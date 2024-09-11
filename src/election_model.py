@@ -2,6 +2,10 @@ import json
 from typing import Dict, List, Tuple
 from urllib.request import urlopen
 
+import os
+os.environ['PYTENSOR_FLAGS'] = 'optimizer_excluding=local_IncSubtensor_serialize'
+
+
 import arviz
 import numpy as np
 import pandas as pd
@@ -288,7 +292,7 @@ class ElectionsModel:
 
 
     def _load_popstar_polls(self):
-        df = pd.read_csv("../data/popstar_sondagens_data.csv", encoding='latin1',na_values=[' '])
+        df = pd.read_csv("data/popstar_sondagens_data.csv", encoding='latin1',na_values=[' '])
         columns_to_convert = [col for col in df.columns if 'sondagens' in col]
         df[columns_to_convert] = df[columns_to_convert].astype(float)
         df.dropna(subset='PS nas sondagens', inplace=True)
@@ -306,7 +310,7 @@ class ElectionsModel:
         return df
     
     def _load_rr_polls(self):
-        polls_df = pd.read_csv('../data/polls_renascenca.tsv', sep='\t', na_values='—')
+        polls_df = pd.read_csv('data/polls_renascenca.tsv', sep='\t', na_values='—')
 
         #rename columns
         polls_df = polls_df.rename(columns={'DATA': 'date', 'ORIGEM': 'pollster', 'ps': 'PS', 'psd': 'PSD', 'chega': 'CH', 'iniciativa liberal' : 'IL', 'bloco de esquerda': 'BE', 'CDU PCP-PEV': 'CDU', 'PAN': 'PAN', 'CDS': 'CDS', 'livre': 'L', 'aliança democrática': 'AD', 'AMOSTRA': 'sample_size'})
@@ -322,6 +326,14 @@ class ElectionsModel:
 
         polls_df = pd.concat([self._load_popstar_polls(), self._load_rr_polls()])
 
+        #replace 'Eurosondagem ' with 'Eurosondagem'
+        polls_df['pollster'] = polls_df['pollster'].str.replace('Eurosondagem ', 'Eurosondagem')
+        #replace CESOP-UCP, CESOP/UCP, Catolica  with UCP
+        polls_df['pollster'] = polls_df['pollster'].str.replace('CESOP-UCP', 'UCP').str.replace('CESOP/UCP', 'UCP').str.replace('Catolica', 'UCP')
+        #replace 'Pitagórica' with 'Pitagorica'
+        polls_df['pollster'] = polls_df['pollster'].str.replace('Pitagórica', 'Pitagorica')
+
+
         polls_df['AD'] = polls_df['AD'].fillna(polls_df['PSD'] + polls_df['CDS'])
         #drop psd and cds columns
         polls_df = polls_df.drop(columns=['PSD', 'CDS'])
@@ -336,7 +348,7 @@ class ElectionsModel:
     def _load_results(self):
         dfs= []
         #for each legislativas_* file in the data folder, load the data and append it to the results_df
-        for file in glob.glob('../data/legislativas_*.parquet'):
+        for file in glob.glob('data/legislativas_*.parquet'):
             #get the file date
             file_date = file.split('_')[-1].split('.')[0]
             #get the date from election_dates which year matches the file date

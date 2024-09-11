@@ -1,10 +1,10 @@
-name: my_env
+name: models
 channels:
   - conda-forge
   - nodefaults
 dependencies:
-  - pymc>=5
-  - numpy<1.26.0
+  - pymc
+  - numpy
   - pyarrow
   - ipykernel
   - jupyterlab
