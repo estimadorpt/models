@@ -292,7 +292,7 @@ class ElectionsModel:
 
 
     def _load_popstar_polls(self):
-        df = pd.read_csv("data/popstar_sondagens_data.csv", encoding='latin1',na_values=[' '])
+        df = pd.read_csv("../data/popstar_sondagens_data.csv", encoding='latin1',na_values=[' '])
         columns_to_convert = [col for col in df.columns if 'sondagens' in col]
         df[columns_to_convert] = df[columns_to_convert].astype(float)
         df.dropna(subset='PS nas sondagens', inplace=True)
@@ -310,7 +310,7 @@ class ElectionsModel:
         return df
     
     def _load_rr_polls(self):
-        polls_df = pd.read_csv('data/polls_renascenca.tsv', sep='\t', na_values='—')
+        polls_df = pd.read_csv('../data/polls_renascenca.tsv', sep='\t', na_values='—')
 
         #rename columns
         polls_df = polls_df.rename(columns={'DATA': 'date', 'ORIGEM': 'pollster', 'ps': 'PS', 'psd': 'PSD', 'chega': 'CH', 'iniciativa liberal' : 'IL', 'bloco de esquerda': 'BE', 'CDU PCP-PEV': 'CDU', 'PAN': 'PAN', 'CDS': 'CDS', 'livre': 'L', 'aliança democrática': 'AD', 'AMOSTRA': 'sample_size'})
@@ -348,7 +348,7 @@ class ElectionsModel:
     def _load_results(self):
         dfs= []
         #for each legislativas_* file in the data folder, load the data and append it to the results_df
-        for file in glob.glob('data/legislativas_*.parquet'):
+        for file in glob.glob('../data/legislativas_*.parquet'):
             #get the file date
             file_date = file.split('_')[-1].split('.')[0]
             #get the date from election_dates which year matches the file date

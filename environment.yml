@@ -9,3 +9,4 @@ dependencies:
   - ipykernel
   - jupyterlab
   - seaborn
+  - numpyro
