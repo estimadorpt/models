@@ -523,121 +523,121 @@ class ElectionsModel:
                 dims=("pollsters", "parties_complete", "elections"),
             )
 
-            # --------------------------------------------------------
-            #                  FUNDAMENTAL COMPONENT
-            #
-            # It is commonly assumed that the results of the elections
-            # are mostly determined by economic fundamentals, and
-            # that the opinion "drifts" towards this result during the
-            # campaign, so to speak.
-            #
-            # The coefficient below accounts for the effect of the
-            # unemployment on the election result.
-            # --------------------------------------------------------
+            # # --------------------------------------------------------
+            # #                  FUNDAMENTAL COMPONENT
+            # #
+            # # It is commonly assumed that the results of the elections
+            # # are mostly determined by economic fundamentals, and
+            # # that the opinion "drifts" towards this result during the
+            # # campaign, so to speak.
+            # #
+            # # The coefficient below accounts for the effect of the
+            # # unemployment on the election result.
+            # # --------------------------------------------------------
 
-            # unemployment_effect = pm.ZeroSumNormal(
-            #     "unemployment_effect",
-            #     sigma=0.15,
+            # # unemployment_effect = pm.ZeroSumNormal(
+            # #     "unemployment_effect",
+            # #     sigma=0.15,
+            # #     dims="parties_complete",
+            # # )
+
+            # # --------------------------------------------------------
+            # #               TIME-VARYING COMPONENT
+            # #
+            # # The latent popularity of political families varies over
+            # # the course of an election. We model this evolution with
+            # # gaussian processes.
+            # #
+            # # We currently use gaussian processes with 3 different
+            # # lengthscales to account for the typical timescales over which
+            # # opinion can change.
+            # #
+            # # The time evolution has two components: one that is common to all
+            # # elections (the baseline), and another one for each election,
+            # # which is a deviation from the common baseline.
+            # # --------------------------------------------------------
+
+            # # Build the gaussian process basis functions
+            # gp_basis_funcs, gp_basis_dim = make_gp_basis(
+            #     time=self.coords["countdown"], gp_config=self.gp_config, key="parties"
+            # )
+
+            # # Baseline (shared across elections) for the time-varying component
+            # # of the latent popularity.
+            # # --------------------------------------------------------
+            # lsd_baseline = pm.Normal("lsd_baseline", sigma=0.3)
+            # lsd_party_effect = pm.ZeroSumNormal(
+            #     "lsd_party_effect_party_amplitude", sigma=0.2, dims="parties_complete"
+            # )
+            # party_time_weight = pm.Deterministic(
+            #     "party_time_weight",
+            #     pt.exp(lsd_baseline + lsd_party_effect),
             #     dims="parties_complete",
             # )
 
-            # --------------------------------------------------------
-            #               TIME-VARYING COMPONENT
-            #
-            # The latent popularity of political families varies over
-            # the course of an election. We model this evolution with
-            # gaussian processes.
-            #
-            # We currently use gaussian processes with 3 different
-            # lengthscales to account for the typical timescales over which
-            # opinion can change.
-            #
-            # The time evolution has two components: one that is common to all
-            # elections (the baseline), and another one for each election,
-            # which is a deviation from the common baseline.
-            # --------------------------------------------------------
-
-            # Build the gaussian process basis functions
-            gp_basis_funcs, gp_basis_dim = make_gp_basis(
-                time=self.coords["countdown"], gp_config=self.gp_config, key="parties"
-            )
-
-            # Baseline (shared across elections) for the time-varying component
-            # of the latent popularity.
-            # --------------------------------------------------------
-            lsd_baseline = pm.Normal("lsd_baseline", sigma=0.3)
-            lsd_party_effect = pm.ZeroSumNormal(
-                "lsd_party_effect_party_amplitude", sigma=0.2, dims="parties_complete"
-            )
-            party_time_weight = pm.Deterministic(
-                "party_time_weight",
-                pt.exp(lsd_baseline + lsd_party_effect),
-                dims="parties_complete",
-            )
-
-            party_time_coefs_raw = pm.ZeroSumNormal(
-                "party_time_coefs_raw",
-                sigma=1,
-                dims=(gp_basis_dim, "parties_complete"),
-                #zerosum_axes=-1,
-            )
-            party_time_effect = pm.Deterministic(
-                "party_time_effect",
-                pt.tensordot(
-                    gp_basis_funcs,
-                    party_time_weight[None, ...] * party_time_coefs_raw,
-                    axes=(1, 0),
-                ),
-                dims=("countdown", "parties_complete"),
-            )
-
-            # Election-specific time-varying component of the latent popularity
-            # --------------------------------------------------------
-            lsd_party_effect = pm.ZeroSumNormal(
-                "lsd_party_effect_election_party_amplitude",
-                sigma=0.2,
-                dims="parties_complete",
-            )
-            # lsd_election_effect = pm.ZeroSumNormal(
-            #     "lsd_election_effect", sigma=0.2, dims="elections"
+            # party_time_coefs_raw = pm.ZeroSumNormal(
+            #     "party_time_coefs_raw",
+            #     sigma=1,
+            #     dims=(gp_basis_dim, "parties_complete"),
+            #     #zerosum_axes=-1,
             # )
-            # lsd_election_party_sd = pm.HalfNormal("lsd_election_party_sd", 0.2)
-            # lsd_election_party_raw = pm.ZeroSumNormal(
-            #     "lsd_election_party_raw",
-            #     dims=("parties_complete", "elections"),
-            #     #zerosum_axes=(0, 1),
-            # )
-            # lsd_election_party_effect = pm.Deterministic(
-            #     "lsd_election_party_effect",
-            #     lsd_election_party_sd * lsd_election_party_raw,
-            #     dims=("parties_complete", "elections"),
-            # )
-            # election_party_time_weight = pm.Deterministic(
-            #     "election_party_time_weight",
-            #     pt.exp(
-            #         lsd_party_effect[:, None]
-            #         + lsd_election_effect[None, :]
-            #         + lsd_election_party_effect
+            # party_time_effect = pm.Deterministic(
+            #     "party_time_effect",
+            #     pt.tensordot(
+            #         gp_basis_funcs,
+            #         party_time_weight[None, ...] * party_time_coefs_raw,
+            #         axes=(1, 0),
             #     ),
-            #     dims=("parties_complete", "elections"),
+            #     dims=("countdown", "parties_complete"),
             # )
-            election_party_sd = pm.HalfNormal("election_party_sd", 0.2)
 
-            election_party_time_coefs = pm.ZeroSumNormal(
-                "election_party_time_coefs",
-                sigma=election_party_sd,
-                dims=(gp_basis_dim, "parties_complete", "elections"),
-                n_zerosum_axes=2,
-            )
-            election_party_time_effect = pm.Deterministic(
-                "election_party_time_effect",
-                pt.tensordot(
-                    gp_basis_funcs,
-                    election_party_time_coefs,
-                    axes=(1, 0),
-                ),
-                dims=("countdown", "parties_complete", "elections"),
-            )
+            # # Election-specific time-varying component of the latent popularity
+            # # --------------------------------------------------------
+            # lsd_party_effect = pm.ZeroSumNormal(
+            #     "lsd_party_effect_election_party_amplitude",
+            #     sigma=0.2,
+            #     dims="parties_complete",
+            # )
+            # # lsd_election_effect = pm.ZeroSumNormal(
+            # #     "lsd_election_effect", sigma=0.2, dims="elections"
+            # # )
+            # # lsd_election_party_sd = pm.HalfNormal("lsd_election_party_sd", 0.2)
+            # # lsd_election_party_raw = pm.ZeroSumNormal(
+            # #     "lsd_election_party_raw",
+            # #     dims=("parties_complete", "elections"),
+            # #     #zerosum_axes=(0, 1),
+            # # )
+            # # lsd_election_party_effect = pm.Deterministic(
+            # #     "lsd_election_party_effect",
+            # #     lsd_election_party_sd * lsd_election_party_raw,
+            # #     dims=("parties_complete", "elections"),
+            # # )
+            # # election_party_time_weight = pm.Deterministic(
+            # #     "election_party_time_weight",
+            # #     pt.exp(
+            # #         lsd_party_effect[:, None]
+            # #         + lsd_election_effect[None, :]
+            # #         + lsd_election_party_effect
+            # #     ),
+            # #     dims=("parties_complete", "elections"),
+            # # )
+            # election_party_sd = pm.HalfNormal("election_party_sd", 0.2)
+
+            # election_party_time_coefs = pm.ZeroSumNormal(
+            #     "election_party_time_coefs",
+            #     sigma=election_party_sd,
+            #     dims=(gp_basis_dim, "parties_complete", "elections"),
+            #     n_zerosum_axes=2,
+            # )
+            # election_party_time_effect = pm.Deterministic(
+            #     "election_party_time_effect",
+            #     pt.tensordot(
+            #         gp_basis_funcs,
+            #         election_party_time_coefs,
+            #         axes=(1, 0),
+            #     ),
+            #     dims=("countdown", "parties_complete", "elections"),
+            # )
 
             # --------------------------------------------------------
             #                      POLL RESULTS
@@ -654,10 +654,10 @@ class ElectionsModel:
             latent_mu = (
                 party_baseline
                 + election_party_baseline[data_containers["election_idx"]]
-                + party_time_effect[data_containers["countdown_idx"]]
-                + election_party_time_effect[
-                    data_containers["countdown_idx"], :, data_containers["election_idx"]
-                ]
+                # + party_time_effect[data_containers["countdown_idx"]]
+                # + election_party_time_effect[
+                #     data_containers["countdown_idx"], :, data_containers["election_idx"]
+                # ]
                 #+ pt.dot(
                 #    data_containers["stdz_unemp"][:, None], unemployment_effect[None, :]
                 #)
@@ -702,29 +702,29 @@ class ElectionsModel:
                 dims=("observations", "parties_complete"),
             )
 
-            # # --------------------------------------------------------
-            # #                    ELECTION RESULTS
-            # #
-            # # In this section we use the variables defined before to model the
-            # # political families' latent popularity and how it translates into
-            # # results the day of the election.
-            # #
-            # # Results from previous elections enter the model here; poll
-            # # results enter indirectly via the latent variable and the above
-            # # regression.
-            # # --------------------------------------------------------
+            # # # --------------------------------------------------------
+            # # #                    ELECTION RESULTS
+            # # #
+            # # # In this section we use the variables defined before to model the
+            # # # political families' latent popularity and how it translates into
+            # # # results the day of the election.
+            # # #
+            # # # Results from previous elections enter the model here; poll
+            # # # results enter indirectly via the latent variable and the above
+            # # # regression.
+            # # # --------------------------------------------------------
 
             latent_mu_t0 = (
                 party_baseline
                 + election_party_baseline
-                + party_time_effect[0]
-                + election_party_time_effect[0].T
+                #+ party_time_effect[0]
+                #+ election_party_time_effect[0].T
                 # + pt.dot(
                 #     data_containers["election_unemp"][:, None],
                 #     unemployment_effect[None, :],
                 # )
             )
-            latent_mu_t0 = latent_mu_t0 #+ non_competing_parties["results"]
+            latent_mu_t0 =  latent_mu_t0 #+ non_competing_parties["results"]
 
             latent_pop_t0 = pm.Deterministic(
                 "latent_pop_t0",
@@ -739,7 +739,7 @@ class ElectionsModel:
             # polls, and the standard deviation accounts for the variation in
             # sample size.
             concentration_results = pm.InverseGamma(
-                "concentration_results", mu=1000, sigma=200
+                "concentration_results", mu=10000, sigma=2000
             )
             pm.DirichletMultinomial(
                 "R",
@@ -852,7 +852,7 @@ class ElectionsModel:
 
         with model:
             prior_checks = pm.sample_prior_predictive()
-            trace = pm.sample(return_inferencedata=True, **sampler_kwargs)
+            trace = pm.sample(nuts_sampler='numpyro',return_inferencedata=True, **sampler_kwargs)
             post_checks = pm.sample_posterior_predictive(
                 trace, var_names=var_names
             )
