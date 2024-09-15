@@ -3,8 +3,6 @@ from typing import Dict, List, Tuple
 from urllib.request import urlopen
 
 import os
-os.environ['PYTENSOR_FLAGS'] = 'optimizer_excluding=local_IncSubtensor_serialize'
-
 
 import arviz
 import numpy as np
@@ -12,185 +10,23 @@ import pandas as pd
 import pymc as pm
 
 import pytensor
-import pytensor.tensor as pt
 
+
+
+# compute_test_value is 'off' by default, meaning this feature is inactive
+#pytensor.config.compute_test_value = 'off' # Use 'warn' to activate this feature
+#pytensor.config.exception_verbosity = 'high' # Use 'high' to see the full error stack
+pytensor.config.optimizer= 'fast_compile'
+#pytensor.config.mode= 'DebugMode'
+#pytensor.config.on_unused_input='warn'
+
+import pytensor.tensor as pt
 from typing import List, Optional, Union
 
 import numpy as np
 import pandas as pd
 from scipy import linalg
 import xarray as xr
-
-"""
-Code mainly contributed by Adrian Seyboldt (@aseyboldt) and Luciano Paz (@lucianopaz).
-"""
-
-
-def make_sum_zero_hh(N: int) -> np.ndarray:
-    """
-    Build a householder transformation matrix that maps e_1 to a vector of all 1s.
-    """
-    e_1 = np.zeros(N)
-    e_1[0] = 1
-    a = np.ones(N)
-    a /= np.sqrt(a @ a)
-    v = e_1 - a
-    v /= np.sqrt(v @ v)
-    return np.eye(N) - 2 * np.outer(v, v)
-
-
-def make_centered_gp_eigendecomp(
-    time: np.ndarray,
-    lengthscale: Union[float, str, List[Union[float, str]]] = 1,
-    variance_limit: float = 0.95,
-    variance_weight: Optional[List[float]] = None,
-    kernel: str = "gaussian",
-    zerosum: bool = False,
-    period: Optional[Union[float, str]] = None,
-):
-    """
-    Decompose the GP into eigen values and eigen vectors.
-    Parameters
-    ----------
-    time : np.ndarray
-        Array containing the time points of observations.
-    lengthscale : float or str or list
-        Length scale parameter of the GP. Set in the ``config`` dictionary.
-        A list of lengthscales can be provided when using the Gaussian kernel.
-        The corresponding covariance matrices will then be added to each other.
-    variance_limit : float
-        Controls how many of the eigen vectors of the GP are used. So, if
-        ``variance_limit=1``, all eigen vectors are used.
-    variance_weight: Optional[List[float]]
-        The weight attributed to each covariance function when there are several
-        lengthscale. By default all lengthscales have the same weight.
-    kernel : str
-        Select the kernel function from the two available: gaussian or periodic.
-    zerosum : bool
-        Constrain all basis functions to sum(basis) = 0. The resulting GP will
-        thus sum to 0 along the time axis.
-    period : float or str
-        Only used if the kernel is periodic. Determines the period of the kernel.
-    """
-
-    ## Construct covariance matrix
-    X = time[:, None]
-
-    if kernel == "gaussian":
-        if isinstance(lengthscale, (int, float, str)):
-            lengthscale = [lengthscale]
-
-        if variance_weight:
-            assert len(variance_weight) == len(
-                lengthscale
-            ), "`variance_weight` must have the same length as `lengthscale`."
-            variance_weight = np.asarray(variance_weight)
-            assert np.isclose(
-                variance_weight.sum(), 1.0
-            ), "`variance_weight` must sum to 1."
-        else:
-            variance_weight = np.ones_like(lengthscale)
-
-        dists = []
-        for ls in lengthscale:
-            if isinstance(ls, str):
-                ls = pd.to_timedelta(ls).to_timedelta64()
-            dists.append(((X - X.T) / np.array(ls)) ** 2)
-
-        cov = sum(
-            w * np.exp(-dist / 2) for (w, dist) in zip(variance_weight, dists)
-        ) / len(lengthscale)
-        # https://gist.github.com/bwengals/481e1f2bc61b0576280cf0f77b8303c6
-
-    elif kernel == "periodic":
-        if len(lengthscale) > 1:
-            raise NotImplementedError(
-                "Multiple lengthscales can only be used with the Gaussian kernel."
-            )
-        elif variance_weight:
-            raise NotImplementedError(
-                "`variance_weight` can only be used with the Gaussian kernel."
-            )
-        elif isinstance(period, str):
-            period = pd.to_timedelta(period).to_timedelta64()
-
-        dists = np.pi * ((time[:, None] - time[None, :]) / period)
-        cov = np.exp(-2 * (np.sin(dists) / lengthscale) ** 2)
-
-    # https://gpflow.readthedocs.io/en/master/notebooks/tailor/kernel_design.html
-    elif kernel == "randomwalk":
-        if np.testing.assert_allclose(lengthscale, 1):
-            raise NotImplementedError(
-                f"No lengthscale needed with the Random Walk kernel."
-            )
-        elif variance_weight:
-            raise NotImplementedError(
-                f"`variance_weight` can only be used with the Gaussian kernel."
-            )
-        cov = np.minimum(X, X.T)
-
-    else:
-        raise ValueError(
-            f"Unknown kernel = {kernel}. Accepted values are 'gaussian' and 'periodic'"
-        )
-
-    if zerosum:
-        Q = make_sum_zero_hh(len(cov))
-        D = np.eye(len(cov))
-        D[0, 0] = 0
-
-        # 1) Transform the covariance matrix so that the first entry
-        # is the mean: A = Q @ cov @ Q.T
-        # 2) Project onto the subspace without the mean: B = D @ A @ D
-        # 3) Transform the result back to the original space: Q.T @ B @ Q
-        cov = Q.T @ D @ Q @ cov @ Q.T @ D @ Q
-
-    vals, vecs = linalg.eigh(cov)
-    precision_limit_inds = np.logical_or(vals < 0, np.imag(vals) != 0)
-
-    if np.any(precision_limit_inds):
-        cutoff = np.where(precision_limit_inds[::-1])[0][0]
-        vals = vals[len(vals) - cutoff :]
-        vecs = vecs[:, vecs.shape[1] - cutoff :]
-
-    if variance_limit == 1:
-        n_eigs = len(vals)
-
-    else:
-        n_eigs = ((vals[::-1].cumsum() / vals.sum()) > variance_limit).nonzero()[0][0]
-
-    return vecs[:, -n_eigs:] * np.sqrt(vals[-n_eigs:])
-
-
-def make_gp_basis(time, gp_config, key=None, *, model=None):
-    model = pm.modelcontext(model)
-
-    if gp_config is None:
-        gp_config = {
-            "lengthscale": 8,
-            "kernel": "gaussian",
-            "zerosum": False,
-            "variance_limit": 0.99,
-        }
-    else:
-        gp_config = gp_config.copy()
-
-    if (
-        np.issubdtype(time.dtype, np.datetime64)
-        or (str(time.dtype).startswith("datetime64"))
-    ) and (
-        gp_config["kernel"] == "gaussian"
-        and "lengthscale" in gp_config
-        and not isinstance(gp_config["lengthscale"], str)
-    ):
-        gp_config["lengthscale"] = f"{gp_config['lengthscale'] * 7}D"
-
-    gp_basis_funcs = make_centered_gp_eigendecomp(time, **gp_config)
-    n_basis = gp_basis_funcs.shape[1]
-    dim = f"gp_{key}_basis"
-    model.add_coords({dim: pd.RangeIndex(n_basis)})
-
-    return gp_basis_funcs, dim
 
 
 def dates_to_idx(timelist, reference_date):
@@ -217,10 +53,10 @@ class ElectionsModel:
             '2022-01-30',
             '2019-10-06',
             '2015-10-04',
-            '2011-06-05',
-            '2009-09-27',
-            '2005-02-20',
-            '2002-03-17',
+            # '2011-06-05',
+            # '2009-09-27',
+            # '2005-02-20',
+            # '2002-03-17',
         ]
     
     # political_families = [
@@ -292,7 +128,7 @@ class ElectionsModel:
 
 
     def _load_popstar_polls(self):
-        df = pd.read_csv("../data/popstar_sondagens_data.csv", encoding='latin1',na_values=[' '])
+        df = pd.read_csv("data/popstar_sondagens_data.csv", encoding='latin1',na_values=[' '])
         columns_to_convert = [col for col in df.columns if 'sondagens' in col]
         df[columns_to_convert] = df[columns_to_convert].astype(float)
         df.dropna(subset='PS nas sondagens', inplace=True)
@@ -310,7 +146,7 @@ class ElectionsModel:
         return df
     
     def _load_rr_polls(self):
-        polls_df = pd.read_csv('../data/polls_renascenca.tsv', sep='\t', na_values='—')
+        polls_df = pd.read_csv('data/polls_renascenca.tsv', sep='\t', na_values='—')
 
         #rename columns
         polls_df = polls_df.rename(columns={'DATA': 'date', 'ORIGEM': 'pollster', 'ps': 'PS', 'psd': 'PSD', 'chega': 'CH', 'iniciativa liberal' : 'IL', 'bloco de esquerda': 'BE', 'CDU PCP-PEV': 'CDU', 'PAN': 'PAN', 'CDS': 'CDS', 'livre': 'L', 'aliança democrática': 'AD', 'AMOSTRA': 'sample_size'})
@@ -348,7 +184,7 @@ class ElectionsModel:
     def _load_results(self):
         dfs= []
         #for each legislativas_* file in the data folder, load the data and append it to the results_df
-        for file in glob.glob('../data/legislativas_*.parquet'):
+        for file in glob.glob('data/legislativas_*.parquet'):
             #get the file date
             file_date = file.split('_')[-1].split('.')[0]
             #get the date from election_dates which year matches the file date
@@ -416,24 +252,6 @@ class ElectionsModel:
         self,
         polls: pd.DataFrame = None,
     ) -> pm.Model:
-        """Build and return a pymc3 model for the poll results and fundamental data.
-
-        Parameters
-        ----------
-        polls
-            Poll results from past and current elections. This only needs to be
-            specified for out-of-sample predictions to run the model on another
-            dataset than the training data.
-        continuous_predictors
-            Continuous predictors, or fundamentals. This only need to be
-            specified for out-of-sample predictions to run the model on another
-            dataset than the training data.
-
-        Returns
-        -------
-        A PyMC model in the form of a pymc.Model() instance.
-
-        """
         (
             self.pollster_id,
             self.countdown_id,
@@ -442,70 +260,40 @@ class ElectionsModel:
         ) = self._build_coords(polls)
 
         with pm.Model(coords=self.coords) as model:
-
-            data_containers, non_competing_parties = self._build_data_containers(
-                polls
-            )
+            data_containers = self._build_data_containers(polls)
 
             # --------------------------------------------------------
             #                   BASELINE COMPONENTS
             # --------------------------------------------------------
 
-            # Baseline latent popularity for each political family. Shared
-            # across elections.
             party_baseline_sd = pm.HalfNormal("party_baseline_sd", 0.5)
             party_baseline = pm.ZeroSumNormal(
                 "party_baseline", sigma=party_baseline_sd, dims="parties_complete"
             )
 
-            # Election-specific deviation from baseline of the latent popularity
-            # of each political family.
-            lsd_baseline = pm.Normal("election_party_baseline_sd_baseline", sigma=0.5)
-            lsd_party_effect = pm.ZeroSumNormal(
-                "election_party_baseline_sd_party_effect",
-                sigma=0.5,
-                dims="parties_complete",
-            )
-            # election_party_baseline_sd = pm.Deterministic(
-            #     "election_party_baseline_sd",
-            #     pt.exp(lsd_baseline + lsd_party_effect),
-            #     dims="parties_complete",
-            # )
             election_party_baseline_sd = pm.HalfNormal("election_party_baseline_sd", 0.5)
-
-            election_party_baseline = (
-                pm.ZeroSumNormal(  # as a GP over elections to account for order?
-                    "election_party_baseline",
-                    sigma=election_party_baseline_sd,
-                    dims=("elections", "parties_complete"),
-                    #zerosum_axes=(0, 1),
-                )
+            election_party_baseline = pm.ZeroSumNormal(
+                "election_party_baseline",
+                sigma=election_party_baseline_sd,
+                dims=("elections", "parties_complete"),
             )
 
             # --------------------------------------------------------
             #                        HOUSE EFFECTS
             # --------------------------------------------------------
 
-            # Baseline for polls' bias towards the different political families.
-            # These biases are shared by pollsters, i.e. they can be interpreted
-            # as the market's bias.
-            poll_bias = (
-                pm.ZeroSumNormal(  # equivalent to no ZeroSum on pollsters in house_effects
-                    "poll_bias",
-                    sigma=0.15,
-                    dims="parties_complete",
-                )
+            poll_bias = pm.ZeroSumNormal(
+                "poll_bias",
+                sigma=0.15,
+                dims="parties_complete",
             )
 
-            # Baseline for house effect (per political family)
             house_effects = pm.ZeroSumNormal(
                 "house_effects",
                 sigma=0.15,
                 dims=("pollsters", "parties_complete"),
-                #zerosum_axes=(0, 1),
             )
 
-            # Election-specific house effect (per political family)
             house_election_effects_sd = pm.HalfNormal(
                 "house_election_effects_sd",
                 0.15,
@@ -514,8 +302,6 @@ class ElectionsModel:
             house_election_effects_raw = pm.ZeroSumNormal(
                 "house_election_effects_raw",
                 dims=("pollsters", "parties_complete", "elections"),
-                n_zerosum_axes=3
-                #zerosum_axes=(0, 1, 2),
             )
             house_election_effects = pm.Deterministic(
                 "house_election_effects",
@@ -524,172 +310,176 @@ class ElectionsModel:
             )
 
             # # --------------------------------------------------------
-            # #                  FUNDAMENTAL COMPONENT
-            # #
-            # # It is commonly assumed that the results of the elections
-            # # are mostly determined by economic fundamentals, and
-            # # that the opinion "drifts" towards this result during the
-            # # campaign, so to speak.
-            # #
-            # # The coefficient below accounts for the effect of the
-            # # unemployment on the election result.
+            # #               TIME-VARYING COMPONENTS (HSGP)
             # # --------------------------------------------------------
 
-            # # unemployment_effect = pm.ZeroSumNormal(
-            # #     "unemployment_effect",
-            # #     sigma=0.15,
-            # #     dims="parties_complete",
-            # # )
+            # Shared parameters
+            m = [30]
+            c = 1.5
+            l_list = self.gp_config['lengthscale']
 
-            # # --------------------------------------------------------
-            # #               TIME-VARYING COMPONENT
-            # #
-            # # The latent popularity of political families varies over
-            # # the course of an election. We model this evolution with
-            # # gaussian processes.
-            # #
-            # # We currently use gaussian processes with 3 different
-            # # lengthscales to account for the typical timescales over which
-            # # opinion can change.
-            # #
-            # # The time evolution has two components: one that is common to all
-            # # elections (the baseline), and another one for each election,
-            # # which is a deviation from the common baseline.
-            # # --------------------------------------------------------
+            # Center and scale the input variable
+            X = self.coords["countdown"][:, None]
+            X_center = (X.max() + X.min()) / 2.0
+            Xs = X - X_center
 
-            # # Build the gaussian process basis functions
-            # gp_basis_funcs, gp_basis_dim = make_gp_basis(
-            #     time=self.coords["countdown"], gp_config=self.gp_config, key="parties"
-            # )
+            # Define covariance functions for multiple lengthscales
+            cov_funcs = [pm.gp.cov.Matern52(input_dim=1, ls=l) for l in l_list]
 
-            # # Baseline (shared across elections) for the time-varying component
-            # # of the latent popularity.
-            # # --------------------------------------------------------
-            # lsd_baseline = pm.Normal("lsd_baseline", sigma=0.3)
-            # lsd_party_effect = pm.ZeroSumNormal(
-            #     "lsd_party_effect_party_amplitude", sigma=0.2, dims="parties_complete"
-            # )
-            # party_time_weight = pm.Deterministic(
-            #     "party_time_weight",
-            #     pt.exp(lsd_baseline + lsd_party_effect),
-            #     dims="parties_complete",
-            # )
+            # Baseline Time-Varying Component
+            fs_baseline = []
+            for idx, cov_func in enumerate(cov_funcs):
+                gp = pm.gp.HSGP(
+                    cov_func=cov_func,
+                    m=m,
+                    c=c,
+                )
+                phi, sqrt_psd = gp.prior_linearized(X=Xs)
+                if f"gp_basis_{idx}" not in model.coords:
+                    model.add_coords({f"gp_basis_{idx}": np.arange(gp.n_basis_vectors)})
+                gp_coef = pm.Normal(
+                    f"gp_coef_baseline_{idx}",
+                    mu=0,
+                    sigma=1,
+                    dims=(f"gp_basis_{idx}", "parties_complete")
+                )
+                f = pt.dot(phi, gp_coef * sqrt_psd[:, None])
+                fs_baseline.append(f)
 
-            # party_time_coefs_raw = pm.ZeroSumNormal(
-            #     "party_time_coefs_raw",
-            #     sigma=1,
-            #     dims=(gp_basis_dim, "parties_complete"),
-            #     #zerosum_axes=-1,
-            # )
-            # party_time_effect = pm.Deterministic(
-            #     "party_time_effect",
-            #     pt.tensordot(
-            #         gp_basis_funcs,
-            #         party_time_weight[None, ...] * party_time_coefs_raw,
-            #         axes=(1, 0),
-            #     ),
-            #     dims=("countdown", "parties_complete"),
-            # )
+            f_baseline_total = sum(fs_baseline)
+            party_time_effect = pm.Deterministic(
+                "party_time_effect",
+                f_baseline_total,
+                dims=("countdown", "parties_complete")
+            )
 
-            # # Election-specific time-varying component of the latent popularity
-            # # --------------------------------------------------------
-            # lsd_party_effect = pm.ZeroSumNormal(
-            #     "lsd_party_effect_election_party_amplitude",
-            #     sigma=0.2,
-            #     dims="parties_complete",
-            # )
-            # # lsd_election_effect = pm.ZeroSumNormal(
-            # #     "lsd_election_effect", sigma=0.2, dims="elections"
-            # # )
-            # # lsd_election_party_sd = pm.HalfNormal("lsd_election_party_sd", 0.2)
-            # # lsd_election_party_raw = pm.ZeroSumNormal(
-            # #     "lsd_election_party_raw",
-            # #     dims=("parties_complete", "elections"),
-            # #     #zerosum_axes=(0, 1),
-            # # )
-            # # lsd_election_party_effect = pm.Deterministic(
-            # #     "lsd_election_party_effect",
-            # #     lsd_election_party_sd * lsd_election_party_raw,
-            # #     dims=("parties_complete", "elections"),
-            # # )
-            # # election_party_time_weight = pm.Deterministic(
-            # #     "election_party_time_weight",
-            # #     pt.exp(
-            # #         lsd_party_effect[:, None]
-            # #         + lsd_election_effect[None, :]
-            # #         + lsd_election_party_effect
-            # #     ),
-            # #     dims=("parties_complete", "elections"),
-            # # )
-            # election_party_sd = pm.HalfNormal("election_party_sd", 0.2)
+            # Weights for baseline component
+            lsd_baseline = pm.Normal("lsd_baseline", sigma=0.3)
+            lsd_party_effect = pm.ZeroSumNormal(
+                "lsd_party_effect_party_amplitude",
+                sigma=0.2,
+                dims="parties_complete"
+            )
+            party_time_weight = pm.Deterministic(
+                "party_time_weight",
+                pt.exp(lsd_baseline + lsd_party_effect),
+                dims="parties_complete"
+            )
+            party_time_effect_weighted = pm.Deterministic(
+                "party_time_effect_weighted",
+                party_time_effect * party_time_weight[None, :],
+                dims=("countdown", "parties_complete")
+            )
 
-            # election_party_time_coefs = pm.ZeroSumNormal(
-            #     "election_party_time_coefs",
-            #     sigma=election_party_sd,
-            #     dims=(gp_basis_dim, "parties_complete", "elections"),
-            #     n_zerosum_axes=2,
-            # )
-            # election_party_time_effect = pm.Deterministic(
-            #     "election_party_time_effect",
-            #     pt.tensordot(
-            #         gp_basis_funcs,
-            #         election_party_time_coefs,
-            #         axes=(1, 0),
-            #     ),
-            #     dims=("countdown", "parties_complete", "elections"),
-            # )
+            # Election-Specific Time-Varying Component
+            fs_election = []
+            for idx, cov_func in enumerate(cov_funcs):
+                gp = pm.gp.HSGP(
+                    cov_func=cov_func,
+                    m=m,
+                    c=c,
+                )
+                phi, sqrt_psd = gp.prior_linearized(X=Xs)
+                if f"gp_basis_election_{idx}" not in model.coords:
+                    model.add_coords({f"gp_basis_election_{idx}": np.arange(gp.n_basis_vectors)})
+                gp_coef_election = pm.Normal(
+                    f"gp_coef_election_{idx}",
+                    mu=0,
+                    sigma=1,
+                    dims=(f"gp_basis_election_{idx}", "parties_complete", "elections")
+                )
+                f_election = pt.tensordot(
+                    phi,
+                    gp_coef_election * sqrt_psd[:, None, None],
+                    axes=(1, 0)
+                )
+                fs_election.append(f_election)
+
+            f_election_total = sum(fs_election)
+            election_party_time_effect = pm.Deterministic(
+                "election_party_time_effect",
+                f_election_total,
+                dims=("countdown", "parties_complete", "elections")
+            )
+
+            # Weights for election-specific component
+            lsd_party_effect_election = pm.ZeroSumNormal(
+                "lsd_party_effect_election_party_amplitude",
+                sigma=0.2,
+                dims="parties_complete"
+            )
+            lsd_election_effect = pm.ZeroSumNormal(
+                "lsd_election_effect",
+                sigma=0.2,
+                dims="elections"
+            )
+            lsd_election_party_sd = pm.HalfNormal("lsd_election_party_sd", 0.2)
+            lsd_election_party_raw = pm.ZeroSumNormal(
+                "lsd_election_party_raw",
+                dims=("parties_complete", "elections"),
+                n_zerosum_axes=2,
+            )
+            lsd_election_party_effect = pm.Deterministic(
+                "lsd_election_party_effect",
+                lsd_election_party_sd * lsd_election_party_raw,
+                dims=("parties_complete", "elections")
+            )
+            election_party_time_weight = pm.Deterministic(
+                "election_party_time_weight",
+                pt.exp(
+                    lsd_party_effect_election[:, None]
+                    + lsd_election_effect[None, :]
+                    + lsd_election_party_effect
+                ),
+                dims=("parties_complete", "elections")
+            )
+            election_party_time_effect_weighted = pm.Deterministic(
+                "election_party_time_effect_weighted",
+                election_party_time_effect * election_party_time_weight[None, :, :],
+                dims=("countdown", "parties_complete", "elections")
+            )
 
             # --------------------------------------------------------
             #                      POLL RESULTS
-            #
-            # In this section we use the variables defined before to
-            # model the latent popularity of political families and how
-            # this popularity translates into poll results.
-            #
-            # This part of the model is used to inform predictions about
-            # the outcomes with the current state of polling; this is the
-            # only place where poll results enter the model.
             # --------------------------------------------------------
 
+            # Compute latent_mu
             latent_mu = (
-                party_baseline
+                party_baseline[None, :]
                 + election_party_baseline[data_containers["election_idx"]]
-                # + party_time_effect[data_containers["countdown_idx"]]
-                # + election_party_time_effect[
-                #     data_containers["countdown_idx"], :, data_containers["election_idx"]
-                # ]
-                #+ pt.dot(
-                #    data_containers["stdz_unemp"][:, None], unemployment_effect[None, :]
-                #)
+                + party_time_effect_weighted[data_containers["countdown_idx"]]
+                + election_party_time_effect_weighted[
+                     data_containers["countdown_idx"], :, data_containers["election_idx"]
+                 ]
+                
             )
-            latent_mu = latent_mu + non_competing_parties["polls_additive"]
+
+            latent_mu = latent_mu + data_containers['non_competing_polls_additive'] 
+
+            # Apply softmax over the correct axis
             pm.Deterministic(
                 "latent_popularity",
-                pt.special.softmax(latent_mu),
+                pt.special.softmax(latent_mu, axis=1),
                 dims=("observations", "parties_complete"),
             )
+
             noisy_mu = (
                 latent_mu
-                + poll_bias[None, :]  # let bias vary during election period?
+                + poll_bias[None, :]
                 + house_effects[data_containers["pollster_idx"]]
                 + house_election_effects[
                     data_containers["pollster_idx"], :, data_containers["election_idx"]
                 ]
-                * non_competing_parties["polls_multiplicative"]
+                * data_containers['non_competing_polls_multiplicative']
             )
 
+            # Apply softmax over the correct axis
             noisy_popularity = pm.Deterministic(
                 "noisy_popularity",
-                pt.special.softmax(noisy_mu),
+                pt.special.softmax(noisy_mu, axis=1),
                 dims=("observations", "parties_complete"),
             )
 
-            # The concentration parameter of a Dirichlet-Multinomial distribution
-            # can be interpreted as the effective number of trials.
-            #
-            # The mean (1000) is thus taken to be roughly the sample size of
-            # polls, and the standard deviation accounts for the variation in
-            # sample size.
             concentration_polls = pm.InverseGamma(
                 "concentration_polls", mu=1000, sigma=200
             )
@@ -702,54 +492,57 @@ class ElectionsModel:
                 dims=("observations", "parties_complete"),
             )
 
-            # # # --------------------------------------------------------
-            # # #                    ELECTION RESULTS
-            # # #
-            # # # In this section we use the variables defined before to model the
-            # # # political families' latent popularity and how it translates into
-            # # # results the day of the election.
-            # # #
-            # # # Results from previous elections enter the model here; poll
-            # # # results enter indirectly via the latent variable and the above
-            # # # regression.
-            # # # --------------------------------------------------------
+            # --------------------------------------------------------
+            #                    ELECTION RESULTS
+            # --------------------------------------------------------
 
+            # Compute latent_mu_t0
             latent_mu_t0 = (
-                party_baseline
+                party_baseline[None, :]
                 + election_party_baseline
-                #+ party_time_effect[0]
-                #+ election_party_time_effect[0].T
-                # + pt.dot(
-                #     data_containers["election_unemp"][:, None],
-                #     unemployment_effect[None, :],
-                # )
+                + party_time_effect_weighted[0]
+                + election_party_time_effect_weighted[0].transpose((1, 0))
             )
-            latent_mu_t0 =  latent_mu_t0 #+ non_competing_parties["results"]
 
+            latent_mu_t0 = latent_mu_t0 + data_containers['non_competing_parties_results']
+
+            # Apply softmax over the correct axis
             latent_pop_t0 = pm.Deterministic(
                 "latent_pop_t0",
-                pt.special.softmax(latent_mu_t0),
+                pt.special.softmax(latent_mu_t0, axis=1),
                 dims=("elections", "parties_complete"),
             )
 
-            # The concentration parameter of a Dirichlet-Multinomial distribution
-            # can be interpreted as the effective number of trials.
-            #
-            # The mean (1000) is thus taken to be roughly the sample size of
-            # polls, and the standard deviation accounts for the variation in
-            # sample size.
             concentration_results = pm.InverseGamma(
                 "concentration_results", mu=10000, sigma=2000
             )
             pm.DirichletMultinomial(
                 "R",
-                a= concentration_results * latent_pop_t0[:-1],
+                a=concentration_results * latent_pop_t0[:-1],
                 n=data_containers["results_N"],
                 observed=data_containers["observed_results"],
                 dims=("elections_observed", "parties_complete"),
             )
 
+            # print(f"Shape of latent_mu: {latent_mu.shape.eval()}")
+            # print(f"Shape of party_baseline: {party_baseline.shape.eval()}")
+            # print(f"Shape of election_party_baseline[data_containers['election_idx']]: {election_party_baseline[data_containers['election_idx']].shape.eval()}")
+            # #print(f"Shape of party_time_effect_weighted[data_containers['countdown_idx']]: {party_time_effect_weighted[data_containers['countdown_idx']].shape.eval()}")
+            # #print(f"Shape of election_party_time_effect_weighted[data_containers['countdown_idx'], :, data_containers['election_idx']]: {election_party_time_effect_weighted[data_containers['countdown_idx'], :, data_containers['election_idx']].shape.eval()}")
+            # print(f"Shape of results_N: {data_containers['results_N'].shape.eval()}")
+            # print(f"Shape of observed_results: {data_containers['observed_results'].shape.eval()}")
+            # print(f"Shape of party_baseline[None, :]: {party_baseline[None, :].shape.eval()}")
+            # print(f"Shape of election_party_baseline: {election_party_baseline.shape.eval()}")
+            # print(f"Shape of pt.expand_dims(party_time_effect_weighted[0], axis=0): {pt.expand_dims(party_time_effect_weighted[0], axis=0).shape.eval()}")
+            # #print(f"Shape of latent_mu_t0: {latent_mu_t0.shape.eval()}")
+
+            # print(f"Shape of latent_popularity: {pt.special.softmax(latent_mu, axis=1).shape.eval()}")
+
+
+
         return model
+
+
     def _build_coords(self, polls: pd.DataFrame = None):
         data = polls if polls is not None else self.polls_train
 
@@ -769,23 +562,23 @@ class ElectionsModel:
     def _build_data_containers(
         self,
         polls: pd.DataFrame = None,
-    ) -> Tuple[Dict[str, pm.Data], Dict[str, np.ndarray]]:
+    ) :
 
         if polls is None:
             polls = self.polls_train
         is_here = polls[self.political_families].astype(bool).astype(int)
-        non_competing_parties = {
-            "polls_multiplicative": is_here.values,
-            "polls_additive": is_here.replace(to_replace=0, value=-10)
-            .replace(to_replace=1, value=0)
-            .values,
-            "results": self.results_mult[self.political_families]
-            .astype(bool)
-            .astype(int)
-            .replace(to_replace=0, value=-10)
-            .replace(to_replace=1, value=0)
-            .values,
-        }
+        # non_competing_parties = {
+        #     "polls_multiplicative": is_here.values,
+        #     "polls_additive": is_here.replace(to_replace=0, value=-10)
+        #     .replace(to_replace=1, value=0)
+        #     .values,
+        #     "results": self.results_mult[self.political_families]
+        #     .astype(bool)
+        #     .astype(int)
+        #     .replace(to_replace=0, value=-10)
+        #     .replace(to_replace=1, value=0)
+        #     .values,
+        # }
         
         data_containers = dict(
             election_idx=pm.Data("election_idx", self.election_id, dims="observations"),
@@ -818,14 +611,33 @@ class ElectionsModel:
                 self.results_oos["sample_size"].to_numpy(),
                 dims="elections_observed",
             ),
+            
             observed_results=pm.Data(
                 "observed_results",
                 self.results_oos[self.political_families].to_numpy(),
                 dims=("elections_observed", "parties_complete"),
             ),
+
+            non_competing_parties_results=pm.Data(
+                "non_competing_parties_results",
+                self.results_mult[self.political_families].astype(bool).astype(int).replace(to_replace=0, value=-10).replace(to_replace=1, value=0).to_numpy(),
+                dims=("elections", "parties_complete"),
+            ),
+            
+            non_competing_polls_additive = pm.Data(
+                "non_competing_polls_additive",
+                is_here.replace(to_replace=0, value=-10).replace(to_replace=1, value=0).to_numpy(),
+                dims=("observations", "parties_complete")
+            ),
+            non_competing_polls_multiplicative = pm.Data(
+                "non_competing_polls_multiplicative",
+                is_here.to_numpy(),
+                dims=("observations", "parties_complete")
+            )
+
         )
 
-        return data_containers, non_competing_parties
+        return data_containers #, non_competing_parties
 
     def sample_all(
         self, *, model: pm.Model = None, var_names: List[str], **sampler_kwargs
@@ -852,7 +664,7 @@ class ElectionsModel:
 
         with model:
             prior_checks = pm.sample_prior_predictive()
-            trace = pm.sample(nuts_sampler='numpyro',return_inferencedata=True, **sampler_kwargs)
+            trace = pm.sample(draws=5000, tune=2000,nuts_sampler='numpyro',return_inferencedata=True, target_accept = 0.99, **sampler_kwargs)
             post_checks = pm.sample_posterior_predictive(
                 trace, var_names=var_names
             )
