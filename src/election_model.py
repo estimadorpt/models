@@ -1,6 +1,10 @@
 import json
+import sys
+import os
 from typing import Dict, List, Tuple
 from urllib.request import urlopen
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from src.config import DATA_DIR
 
 import os
 
@@ -67,16 +71,16 @@ class ElectionsModel:
     def __init__(
         self,
         election_date: str,
-        timescales: List[int] = [5, 14, 28],
+        timescales: List[int] = [5, 14, 28, 60, 120],
         weights: List[float] = None,
         test_cutoff: pd.Timedelta = None,
     ):
         
         self.gp_config = {
             "lengthscale": timescales,
-            "kernel": "gaussian",
+            "kernel": "matern52",
             "zerosum": True,
-            "variance_limit": 0.95,
+            "variance_limit": 0.8,
             "variance_weight": weights,
         }
 
@@ -128,7 +132,7 @@ class ElectionsModel:
 
 
     def _load_popstar_polls(self):
-        df = pd.read_csv("data/popstar_sondagens_data.csv", encoding='latin1',na_values=[' '])
+        df = pd.read_csv(os.path.join(DATA_DIR, "popstar_sondagens_data.csv"), encoding='latin1', na_values=[' '])
         columns_to_convert = [col for col in df.columns if 'sondagens' in col]
         df[columns_to_convert] = df[columns_to_convert].astype(float)
         df.dropna(subset='PS nas sondagens', inplace=True)
@@ -146,7 +150,7 @@ class ElectionsModel:
         return df
     
     def _load_rr_polls(self):
-        polls_df = pd.read_csv('data/polls_renascenca.tsv', sep='\t', na_values='—')
+        polls_df = pd.read_csv(os.path.join(DATA_DIR, 'polls_renascenca.tsv'), sep='\t', na_values='—')
 
         #rename columns
         polls_df = polls_df.rename(columns={'DATA': 'date', 'ORIGEM': 'pollster', 'ps': 'PS', 'psd': 'PSD', 'chega': 'CH', 'iniciativa liberal' : 'IL', 'bloco de esquerda': 'BE', 'CDU PCP-PEV': 'CDU', 'PAN': 'PAN', 'CDS': 'CDS', 'livre': 'L', 'aliança democrática': 'AD', 'AMOSTRA': 'sample_size'})
@@ -184,7 +188,7 @@ class ElectionsModel:
     def _load_results(self):
         dfs= []
         #for each legislativas_* file in the data folder, load the data and append it to the results_df
-        for file in glob.glob('data/legislativas_*.parquet'):
+        for file in glob.glob(os.path.join(DATA_DIR, 'legislativas_*.parquet')):
             #get the file date
             file_date = file.split('_')[-1].split('.')[0]
             #get the date from election_dates which year matches the file date
@@ -266,12 +270,12 @@ class ElectionsModel:
             #                   BASELINE COMPONENTS
             # --------------------------------------------------------
 
-            party_baseline_sd = pm.HalfNormal("party_baseline_sd", 0.5)
+            party_baseline_sd = pm.HalfNormal("party_baseline_sd", sigma=0.5)
             party_baseline = pm.ZeroSumNormal(
                 "party_baseline", sigma=party_baseline_sd, dims="parties_complete"
             )
 
-            election_party_baseline_sd = pm.HalfNormal("election_party_baseline_sd", 0.5)
+            election_party_baseline_sd = pm.HalfNormal("election_party_baseline_sd", sigma=0.5)
             election_party_baseline = pm.ZeroSumNormal(
                 "election_party_baseline",
                 sigma=election_party_baseline_sd,
@@ -296,7 +300,7 @@ class ElectionsModel:
 
             house_election_effects_sd = pm.HalfNormal(
                 "house_election_effects_sd",
-                0.15,
+                0.1,
                 dims=("pollsters", "parties_complete"),
             )
             house_election_effects_raw = pm.ZeroSumNormal(
@@ -354,7 +358,7 @@ class ElectionsModel:
             )
 
             # Weights for baseline component
-            lsd_baseline = pm.Normal("lsd_baseline", sigma=0.3)
+            lsd_baseline = pm.Normal("lsd_baseline", mu=-2, sigma=0.5)
             lsd_party_effect = pm.ZeroSumNormal(
                 "lsd_party_effect_party_amplitude",
                 sigma=0.2,
@@ -413,16 +417,13 @@ class ElectionsModel:
                 sigma=0.2,
                 dims="elections"
             )
-            lsd_election_party_sd = pm.HalfNormal("lsd_election_party_sd", 0.2)
-            lsd_election_party_raw = pm.ZeroSumNormal(
-                "lsd_election_party_raw",
+            lsd_election_party_sd = pm.HalfNormal("lsd_election_party_sd", sigma=0.5)
+            lsd_election_party_effect = pm.ZeroSumNormal(
+                "lsd_election_party_effect",
+                sigma=lsd_election_party_sd,
                 dims=("parties_complete", "elections"),
                 n_zerosum_axes=2,
-            )
-            lsd_election_party_effect = pm.Deterministic(
-                "lsd_election_party_effect",
-                lsd_election_party_sd * lsd_election_party_raw,
-                dims=("parties_complete", "elections")
+
             )
             election_party_time_weight = pm.Deterministic(
                 "election_party_time_weight",
@@ -480,6 +481,12 @@ class ElectionsModel:
                 dims=("observations", "parties_complete"),
             )
 
+             # The concentration parameter of a Dirichlet-Multinomial distribution
+            # can be interpreted as the effective number of trials.
+            #
+            # The mean (1000) is thus taken to be roughly the sample size of
+            # polls, and the standard deviation accounts for the variation in
+            # sample size.
             concentration_polls = pm.InverseGamma(
                 "concentration_polls", mu=1000, sigma=200
             )
@@ -513,9 +520,16 @@ class ElectionsModel:
                 dims=("elections", "parties_complete"),
             )
 
+            # The concentration parameter of a Dirichlet-Multinomial distribution
+            # can be interpreted as the effective number of trials.
+            #
+            # The mean (1000) is thus taken to be roughly the sample size of
+            # polls, and the standard deviation accounts for the variation in
+            # sample size.
             concentration_results = pm.InverseGamma(
-                "concentration_results", mu=10000, sigma=2000
+                "concentration_results", mu=1000, sigma=200
             )
+
             pm.DirichletMultinomial(
                 "R",
                 a=concentration_results * latent_pop_t0[:-1],
@@ -664,7 +678,7 @@ class ElectionsModel:
 
         with model:
             prior_checks = pm.sample_prior_predictive()
-            trace = pm.sample(draws=5000, tune=2000,nuts_sampler='numpyro',return_inferencedata=True, target_accept = 0.99, **sampler_kwargs)
+            trace = pm.sample(draws=13000, tune=3000,nuts_sampler='numpyro',return_inferencedata=True, target_accept = 0.99,  **sampler_kwargs)
             post_checks = pm.sample_posterior_predictive(
                 trace, var_names=var_names
             )
@@ -719,7 +733,7 @@ class ElectionsModel:
         return ppc,PREDICTION_COORDS,PREDICTION_DIMS
 
     def _generate_oos_data(
-        self, idata: arviz.InferenceData
+                self, idata: arviz.InferenceData
     ) -> Tuple[pd.Index, pd.DataFrame]:
 
         countdown = idata.posterior["countdown"]
@@ -756,8 +770,76 @@ class ElectionsModel:
 
         return new_dates, oos_data.set_index("date")
     
+    def prepare_observed_data(self):
+        # This method prepares the observed poll results for posterior predictive checks
+        observed_data = pd.DataFrame({
+            'date': self.results['date'],
+            'pollster': self.results['pollster'],
+        })
+        for party in self.political_families:
+            observed_data[party] = self.results[party] / self.results['sample_size']
+        return observed_data
 
-    from typing import List
+    def posterior_predictive_check(self, posterior):
+        """
+        Perform posterior predictive checks.
+
+        Parameters:
+        -----------
+        posterior : arviz.InferenceData
+            The posterior samples containing posterior predictive data.
+
+        Returns:
+        --------
+        ppc_results : dict
+            A dictionary containing various posterior predictive check results.
+        """
+        # Build the model
+        model = self.build_model(self.polls_train)
+
+        
+        ppc = posterior.posterior_predictive
+
+        ppc_results = {}
+
+        # Print available keys in ppc for debugging
+        print("Available keys in posterior_predictive:", ppc.data_vars.keys())
+
+        # Compare observed data to posterior predictive distribution
+        for i, party in enumerate(self.political_families):
+            observed_polls = self.polls_train[party].values / self.polls_train['sample_size'].values
+            observed_results = self.results_mult[party].values / self.results_mult['sample_size'].values
+            
+            # Use 'N_approve' from posterior_predictive
+            predicted = ppc['N_approve'].values[:, :, :, i] / self.polls_train['sample_size'].values
+
+            # Calculate mean absolute error for polls
+            mae_polls = np.mean(np.abs(observed_polls - predicted.mean(axis=(0, 1))))
+            ppc_results[f'{party}_mae_polls'] = mae_polls
+
+            # Calculate coverage of 95% credible interval for polls
+            lower, upper = np.percentile(predicted, [2.5, 97.5], axis=(0, 1))
+            coverage_polls = np.mean((observed_polls >= lower) & (observed_polls <= upper))
+            ppc_results[f'{party}_coverage_polls'] = coverage_polls
+
+            # Calculate mean absolute error for results
+            mae_results = np.mean(np.abs(observed_results - predicted.mean(axis=(0, 1))[-len(observed_results):]))
+            ppc_results[f'{party}_mae_results'] = mae_results
+
+            # Plot observed vs. predicted for polls
+            plt.figure(figsize=(10, 6))
+            plt.scatter(observed_polls, predicted.mean(axis=(0, 1)), label='Polls', alpha=0.5)
+            plt.scatter(observed_results, predicted.mean(axis=(0, 1))[-len(observed_results):], label='Results', marker='x', s=100)
+            plt.plot([0, 1], [0, 1], 'r--')
+            plt.xlabel('Observed')
+            plt.ylabel('Predicted')
+            plt.title(f'Observed vs. Predicted for {party}')
+            plt.legend()
+            plt.savefig(f'ppc_plot_{party}.png')
+            plt.close()
+
+        return ppc_results
+
 
 import arviz
 import matplotlib.pyplot as plt
@@ -994,3 +1076,4 @@ def predictive_plot(
         axes[i].tick_params(axis="x", labelrotation=45, labelsize=10)
         axes[i].set(title=p, ylim=(-0.01, 0.4))
         axes[i].legend(fontsize=9, ncol=3)
+        
