@@ -71,7 +71,7 @@ class ElectionsModel:
     def __init__(
         self,
         election_date: str,
-        timescales: List[int] = [5, 14, 28, 60, 120],
+        timescales: List[int] = [7, 28, 60],
         weights: List[float] = None,
         test_cutoff: pd.Timedelta = None,
     ):
@@ -678,7 +678,7 @@ class ElectionsModel:
 
         with model:
             prior_checks = pm.sample_prior_predictive()
-            trace = pm.sample(draws=13000, tune=3000,nuts_sampler='numpyro',return_inferencedata=True, target_accept = 0.99,  **sampler_kwargs)
+            trace = pm.sample(draws=10000, tune=3000,nuts_sampler='numpyro',return_inferencedata=True, target_accept = 0.99,  **sampler_kwargs)
             post_checks = pm.sample_posterior_predictive(
                 trace, var_names=var_names
             )
