@@ -71,7 +71,7 @@ class ElectionsModel:
     def __init__(
         self,
         election_date: str,
-        timescales: List[int] = [7, 28, 60],
+        timescales: List[int] = [7, 28],
         weights: List[float] = None,
         test_cutoff: pd.Timedelta = None,
     ):
@@ -263,38 +263,40 @@ class ElectionsModel:
             self.coords,
         ) = self._build_coords(polls)
 
+        # Define different timescales for party and election-specific time effects
+        long_timescale = 60  # For long-term trends (party_time_effect)
+        short_timescale = 7   # For short-term trends (election_party_time_effect)
+
         with pm.Model(coords=self.coords) as model:
             data_containers = self._build_data_containers(polls)
 
             # --------------------------------------------------------
             #                   BASELINE COMPONENTS
             # --------------------------------------------------------
-
             party_baseline_sd = pm.HalfNormal("party_baseline_sd", sigma=0.5)
             party_baseline = pm.ZeroSumNormal(
                 "party_baseline", sigma=party_baseline_sd, dims="parties_complete"
             )
 
-            election_party_baseline_sd = pm.HalfNormal("election_party_baseline_sd", sigma=0.5)
+            election_party_baseline_sd = pm.HalfNormal("election_party_baseline_sd", sigma=0.1)
             election_party_baseline = pm.ZeroSumNormal(
                 "election_party_baseline",
                 sigma=election_party_baseline_sd,
                 dims=("elections", "parties_complete"),
             )
-
             # --------------------------------------------------------
             #                        HOUSE EFFECTS
             # --------------------------------------------------------
 
             poll_bias = pm.ZeroSumNormal(
                 "poll_bias",
-                sigma=0.15,
+                sigma=0.05,
                 dims="parties_complete",
             )
 
             house_effects = pm.ZeroSumNormal(
                 "house_effects",
-                sigma=0.15,
+                sigma=0.05,
                 dims=("pollsters", "parties_complete"),
             )
 
@@ -313,55 +315,50 @@ class ElectionsModel:
                 dims=("pollsters", "parties_complete", "elections"),
             )
 
-            # # --------------------------------------------------------
-            # #               TIME-VARYING COMPONENTS (HSGP)
-            # # --------------------------------------------------------
+            # --------------------------------------------------------
+            #               TIME-VARYING COMPONENTS (HSGP)
+            # --------------------------------------------------------
 
-            # Shared parameters
-            m = [30]
+            m = [10]
             c = 1.5
-            l_list = self.gp_config['lengthscale']
 
             # Center and scale the input variable
             X = self.coords["countdown"][:, None]
             X_center = (X.max() + X.min()) / 2.0
             Xs = X - X_center
 
-            # Define covariance functions for multiple lengthscales
-            cov_funcs = [pm.gp.cov.Matern52(input_dim=1, ls=l) for l in l_list]
+            # Baseline Time-Varying Component (Long-Term Trend)
+            cov_func_long_term = pm.gp.cov.Matern52(input_dim=1, ls=long_timescale)
 
-            # Baseline Time-Varying Component
-            fs_baseline = []
-            for idx, cov_func in enumerate(cov_funcs):
-                gp = pm.gp.HSGP(
-                    cov_func=cov_func,
-                    m=m,
-                    c=c,
-                )
-                phi, sqrt_psd = gp.prior_linearized(X=Xs)
-                if f"gp_basis_{idx}" not in model.coords:
-                    model.add_coords({f"gp_basis_{idx}": np.arange(gp.n_basis_vectors)})
-                gp_coef = pm.Normal(
-                    f"gp_coef_baseline_{idx}",
-                    mu=0,
-                    sigma=1,
-                    dims=(f"gp_basis_{idx}", "parties_complete")
-                )
-                f = pt.dot(phi, gp_coef * sqrt_psd[:, None])
-                fs_baseline.append(f)
+            gp_baseline = pm.gp.HSGP(
+                cov_func=cov_func_long_term,
+                m=m,
+                c=c,
+            )
 
-            f_baseline_total = sum(fs_baseline)
+            phi_long_term, sqrt_psd_long_term = gp_baseline.prior_linearized(X=Xs)
+
+            if "gp_basis_long_term" not in model.coords:
+                model.add_coords({"gp_basis_long_term": np.arange(gp_baseline.n_basis_vectors)})
+
+            gp_coef_baseline_long_term = pm.Normal(
+                "gp_coef_baseline_long_term",
+                mu=0,
+                sigma=1,
+                dims=("gp_basis_long_term", "parties_complete")
+            )
+
             party_time_effect = pm.Deterministic(
                 "party_time_effect",
-                f_baseline_total,
+                pt.dot(phi_long_term, gp_coef_baseline_long_term * sqrt_psd_long_term[:, None]),
                 dims=("countdown", "parties_complete")
             )
 
             # Weights for baseline component
-            lsd_baseline = pm.Normal("lsd_baseline", mu=-2, sigma=0.5)
+            lsd_baseline = pm.Normal("lsd_baseline", mu=-2, sigma=0.3)
             lsd_party_effect = pm.ZeroSumNormal(
                 "lsd_party_effect_party_amplitude",
-                sigma=0.2,
+                sigma=0.1,
                 dims="parties_complete"
             )
             party_time_weight = pm.Deterministic(
@@ -375,46 +372,46 @@ class ElectionsModel:
                 dims=("countdown", "parties_complete")
             )
 
-            # Election-Specific Time-Varying Component
-            fs_election = []
-            for idx, cov_func in enumerate(cov_funcs):
-                gp = pm.gp.HSGP(
-                    cov_func=cov_func,
-                    m=m,
-                    c=c,
-                )
-                phi, sqrt_psd = gp.prior_linearized(X=Xs)
-                if f"gp_basis_election_{idx}" not in model.coords:
-                    model.add_coords({f"gp_basis_election_{idx}": np.arange(gp.n_basis_vectors)})
-                gp_coef_election = pm.Normal(
-                    f"gp_coef_election_{idx}",
-                    mu=0,
-                    sigma=1,
-                    dims=(f"gp_basis_election_{idx}", "parties_complete", "elections")
-                )
-                f_election = pt.tensordot(
-                    phi,
-                    gp_coef_election * sqrt_psd[:, None, None],
-                    axes=(1, 0)
-                )
-                fs_election.append(f_election)
+            # Election-Specific Time-Varying Component (Short-Term Trend)
+            cov_func_short_term = pm.gp.cov.Matern52(input_dim=1, ls=short_timescale)
 
-            f_election_total = sum(fs_election)
+            gp_election = pm.gp.HSGP(
+                cov_func=cov_func_short_term,
+                m=m,
+                c=c,
+            )
+
+            phi_short_term, sqrt_psd_short_term = gp_election.prior_linearized(X=Xs)
+
+            if "gp_basis_short_term" not in model.coords:
+                model.add_coords({"gp_basis_short_term": np.arange(gp_election.n_basis_vectors)})
+
+            gp_coef_election_short_term = pm.Normal(
+                "gp_coef_election_short_term",
+                mu=0,
+                sigma=1,
+                dims=("gp_basis_short_term", "parties_complete", "elections")
+            )
+
             election_party_time_effect = pm.Deterministic(
                 "election_party_time_effect",
-                f_election_total,
+                pt.tensordot(
+                    phi_short_term,
+                    gp_coef_election_short_term * sqrt_psd_short_term[:, None, None],
+                    axes=(1, 0)
+                ),
                 dims=("countdown", "parties_complete", "elections")
             )
 
-            # Weights for election-specific component
+            # Reparameterizing election-specific time-varying component
             lsd_party_effect_election = pm.ZeroSumNormal(
                 "lsd_party_effect_election_party_amplitude",
-                sigma=0.2,
+                sigma=0.1,
                 dims="parties_complete"
             )
             lsd_election_effect = pm.ZeroSumNormal(
                 "lsd_election_effect",
-                sigma=0.2,
+                sigma=0.1,
                 dims="elections"
             )
             lsd_election_party_sd = pm.HalfNormal("lsd_election_party_sd", sigma=0.5)
@@ -423,8 +420,8 @@ class ElectionsModel:
                 sigma=lsd_election_party_sd,
                 dims=("parties_complete", "elections"),
                 n_zerosum_axes=2,
-
             )
+
             election_party_time_weight = pm.Deterministic(
                 "election_party_time_weight",
                 pt.exp(
@@ -434,6 +431,7 @@ class ElectionsModel:
                 ),
                 dims=("parties_complete", "elections")
             )
+
             election_party_time_effect_weighted = pm.Deterministic(
                 "election_party_time_effect_weighted",
                 election_party_time_effect * election_party_time_weight[None, :, :],
@@ -450,9 +448,8 @@ class ElectionsModel:
                 + election_party_baseline[data_containers["election_idx"]]
                 + party_time_effect_weighted[data_containers["countdown_idx"]]
                 + election_party_time_effect_weighted[
-                     data_containers["countdown_idx"], :, data_containers["election_idx"]
-                 ]
-                
+                    data_containers["countdown_idx"], :, data_containers["election_idx"]
+                ]
             )
 
             latent_mu = latent_mu + data_containers['non_competing_polls_additive'] 
@@ -481,12 +478,7 @@ class ElectionsModel:
                 dims=("observations", "parties_complete"),
             )
 
-             # The concentration parameter of a Dirichlet-Multinomial distribution
-            # can be interpreted as the effective number of trials.
-            #
-            # The mean (1000) is thus taken to be roughly the sample size of
-            # polls, and the standard deviation accounts for the variation in
-            # sample size.
+            # The concentration parameter of a Dirichlet-Multinomial distribution
             concentration_polls = pm.InverseGamma(
                 "concentration_polls", mu=1000, sigma=200
             )
@@ -520,12 +512,6 @@ class ElectionsModel:
                 dims=("elections", "parties_complete"),
             )
 
-            # The concentration parameter of a Dirichlet-Multinomial distribution
-            # can be interpreted as the effective number of trials.
-            #
-            # The mean (1000) is thus taken to be roughly the sample size of
-            # polls, and the standard deviation accounts for the variation in
-            # sample size.
             concentration_results = pm.InverseGamma(
                 "concentration_results", mu=1000, sigma=200
             )
@@ -537,22 +523,6 @@ class ElectionsModel:
                 observed=data_containers["observed_results"],
                 dims=("elections_observed", "parties_complete"),
             )
-
-            # print(f"Shape of latent_mu: {latent_mu.shape.eval()}")
-            # print(f"Shape of party_baseline: {party_baseline.shape.eval()}")
-            # print(f"Shape of election_party_baseline[data_containers['election_idx']]: {election_party_baseline[data_containers['election_idx']].shape.eval()}")
-            # #print(f"Shape of party_time_effect_weighted[data_containers['countdown_idx']]: {party_time_effect_weighted[data_containers['countdown_idx']].shape.eval()}")
-            # #print(f"Shape of election_party_time_effect_weighted[data_containers['countdown_idx'], :, data_containers['election_idx']]: {election_party_time_effect_weighted[data_containers['countdown_idx'], :, data_containers['election_idx']].shape.eval()}")
-            # print(f"Shape of results_N: {data_containers['results_N'].shape.eval()}")
-            # print(f"Shape of observed_results: {data_containers['observed_results'].shape.eval()}")
-            # print(f"Shape of party_baseline[None, :]: {party_baseline[None, :].shape.eval()}")
-            # print(f"Shape of election_party_baseline: {election_party_baseline.shape.eval()}")
-            # print(f"Shape of pt.expand_dims(party_time_effect_weighted[0], axis=0): {pt.expand_dims(party_time_effect_weighted[0], axis=0).shape.eval()}")
-            # #print(f"Shape of latent_mu_t0: {latent_mu_t0.shape.eval()}")
-
-            # print(f"Shape of latent_popularity: {pt.special.softmax(latent_mu, axis=1).shape.eval()}")
-
-
 
         return model
 
@@ -675,10 +645,11 @@ class ElectionsModel:
         """
         if model is None:
             model = self.build_model()
+            #model = self.build_simplified_model()
 
         with model:
             prior_checks = pm.sample_prior_predictive()
-            trace = pm.sample(draws=10000, tune=3000,nuts_sampler='numpyro',return_inferencedata=True, target_accept = 0.99,  **sampler_kwargs)
+            trace = pm.sample(draws=5000, tune=2000,nuts_sampler='numpyro',return_inferencedata=True, target_accept = 0.995,  **sampler_kwargs)
             post_checks = pm.sample_posterior_predictive(
                 trace, var_names=var_names
             )
