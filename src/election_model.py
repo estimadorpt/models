@@ -71,8 +71,8 @@ class ElectionsModel:
     def __init__(
         self,
         election_date: str,
-        baseline_timescales=[60],
-        election_timescales=[7],
+        baseline_timescales=[180, 365],
+        election_timescales=[7,28],
         weights: List[float] = None,
         test_cutoff: pd.Timedelta = None,
     ):
@@ -352,10 +352,7 @@ class ElectionsModel:
 
         return data_containers #, non_competing_parties
     
-    def build_model(
-        self,
-        polls: pd.DataFrame = None,
-    ) -> pm.Model:
+    def build_model(self, polls: pd.DataFrame = None) -> pm.Model:
         (
             self.pollster_id,
             self.countdown_id,
@@ -366,17 +363,14 @@ class ElectionsModel:
         with pm.Model(coords=self.coords) as model:
             data_containers = self._build_data_containers(polls)
 
-            # ------------------------------------------------------
+            # --------------------------------------------------------
             #                   BASELINE COMPONENTS
-            # ------------------------------------------------------
-
-            # Baseline party component (static per party)
+            # --------------------------------------------------------
             party_baseline_sd = pm.HalfNormal("party_baseline_sd", sigma=0.5)
             party_baseline = pm.ZeroSumNormal(
                 "party_baseline", sigma=party_baseline_sd, dims="parties_complete"
             )
 
-            # Election-specific baseline (static per election and party)
             election_party_baseline_sd = pm.HalfNormal("election_party_baseline_sd", sigma=0.1)
             election_party_baseline = pm.ZeroSumNormal(
                 "election_party_baseline",
@@ -384,31 +378,43 @@ class ElectionsModel:
                 dims=("elections", "parties_complete"),
             )
 
-            # ------------------------------------------------------
-            # Time-varying effects shared across all elections (baseline effect)
-            # ------------------------------------------------------
-            baseline_lengthscales = self.gp_config["baseline_lengthscale"]
-            fs_baseline = []
-            for ls in baseline_lengthscales:
-                # Use a different lengthscale for the baseline
-                cov_func_baseline = pm.gp.cov.Matern52(1, ls)
-                gp_baseline = pm.gp.Latent(cov_func=cov_func_baseline)
-                f_baseline = gp_baseline.prior(
-                    f"party_time_effect_baseline_{ls}",
-                    X=data_containers["countdown_idx"][:, None],
+            # --------------------------------------------------------
+            #               TIME-VARYING COMPONENTS (Multiple Timescales with Weighting)
+            # --------------------------------------------------------
+
+            # Loop over baseline timescales and sum their contributions
+            baseline_gp_contributions = []
+            for i, baseline_lengthscale in enumerate(self.gp_config["baseline_lengthscale"]):
+                cov_func_baseline = pm.gp.cov.Matern52(input_dim=1, ls=baseline_lengthscale)
+                gp_baseline = pm.gp.HSGP(cov_func=cov_func_baseline, m=[10], c=1.5)
+                phi_baseline, sqrt_psd_baseline = gp_baseline.prior_linearized(X=self.coords["countdown"][:, None])
+
+                coord_name = f"gp_basis_baseline_{i}"
+                if coord_name not in model.coords:
+                    model.add_coords({coord_name: np.arange(gp_baseline.n_basis_vectors)})
+
+                gp_coef_baseline = pm.Normal(
+                    f"gp_coef_baseline_{baseline_lengthscale}",
+                    mu=0,
+                    sigma=1,
+                    dims=(coord_name, "parties_complete")
+                )
+
+                baseline_contrib = pm.Deterministic(
+                    f"party_time_effect_baseline_{baseline_lengthscale}",
+                    pt.dot(phi_baseline, gp_coef_baseline * sqrt_psd_baseline[:, None]),
                     dims=("countdown", "parties_complete")
                 )
-                fs_baseline.append(f_baseline)
+                baseline_gp_contributions.append(baseline_contrib)
 
-            # Sum over all baseline lengthscales
-            f_baseline_total = sum(fs_baseline)
+            # Sum the contributions from different baseline timescales
             party_time_effect = pm.Deterministic(
                 "party_time_effect",
-                f_baseline_total,
+                sum(baseline_gp_contributions),
                 dims=("countdown", "parties_complete")
             )
 
-            # Weighting with ZeroSumNormal to balance party effects
+            # Weights for baseline component
             lsd_baseline = pm.Normal("lsd_baseline", mu=-2, sigma=0.5)
             lsd_party_effect = pm.ZeroSumNormal(
                 "lsd_party_effect_party_amplitude",
@@ -420,39 +426,45 @@ class ElectionsModel:
                 pt.exp(lsd_baseline + lsd_party_effect),
                 dims="parties_complete"
             )
-
-            # Weight the baseline time effect
             party_time_effect_weighted = pm.Deterministic(
                 "party_time_effect_weighted",
                 party_time_effect * party_time_weight[None, :],
                 dims=("countdown", "parties_complete")
             )
 
-            # ------------------------------------------------------
-            # Election-specific time-varying effects
-            # ------------------------------------------------------
-            election_lengthscales = self.gp_config["election_lengthscale"]
-            fs_election = []
-            for ls in election_lengthscales:
-                # Use a different lengthscale for the election-specific time effect
-                cov_func_election = pm.gp.cov.Matern52(1, ls)
-                gp_election = pm.gp.Latent(cov_func=cov_func_election)
-                f_election = gp_election.prior(
-                    f"election_party_time_effect_{ls}",
-                    X=data_containers["countdown_idx"][:, None],
+            # Loop over election timescales and sum their contributions
+            election_gp_contributions = []
+            for i, election_lengthscale in enumerate(self.gp_config["election_lengthscale"]):
+                cov_func_election = pm.gp.cov.Matern52(input_dim=1, ls=election_lengthscale)
+                gp_election = pm.gp.HSGP(cov_func=cov_func_election, m=[10], c=1.5)
+                phi_election, sqrt_psd_election = gp_election.prior_linearized(X=self.coords["countdown"][:, None])
+
+                coord_name = f"gp_basis_election_{i}"
+                if coord_name not in model.coords:
+                    model.add_coords({coord_name: np.arange(gp_election.n_basis_vectors)})
+
+                gp_coef_election = pm.Normal(
+                    f"gp_coef_election_{election_lengthscale}",
+                    mu=0,
+                    sigma=1,
+                    dims=(coord_name, "parties_complete", "elections")
+                )
+
+                election_contrib = pm.Deterministic(
+                    f"election_party_time_effect_{election_lengthscale}",
+                    pt.tensordot(phi_election, gp_coef_election * sqrt_psd_election[:, None, None], axes=(1, 0)),
                     dims=("countdown", "parties_complete", "elections")
                 )
-                fs_election.append(f_election)
+                election_gp_contributions.append(election_contrib)
 
-            # Sum over all election-specific lengthscales
-            f_election_total = sum(fs_election)
+            # Sum the contributions from different election timescales
             election_party_time_effect = pm.Deterministic(
                 "election_party_time_effect",
-                f_election_total,
+                sum(election_gp_contributions),
                 dims=("countdown", "parties_complete", "elections")
             )
 
-            # Weighting for election-specific component with ZeroSumNormal
+            # Weights for election-specific component
             lsd_party_effect_election = pm.ZeroSumNormal(
                 "lsd_party_effect_election_party_amplitude",
                 sigma=0.2,
@@ -471,7 +483,6 @@ class ElectionsModel:
                 n_zerosum_axes=2
             )
 
-            # Final weighting of the election-specific effect
             election_party_time_weight = pm.Deterministic(
                 "election_party_time_weight",
                 pt.exp(
@@ -481,96 +492,127 @@ class ElectionsModel:
                 ),
                 dims=("parties_complete", "elections")
             )
-
-            # Weight the election-specific time effect
             election_party_time_effect_weighted = pm.Deterministic(
                 "election_party_time_effect_weighted",
                 election_party_time_effect * election_party_time_weight[None, :, :],
                 dims=("countdown", "parties_complete", "elections")
             )
 
-            # ------------------------------------------------------
-            #                       HOUSE EFFECTS
-            # ------------------------------------------------------
+            # --------------------------------------------------------
+            #                        HOUSE EFFECTS & POLL BIAS
+            # --------------------------------------------------------
 
-            # Pollster bias shared across all elections
-            poll_bias = pm.ZeroSumNormal("poll_bias", sigma=0.05, dims="parties_complete")
+            poll_bias = pm.ZeroSumNormal(
+                "poll_bias",
+                sigma=0.05,
+                dims="parties_complete",
+            )
 
-            # Pollster-specific house effects
             house_effects = pm.ZeroSumNormal(
                 "house_effects",
                 sigma=0.05,
-                dims=("pollsters", "parties_complete")
+                dims=("pollsters", "parties_complete"),
             )
 
-            # Pollster-specific election effects
-            house_election_effects_sd = pm.HalfNormal("house_election_effects_sd", sigma=0.1, dims=("pollsters", "parties_complete"))
-            house_election_effects_raw = pm.ZeroSumNormal("house_election_effects_raw", dims=("pollsters", "parties_complete", "elections"))
+            house_election_effects_sd = pm.HalfNormal(
+                "house_election_effects_sd",
+                0.1,
+                dims=("pollsters", "parties_complete"),
+            )
+            house_election_effects_raw = pm.ZeroSumNormal(
+                "house_election_effects_raw",
+                dims=("pollsters", "parties_complete", "elections"),
+            )
             house_election_effects = pm.Deterministic(
                 "house_election_effects",
                 house_election_effects_sd[..., None] * house_election_effects_raw,
-                dims=("pollsters", "parties_complete", "elections")
+                dims=("pollsters", "parties_complete", "elections"),
             )
 
-            # ------------------------------------------------------
-            #        LATENT POPULARITY (WITHOUT POLL BIAS)
-            # ------------------------------------------------------
+            # --------------------------------------------------------
+            #                      POLL RESULTS
+            # --------------------------------------------------------
+
+            # Compute latent_mu
             latent_mu = (
-                party_baseline[None, :]  # Baseline party effect
-                + election_party_baseline[data_containers["election_idx"]]  # Election-specific baseline
-                + party_time_effect_weighted[data_containers["countdown_idx"]]  # Baseline time-varying effect
-                + election_party_time_effect_weighted[data_containers["countdown_idx"], :, data_containers["election_idx"]]  # Election-specific time-varying effect
+                party_baseline[None, :]
+                + election_party_baseline[data_containers["election_idx"]]
+                + party_time_effect_weighted[data_containers["countdown_idx"]]
+                + election_party_time_effect_weighted[
+                    data_containers["countdown_idx"], :, data_containers["election_idx"]
+                ]
             )
 
-            # Apply softmax to obtain probabilities for latent popularity
-            latent_popularity = pm.Deterministic("latent_popularity", pt.special.softmax(latent_mu, axis=1), dims=("observations", "parties_complete"))
+            latent_mu = latent_mu + data_containers['non_competing_polls_additive'] 
 
-            # ------------------------------------------------------
-            #        NOISY POPULARITY (WITH POLL BIAS & HOUSE EFFECTS)
-            # ------------------------------------------------------
+            # Apply softmax over the correct axis
+            pm.Deterministic(
+                "latent_popularity",
+                pt.special.softmax(latent_mu, axis=1),
+                dims=("observations", "parties_complete"),
+            )
+
             noisy_mu = (
                 latent_mu
-                + poll_bias[None, :]  # Poll bias (shared across elections)
-                + house_effects[data_containers["pollster_idx"]]  # Pollster-specific bias
-                + house_election_effects[data_containers["pollster_idx"], :, data_containers["election_idx"]]  # Pollster-specific election effects
+                + poll_bias[None, :]
+                + house_effects[data_containers["pollster_idx"]]
+                + house_election_effects[
+                    data_containers["pollster_idx"], :, data_containers["election_idx"]
+                ]
+                * data_containers['non_competing_polls_multiplicative']
             )
 
-            noisy_popularity = pm.Deterministic("noisy_popularity", pt.special.softmax(noisy_mu, axis=1), dims=("observations", "parties_complete"))
+            # Apply softmax over the correct axis
+            noisy_popularity = pm.Deterministic(
+                "noisy_popularity",
+                pt.special.softmax(noisy_mu, axis=1),
+                dims=("observations", "parties_complete"),
+            )
 
-            # ------------------------------------------------------
-            #        POLL RESULTS (DIRICHLET-MULTINOMIAL MODEL)
-            # ------------------------------------------------------
-            concentration_polls = pm.InverseGamma("concentration_polls", mu=1000, sigma=200)
+            # The concentration parameter of a Dirichlet-Multinomial distribution
+            concentration_polls = pm.InverseGamma(
+                "concentration_polls", mu=1000, sigma=200
+            )
+
             pm.DirichletMultinomial(
                 "N_approve",
                 a=concentration_polls * noisy_popularity,
                 n=data_containers["observed_N"],
                 observed=data_containers["observed_polls"],
-                dims=("observations", "parties_complete")
+                dims=("observations", "parties_complete"),
             )
 
-            # ------------------------------------------------------
-            #              ELECTION RESULTS COMPONENT
-            # ------------------------------------------------------
-            # Time-zero (election day) latent popularity
+            # --------------------------------------------------------
+            #                    ELECTION RESULTS
+            # --------------------------------------------------------
+
+            # Compute latent_mu_t0
             latent_mu_t0 = (
-                party_baseline[None, :]  # Baseline party effect
-                + election_party_baseline  # Election-specific baseline
-                + party_time_effect_weighted[0]  # Baseline time-varying effect at time=0
-                + election_party_time_effect_weighted[0].transpose((1, 0))  # Election-specific time effect at time=0
+                party_baseline[None, :]
+                + election_party_baseline
+                + party_time_effect_weighted[0]
+                + election_party_time_effect_weighted[0].transpose((1, 0))
             )
 
-            # Apply softmax to obtain probabilities for latent popularity at election time
-            latent_pop_t0 = pm.Deterministic("latent_pop_t0", pt.special.softmax(latent_mu_t0, axis=1), dims=("elections", "parties_complete"))
+            latent_mu_t0 = latent_mu_t0 + data_containers['non_competing_parties_results']
 
-            # Dirichlet-Multinomial model for election results
-            concentration_results = pm.InverseGamma("concentration_results", mu=1000, sigma=200)
+            # Apply softmax over the correct axis
+            latent_pop_t0 = pm.Deterministic(
+                "latent_pop_t0",
+                pt.special.softmax(latent_mu_t0, axis=1),
+                dims=("elections", "parties_complete"),
+            )
+
+            concentration_results = pm.InverseGamma(
+                "concentration_results", mu=1000, sigma=200
+            )
+
             pm.DirichletMultinomial(
                 "R",
-                a=concentration_results * latent_pop_t0[:-1],  # Remove the last election if modeling only past ones
+                a=concentration_results * latent_pop_t0[:-1],
                 n=data_containers["results_N"],
                 observed=data_containers["observed_results"],
-                dims=("elections", "parties_complete")
+                dims=("elections_observed", "parties_complete"),
             )
 
         return model

@@ -11,8 +11,11 @@ var_names = [
         "poll_bias",
         "house_effects",
         "house_election_effects",
+        "party_time_effect_weighted",
         "latent_popularity",
         "noisy_popularity",
+        "election_party_time_effect_weighted",
+
         "N_approve",
         "R"
     ]
