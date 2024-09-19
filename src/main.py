@@ -11,10 +11,10 @@ var_names = [
         "poll_bias",
         "house_effects",
         "house_election_effects",
-        "party_time_effect_weighted",
+        #"party_time_effect_weighted",
         "latent_popularity",
         "noisy_popularity",
-        "election_party_time_effect_weighted",
+        #"election_party_time_effect_weighted",
 
         "N_approve",
         "R"
@@ -23,6 +23,6 @@ var_names = [
 if __name__ == "__main__":
     b = ElectionsModel('2024-03-10')
     prior, trace, post = b.sample_all(var_names=var_names)
-    arviz.to_netcdf(prior, "prior_simplified.nc")
-    arviz.to_netcdf(trace, "trace_simplified.nc")
-    arviz.to_netcdf(post, "posterior_simplified.nc")
+    arviz.to_zarr(prior, "prior.zarr")
+    arviz.to_zarr(trace, "trace.zarr")
+    arviz.to_zarr(post, "posterior.zarr")
