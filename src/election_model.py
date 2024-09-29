@@ -18,11 +18,11 @@ import pytensor
 
 
 # compute_test_value is 'off' by default, meaning this feature is inactive
-#pytensor.config.compute_test_value = 'off' # Use 'warn' to activate this feature
+#pytensor.config.compute_test_value = 'warn' # Use 'warn' to activate this feature
 pytensor.config.exception_verbosity = 'high' # Use 'high' to see the full error stack
 pytensor.config.optimizer= 'fast_compile'
 #pytensor.config.mode= 'DebugMode'
-#pytensor.config.on_unused_input='warn'
+pytensor.config.on_unused_input='warn'
 
 import pytensor.tensor as pt
 from typing import List, Optional, Union
@@ -77,8 +77,8 @@ class ElectionsModel:
     def __init__(
         self,
         election_date: str,
-        baseline_timescales=[180],
-        election_timescales=[14],
+        baseline_timescales=[365],
+        election_timescales=[60],
         weights: List[float] = None,
         test_cutoff: pd.Timedelta = None,
     ):
@@ -212,7 +212,7 @@ class ElectionsModel:
     
     def _load_marktest_polls(self):
         # Read the CSV file
-        df = pd.read_csv('data/marktest_polls.csv')
+        df = pd.read_csv(os.path.join(DATA_DIR,'marktest_polls.csv'))
 
         # Convert 'Date' to datetime
         df['Date'] = pd.to_datetime(df['Date'], format='%d/%m/%Y')
@@ -232,20 +232,20 @@ class ElectionsModel:
             'Chega - Chega': 'CH',
             'Outros - Outros/Brancos/Nulos': 'Others',
             'PSD - Partido Social Democrata': 'PSD',
-            'CDS-PP - Partido Popular': 'CDS'
+            'CDS-PP - Partido Popular': 'CDS',
+            "PAF - PSD/CDS - Portugal à Frente (2015)": 'PAF',
         })
 
         # Select and reorder columns
-        columns = ['date', 'pollster', 'sample_size', 'PS', 'PSD', 'CH', 'IL', 'BE', 'CDU', 'CDS', 'PAN', 'L', 'AD']
+        columns = ['date', 'pollster', 'sample_size', 'PS', 'PSD', 'CH', 'IL', 'BE', 'CDU', 'CDS', 'PAN', 'L', 'AD','PAF']
         df = df[columns]
 
         # Handle AD coalition
-        df['AD'] = df['AD'].fillna(df['PSD'] + df['CDS'])
-        df['PSD'] = df['PSD'].where(df['AD'].isna(), 0)
-        df['CDS'] = df['CDS'].where(df['AD'].isna(), 0)
-
+        df['AD'] = df['AD'].fillna(df['PSD'].fillna(0) + df['CDS'].fillna(0) + df['PAF'].fillna(0))
+        df.drop(columns=['PAF','PSD','CDS'], inplace=True)
         # Convert percentage values to floats
-        for col in df.columns[3:]:
+        party_columns = df.select_dtypes(include=['int64', 'float64']).columns
+        for col in ['PS', 'CH', 'IL', 'BE', 'CDU', 'PAN', 'L', 'AD']:
             df[col] = df[col].astype(float) / 100
 
         # Sort by date
@@ -267,9 +267,9 @@ class ElectionsModel:
         polls_df['pollster'] = polls_df['pollster'].str.replace('Pitagórica', 'Pitagorica')
 
 
-        polls_df['AD'] = polls_df['AD'].fillna(polls_df['PSD'] + polls_df['CDS'])
+        #polls_df['AD'] = polls_df['AD'].fillna(polls_df['PSD'] + polls_df['CDS'])
         #drop psd and cds columns
-        polls_df = polls_df.drop(columns=['PSD', 'CDS'])
+        #polls_df = polls_df.drop(columns=['PSD', 'CDS'])
         #fill na with 0
         polls_df = polls_df.fillna(0)
         polls_df['other'] = 1 - polls_df[['PS', 'AD', 'BE', 'CDU', 'IL', 'PAN', 'L', 'CH']].sum(axis=1)
@@ -277,6 +277,7 @@ class ElectionsModel:
         polls_df['election_date'] = pd.to_datetime(polls_df.apply(self.find_closest_election_date, axis=1))
         polls_df = polls_df[polls_df['election_date'].notna()]
         polls_df['countdown'] = (polls_df['election_date'] - polls_df['date']).dt.days
+        polls_df.drop(columns=['other'], inplace=True)
 
         #drop polls without an election date
         return(polls_df)
@@ -304,7 +305,7 @@ class ElectionsModel:
             if 'L/TDA' in temp_results_df.columns:
                 temp_results_df = temp_results_df.drop(columns='L/TDA')
 
-            AD_columns_to_sum = temp_results_df.filter(like='PPD/PSD').columns.tolist() + temp_results_df.filter(like='CDS').columns.tolist()
+            AD_columns_to_sum = list(set(temp_results_df.filter(like='PPD/PSD').columns.tolist() + temp_results_df.filter(like='CDS').columns.tolist()))
             temp_results_df['AD'] = temp_results_df[AD_columns_to_sum].sum(axis=1)
             temp_results_df = temp_results_df.drop(columns=AD_columns_to_sum)
 
@@ -312,12 +313,14 @@ class ElectionsModel:
             columns_to_keep = ['date', 'election_date', 'pollster', 'sample_size', 'PS', 'AD', 'B.E.', 'PCP-PEV', 'IL', 'PAN', 'CH','L']
             #drop items from columns_to_keep that are not in temp_results_df
             columns_to_keep = [col for col in columns_to_keep if col in temp_results_df.columns]
-            temp_results_df['other'] = temp_results_df.drop(columns=columns_to_keep).sum(axis=1)
+            # Calculate 'other' as the sum of all parties not in columns_to_keep
+            party_columns = [col for col in temp_results_df.columns if col not in columns_to_keep and col not in ['sample_size', 'date', 'election_date', 'pollster','number_voters','percentage_voters','subscribed_voters']]
+            temp_results_df['other'] = temp_results_df[party_columns].sum(axis=1)
             temp_results_df = temp_results_df[columns_to_keep+['other']]
             temp_results_df = temp_results_df.rename(columns={'B.E.': 'BE', 'PCP-PEV': 'CDU'})
 
-            #divide all numerical columns by 100
-            for col in ['PS', 'AD', 'BE', 'CDU', 'IL', 'PAN', 'L', 'CH']:
+            #divide all numerical columns by 100 to avoid overflow in Multinomial
+            for col in ['PS', 'AD', 'BE', 'CDU', 'IL', 'PAN', 'L', 'CH', 'other']:
                 if col in temp_results_df.columns:
                     temp_results_df[col] = temp_results_df[col] // 100
                 else:
@@ -328,6 +331,7 @@ class ElectionsModel:
             
             dfs.append(temp_results_df)
         df = pd.concat(dfs)
+        df.drop(columns=['other'], inplace=True)
         #add countdown column with difference between election_date and date
         df['countdown'] = (df['election_date'] - df['date']).dt.days
         df = df.fillna(0)
@@ -421,73 +425,49 @@ class ElectionsModel:
         COORDS["elections_observed"] = COORDS["elections"][:-1]
 
         return pollster_id, countdown_id, election_id, COORDS
-
-    def _build_data_containers(
-        self,
-        polls: pd.DataFrame = None,
-    ) :
-
+    def _build_data_containers(self, polls: pd.DataFrame = None):
         if polls is None:
             polls = self.polls_train
         is_here = polls[self.political_families].astype(bool).astype(int)
-        
-        # Ensure there are no NaNs in government_status
-        if self.government_status.isnull().values.any():
-            raise ValueError("government_status contains NaN values. Please check the data.")
-        
+
+
         data_containers = dict(
             election_idx=pm.Data("election_idx", self.election_id, dims="observations"),
             pollster_idx=pm.Data("pollster_idx", self.pollster_id, dims="observations"),
-            countdown_idx=pm.Data(
-                "countdown_idx", self.countdown_id, dims="observations"
-            ),
-            stdz_gdp=pm.Data(
-                "stdz_gdp",
-                self.campaign_preds["gdp"].to_numpy(),
-                dims="observations",
-            ),
-            election_gdp=pm.Data(
-                "election_gdp",
-                self.results_preds["gdp"].to_numpy(),
-                dims="elections",
-            ),
-            observed_N=pm.Data(
-                "observed_N",
-                polls["sample_size"].to_numpy(),
-                dims="observations",
-            ),
+            countdown_idx=pm.Data("countdown_idx", self.countdown_id, dims="observations"),
+            stdz_gdp=pm.Data("stdz_gdp", self.campaign_preds["gdp"].to_numpy(), dims="observations"),
+            election_gdp=pm.Data("election_gdp", self.results_preds["gdp"].to_numpy(), dims="elections"),
+            observed_N=pm.Data("observed_N", polls["sample_size"].to_numpy(), dims="observations"),
             observed_polls=pm.Data(
                 "observed_polls",
                 polls[self.political_families].to_numpy(),
                 dims=("observations", "parties_complete"),
             ),
-            results_N=pm.Data(
-                "results_N",
-                self.results_oos["sample_size"].to_numpy(),
-                dims="elections_observed",
-            ),
-            
+            results_N=pm.Data("results_N", self.results_oos["sample_size"].to_numpy(), dims="elections_observed"),
             observed_results=pm.Data(
                 "observed_results",
                 self.results_oos[self.political_families].to_numpy(),
                 dims=("elections_observed", "parties_complete"),
             ),
-
             non_competing_parties_results=pm.Data(
                 "non_competing_parties_results",
-                self.results_mult[self.political_families].astype(bool).astype(int).replace(to_replace=0, value=-10).replace(to_replace=1, value=0).to_numpy(),
+                self.results_mult[self.political_families]
+                .astype(bool)
+                .astype(int)
+                .replace(to_replace=0, value=-10)
+                .replace(to_replace=1, value=0)
+                .to_numpy(),
                 dims=("elections", "parties_complete"),
             ),
-            
-            non_competing_polls_additive = pm.Data(
+            non_competing_polls_additive=pm.Data(
                 "non_competing_polls_additive",
                 is_here.replace(to_replace=0, value=-10).replace(to_replace=1, value=0).to_numpy(),
-                dims=("observations", "parties_complete")
+                dims=("observations", "parties_complete"),
             ),
-            non_competing_polls_multiplicative = pm.Data(
+            non_competing_polls_multiplicative=pm.Data(
                 "non_competing_polls_multiplicative",
                 is_here.to_numpy(),
-                dims=("observations", "parties_complete")
+                dims=("observations", "parties_complete"),
             ),
             government_status=pm.Data(
                 "government_status",
@@ -496,9 +476,10 @@ class ElectionsModel:
             ),
         )
 
-        print("Shape of government_status in _build_data_containers:", data_containers["government_status"].shape.eval())
         return data_containers
-    
+
+
+
     def build_model(self, polls: pd.DataFrame = None) -> pm.Model:
         (
             self.pollster_id,
@@ -525,35 +506,35 @@ class ElectionsModel:
                 dims=("elections", "parties_complete"),
             )
 
-            # --------------------------------------------------------
-            #                   FUNDAMENTAL COMPONENTS
-            # --------------------------------------------------------
+            # # --------------------------------------------------------
+            # #                   FUNDAMENTAL COMPONENTS
+            # # --------------------------------------------------------
 
-            # Define independent GDP coefficients for government and opposition
-            gdp_coeff_gov = pm.Normal("gdp_coeff_gov", mu=0, sigma=0.2)
-            gdp_coeff_opp = pm.Normal("gdp_coeff_opp", mu=0, sigma=0.2)
+            # # Define independent GDP coefficients for government and opposition
+            # gdp_coeff_gov = pm.Normal("gdp_coeff_gov", mu=0, sigma=0.2)
+            # gdp_coeff_opp = pm.Normal("gdp_coeff_opp", mu=0, sigma=0.2)
 
-            # Compute GDP effect for polls using pm.math.switch
-            gdp_effect_polls = pm.Deterministic(
-                "gdp_effect_polls",
-                pm.math.switch(
-                    data_containers["government_status"][data_containers["election_idx"]],
-                    gdp_coeff_gov,
-                    gdp_coeff_opp
-                ),
-                dims=("observations", "parties_complete"),
-            )
+            # # Compute GDP effect for polls using pm.math.switch
+            # gdp_effect_polls = pm.Deterministic(
+            #     "gdp_effect_polls",
+            #     pm.math.switch(
+            #         data_containers["government_status"][data_containers["election_idx"]],
+            #         gdp_coeff_gov,
+            #         gdp_coeff_opp
+            #     ),
+            #     dims=("observations", "parties_complete"),
+            # )
 
-            # Compute GDP effect for elections using pm.math.switch
-            gdp_effect_elections = pm.Deterministic(
-                "gdp_effect_elections",
-                pm.math.switch(
-                    data_containers["government_status"],
-                    gdp_coeff_gov,
-                    gdp_coeff_opp
-                ),
-                dims=("elections", "parties_complete"),
-            )
+            # # Compute GDP effect for elections using pm.math.switch
+            # gdp_effect_elections = pm.Deterministic(
+            #     "gdp_effect_elections",
+            #     pm.math.switch(
+            #         data_containers["government_status"],
+            #         gdp_coeff_gov,
+            #         gdp_coeff_opp
+            #     ),
+            #     dims=("elections", "parties_complete"),
+            # )
 
             # --------------------------------------------------------
             #               TIME-VARYING COMPONENTS (Multiple Timescales with Weighting)
@@ -563,7 +544,7 @@ class ElectionsModel:
             baseline_gp_contributions = []
             for i, baseline_lengthscale in enumerate(self.gp_config["baseline_lengthscale"]):
                 cov_func_baseline = pm.gp.cov.Matern52(input_dim=1, ls=baseline_lengthscale)
-                gp_baseline = pm.gp.HSGP(cov_func=cov_func_baseline, m=[10], c=1.5)
+                gp_baseline = pm.gp.HSGP(cov_func=cov_func_baseline, m=[20], c=2.0)
                 phi_baseline, sqrt_psd_baseline = gp_baseline.prior_linearized(X=self.coords["countdown"][:, None])
 
                 coord_name = f"gp_basis_baseline_{i}"
@@ -592,10 +573,10 @@ class ElectionsModel:
             )
 
             # Weights for baseline component
-            lsd_baseline = pm.Normal("lsd_baseline", mu=-2, sigma=0.5)
+            lsd_baseline = pm.Normal("lsd_baseline", mu=-2, sigma=0.2)
             lsd_party_effect = pm.ZeroSumNormal(
                 "lsd_party_effect_party_amplitude",
-                sigma=0.2,
+                sigma=0.05,
                 dims="parties_complete"
             )
             party_time_weight = pm.Deterministic(
@@ -613,7 +594,7 @@ class ElectionsModel:
             election_gp_contributions = []
             for i, election_lengthscale in enumerate(self.gp_config["election_lengthscale"]):
                 cov_func_election = pm.gp.cov.Matern52(input_dim=1, ls=election_lengthscale)
-                gp_election = pm.gp.HSGP(cov_func=cov_func_election, m=[10], c=1.5)
+                gp_election = pm.gp.HSGP(cov_func=cov_func_election, m=[20], c=2.0)
                 phi_election, sqrt_psd_election = gp_election.prior_linearized(X=self.coords["countdown"][:, None])
 
                 coord_name = f"gp_basis_election_{i}"
@@ -644,15 +625,15 @@ class ElectionsModel:
             # Weights for election-specific component
             lsd_party_effect_election = pm.ZeroSumNormal(
                 "lsd_party_effect_election_party_amplitude",
-                sigma=0.2,
+                sigma=0.1,
                 dims="parties_complete"
             )
             lsd_election_effect = pm.ZeroSumNormal(
                 "lsd_election_effect",
-                sigma=0.2,
+                sigma=0.1,
                 dims="elections"
             )
-            lsd_election_party_sd = pm.HalfNormal("lsd_election_party_sd", sigma=0.05)
+            lsd_election_party_sd = pm.HalfNormal("lsd_election_party_sd", sigma=0.2)
             lsd_election_party_effect = pm.ZeroSumNormal(
                 "lsd_election_party_effect",
                 sigma=lsd_election_party_sd,
@@ -681,19 +662,19 @@ class ElectionsModel:
 
             poll_bias = pm.ZeroSumNormal(
                 "poll_bias",
-                sigma=0.05,
+                sigma=0.25,
                 dims="parties_complete",
             )
 
             house_effects = pm.ZeroSumNormal(
                 "house_effects",
-                sigma=0.05,
+                sigma=0.5,
                 dims=("pollsters", "parties_complete"),
             )
 
             house_election_effects_sd = pm.HalfNormal(
                 "house_election_effects_sd",
-                0.1,
+                0.5,
                 dims=("pollsters", "parties_complete"),
             )
             house_election_effects_raw = pm.ZeroSumNormal(
@@ -718,7 +699,7 @@ class ElectionsModel:
                 + election_party_time_effect_weighted[
                     data_containers["countdown_idx"], :, data_containers["election_idx"]
                 ]
-                + gdp_effect_polls * pt.expand_dims(data_containers["stdz_gdp"], axis=1)  # Apply GDP effect for polls
+                #+ gdp_effect_polls * pt.expand_dims(data_containers["stdz_gdp"], axis=1)  # Apply GDP effect for polls
             )
 
             latent_mu = latent_mu + data_containers['non_competing_polls_additive'] 
@@ -770,7 +751,7 @@ class ElectionsModel:
                 + election_party_baseline
                 + party_time_effect_weighted[0]
                 + election_party_time_effect_weighted[0].transpose((1, 0))
-                + gdp_effect_elections * data_containers["election_gdp"][:, None]  # Apply GDP effect for elections
+                #+ gdp_effect_elections * data_containers["election_gdp"][:, None]  # Apply GDP effect for elections
             )
 
             latent_mu_t0 = latent_mu_t0 + data_containers['non_competing_parties_results']
@@ -823,7 +804,7 @@ class ElectionsModel:
 
         with model:
             prior_checks = pm.sample_prior_predictive()
-            trace = pm.sample(draws=5000, tune=3000,nuts_sampler='numpyro',return_inferencedata=True, target_accept = 0.995,  **sampler_kwargs)
+            trace = pm.sample(draws=2000, tune=1000,nuts_sampler='numpyro',return_inferencedata=True, target_accept = 0.995,  **sampler_kwargs)
             post_checks = pm.sample_posterior_predictive(
                 trace, var_names=var_names
             )
