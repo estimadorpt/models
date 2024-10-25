@@ -3,7 +3,7 @@ channels:
   - conda-forge
   - nodefaults
 dependencies:
-  - pymc
+  - pymc >= 5.17.0
   - numpy
   - pyarrow
   - ipykernel
