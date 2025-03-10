@@ -3,32 +3,22 @@ import sys
 import os
 from typing import Dict, List, Tuple
 from urllib.request import urlopen
+
+# Set PyTensor config before importing PyMC or other PyTensor-dependent libraries
+import pytensor
+pytensor.config.exception_verbosity = 'high'  # Use 'high' to see the full error stack
+pytensor.config.mode = 'FAST_RUN'  # Changed from lowercase to uppercase
+pytensor.config.on_unused_input = 'warn'
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.config import DATA_DIR
-
-import os
 
 import arviz
 import numpy as np
 import pandas as pd
 import pymc as pm
-
-import pytensor
-
-
-
-# compute_test_value is 'off' by default, meaning this feature is inactive
-#pytensor.config.compute_test_value = 'warn' # Use 'warn' to activate this feature
-pytensor.config.exception_verbosity = 'high' # Use 'high' to see the full error stack
-pytensor.config.optimizer= 'fast_compile'
-#pytensor.config.mode= 'DebugMode'
-pytensor.config.on_unused_input='warn'
-
 import pytensor.tensor as pt
 from typing import List, Optional, Union
-
-import numpy as np
-import pandas as pd
 from scipy import linalg
 import xarray as xr
 
@@ -108,7 +98,6 @@ class ElectionsModel:
             self.results_mult.election_date != election_date
         ].copy()
 
-        self.government_parties = self.government_parties
         self.government_status = self._create_government_status()
 
         self._load_predictors()
@@ -899,11 +888,11 @@ class ElectionsModel:
     def prepare_observed_data(self):
         # This method prepares the observed poll results for posterior predictive checks
         observed_data = pd.DataFrame({
-            'date': self.results['date'],
-            'pollster': self.results['pollster'],
+            'date': self.results_mult['date'],
+            'pollster': self.results_mult['pollster'],
         })
         for party in self.political_families:
-            observed_data[party] = self.results[party] / self.results['sample_size']
+            observed_data[party] = self.results_mult[party] / self.results_mult['sample_size']
         return observed_data
 
     def posterior_predictive_check(self, posterior):
@@ -1202,4 +1191,4 @@ def predictive_plot(
         axes[i].tick_params(axis="x", labelrotation=45, labelsize=10)
         axes[i].set(title=p, ylim=(-0.01, 0.4))
         axes[i].legend(fontsize=9, ncol=3)
-        
+    plt.suptitle(f"Forecast for {election_date.date()}", fontsize=16, fontweight="bold")
