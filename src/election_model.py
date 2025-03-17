@@ -17,13 +17,6 @@ import pytensor
 
 
 
-# compute_test_value is 'off' by default, meaning this feature is inactive
-#pytensor.config.compute_test_value = 'warn' # Use 'warn' to activate this feature
-pytensor.config.exception_verbosity = 'high' # Use 'high' to see the full error stack
-pytensor.config.optimizer= 'fast_compile'
-#pytensor.config.mode= 'DebugMode'
-pytensor.config.on_unused_input='warn'
-
 import pytensor.tensor as pt
 from typing import List, Optional, Union
 

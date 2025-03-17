@@ -2,7 +2,6 @@ import os
 
 import arviz
 import requests
-os.environ["PYTENSOR_FLAGS"] = "optimizer_excluding=local_IncSubtensor_serialize"
 
 from election_model import ElectionsModel
 from analysis import run_diagnostics
