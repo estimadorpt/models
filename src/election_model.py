@@ -797,7 +797,7 @@ class ElectionsModel:
 
         with model:
             prior_checks = pm.sample_prior_predictive()
-            trace = pm.sample(draws=2000, tune=1000,nuts_sampler='numpyro',return_inferencedata=True, target_accept = 0.995,  **sampler_kwargs)
+            trace = pm.sample(draws=200, tune=100,nuts_sampler='numpyro',return_inferencedata=True, target_accept = 0.995,  **sampler_kwargs)
             post_checks = pm.sample_posterior_predictive(
                 trace, var_names=var_names
             )

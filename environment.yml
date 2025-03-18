@@ -11,3 +11,5 @@ dependencies:
   - seaborn
   - numpyro
   - joblib
+  - zarr < 3.0.0
+    
