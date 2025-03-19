@@ -6,9 +6,19 @@ import matplotlib.pyplot as plt
 import datetime
 import seaborn as sns
 import numpy as np
+import pandas as pd
+import time
+import traceback
+import sys
+
+# Debug module loading
+print(f"DEBUG: Main module {__name__} is being loaded")
 
 from src.models.elections_facade import ElectionsFacade
+from src.evaluation.retrodictive import evaluate_retrodictive_accuracy
 
+# Global flag to track if main has already run
+_MAIN_HAS_RUN = False
 
 def save_plots(elections_model, output_dir):
     """
@@ -264,143 +274,8 @@ def plot_model_components(elections_model, output_dir):
         print(f"Error plotting election party time effect weighted: {e}")
 
 
-def main():
-    """Main entry point for the application"""
-    # Parse command line arguments
-    parser = argparse.ArgumentParser(description="Election Model")
-    parser.add_argument(
-        "--draws", type=int, default=1000, help="Number of posterior samples to draw"
-    )
-    parser.add_argument(
-        "--tune", type=int, default=1000, help="Number of tuning steps for NUTS sampler"
-    )
-    parser.add_argument(
-        "--election-date", type=str, default="2024-03-10", help="Target election date (YYYY-MM-DD)"
-    )
-    parser.add_argument(
-        "--baseline-timescales", type=int, nargs="+", default=[365], 
-        help="Timescales for baseline GP in days"
-    )
-    parser.add_argument(
-        "--election-timescales", type=int, nargs="+", default=[60], 
-        help="Timescales for election-specific GP in days"
-    )
-    parser.add_argument(
-        "--weights", type=float, nargs="+", default=None, 
-        help="Optional weights for GP components"
-    )
-    parser.add_argument(
-        "--output-dir", type=str, default=None, 
-        help="Directory to save outputs (default: timestamped directory in 'outputs/')"
-    )
-    parser.add_argument(
-        "--load-results", action="store_true", default=False, 
-        help="Load previously saved inference results instead of running inference"
-    )
-    parser.add_argument(
-        "--load-dir", type=str, default=None, 
-        help="Directory to load results from (if --load-results is specified)"
-    )
-    parser.add_argument(
-        "--notify", action="store_true", default=False,
-        help="Send notifications via ntfy.sh"
-    )
-    parser.add_argument(
-        "--debug", action="store_true", default=False,
-        help="Enable detailed diagnostic output"
-    )
-    parser.add_argument(
-        "--fast", action="store_true", default=False,
-        help="Skip plots and other time-consuming operations for maximum speed"
-    )
-    
-    args = parser.parse_args()
-    
-    # Configure output directory
-    if args.output_dir is None:
-        # Use a timestamped directory if not specified
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S")
-        args.output_dir = os.path.join("outputs", timestamp)
-    
-    # Create output directory if it doesn't exist
-    if not os.path.exists(args.output_dir):
-        os.makedirs(args.output_dir)
-    
-    # Create an instance of the elections model
-    elections_model = ElectionsFacade(
-        election_date=args.election_date,
-        baseline_timescales=args.baseline_timescales,
-        election_timescales=args.election_timescales,
-        weights=args.weights,
-        debug=args.debug,
-    )
-    
-    # Store the output directory in the ElectionsFacade instance
-    elections_model.output_dir = args.output_dir
-    
-    # Step 1: Either load results or run inference
-    if args.load_results:
-        # If a specific directory is provided, load from there
-        if args.load_dir:
-            # Store load directory to handle prediction.zarr correctly
-            elections_model.load_dir = args.load_dir
-            elections_model.load_inference_results(directory=args.load_dir)
-        else:
-            elections_model.load_inference_results()
-        
-        if args.notify:
-            requests.post("https://ntfy.sh/bc-estimador",
-                data="Loaded saved inference results".encode(encoding='utf-8'))
-    else:
-        # Run inference
-        try:
-            elections_model.run_inference(draws=args.draws, tune=args.tune)
-            # Save inference results to output directory
-            if not args.fast:
-                elections_model.save_inference_results(directory=args.output_dir)
-            if args.notify:
-                requests.post("https://ntfy.sh/bc-estimador",
-                    data="Finished sampling".encode(encoding='utf-8'))
-        except Exception as e:
-            print(f"Error running inference: {e}")
-            if args.notify:
-                requests.post("https://ntfy.sh/bc-estimador",
-                    data=f"Error running inference: {e}".encode(encoding='utf-8'))
-            return
-    
-    # Step 2: Generate forecast once
-    try:
-        print("Generating forecast...")
-        elections_model.generate_forecast()
-        
-        # Save inference results including prediction to output directory
-        if not args.fast:
-            elections_model.save_inference_results(directory=args.output_dir)
-        if args.notify:
-            requests.post("https://ntfy.sh/bc-estimador",
-                data="Generated forecast".encode(encoding='utf-8'))
-    except Exception as e:
-        print(f"Error generating forecast: {e}")
-        if args.notify:
-            requests.post("https://ntfy.sh/bc-estimador",
-                data=f"Error generating forecast: {e}".encode(encoding='utf-8'))
-    
-    # Step 3: Save plots (skip in fast mode)
-    if not args.fast:
-        try:
-            save_plots(elections_model, args.output_dir)
-            if args.notify:
-                requests.post("https://ntfy.sh/bc-estimador",
-                    data="Finished analysis and saved plots".encode(encoding='utf-8'))
-        except Exception as e:
-            print(f"Error saving plots: {e}")
-            if args.notify:
-                requests.post("https://ntfy.sh/bc-estimador",
-                    data=f"Error saving plots: {e}".encode(encoding='utf-8'))
-    else:
-        print("Fast mode: Skipped plot generation")
-        
-    # Step 4: Print forecast summary
+def print_forecast_summary(elections_model):
+    """Print a summary of the forecast results"""
     try:
         # Extract the forecast data for the election date
         if hasattr(elections_model, "prediction") and elections_model.prediction is not None:
@@ -425,6 +300,335 @@ def main():
                 print("="*50)
     except Exception as e:
         print(f"Error printing forecast summary: {e}")
+
+
+def fit_model(args):
+    """Fit a model with the specified parameters"""
+    # Create output directory if it doesn't exist
+    if not os.path.exists(args.output_dir):
+        os.makedirs(args.output_dir)
+    
+    # Determine if we're doing a cutoff for retrodictive testing
+    test_cutoff = None
+    if args.cutoff_date:
+        cutoff_date = pd.to_datetime(args.cutoff_date)
+        target_date = pd.to_datetime(args.election_date)
+        test_cutoff = target_date - cutoff_date
+
+    # Create an instance of the elections model
+    elections_model = ElectionsFacade(
+        election_date=args.election_date,
+        baseline_timescales=args.baseline_timescales,
+        election_timescales=args.election_timescales,
+        weights=args.weights,
+        test_cutoff=test_cutoff,
+        debug=args.debug,
+    )
+    
+    # Store the output directory in the ElectionsFacade instance
+    elections_model.output_dir = args.output_dir
+    
+    # Run inference
+    try:
+        elections_model.run_inference(draws=args.draws, tune=args.tune)
+        
+        # Save inference results to output directory - always save regardless of fast mode
+        print(f"Saving model to {args.output_dir}")
+        elections_model.save_inference_results(directory=args.output_dir)
+        
+        if args.notify:
+            requests.post("https://ntfy.sh/bc-estimador",
+                data="Finished sampling".encode(encoding='utf-8'))
+    except Exception as e:
+        print(f"Error running inference: {e}")
+        if args.notify:
+            requests.post("https://ntfy.sh/bc-estimador",
+                data=f"Error running inference: {e}".encode(encoding='utf-8'))
+        return None
+    
+    return elections_model
+
+
+def load_model(args):
+    """Load a previously fitted model"""
+    # Create an instance of the elections model
+    elections_model = ElectionsFacade(
+        election_date=args.election_date,
+        baseline_timescales=args.baseline_timescales,
+        election_timescales=args.election_timescales,
+        weights=args.weights,
+        debug=args.debug,
+    )
+    
+    # Store the output directory in the ElectionsFacade instance
+    elections_model.output_dir = args.output_dir
+    
+    # If a specific directory is provided, load from there
+    if args.load_dir:
+        # Load only the trace, prior, and posterior
+        try:
+            trace_path = os.path.join(args.load_dir, "trace.zarr")
+            if os.path.exists(trace_path):
+                print(f"Loading trace from {trace_path}")
+                elections_model.trace = arviz.from_zarr(trace_path)
+            else:
+                raise ValueError(f"Trace file not found at {trace_path}")
+                
+            # Optional: load prior and posterior if they exist
+            prior_path = os.path.join(args.load_dir, "prior_check.zarr")
+            old_prior_path = os.path.join(args.load_dir, "prior.zarr")
+            if os.path.exists(prior_path):
+                elections_model.prior = arviz.from_zarr(prior_path)
+            elif os.path.exists(old_prior_path):
+                elections_model.prior = arviz.from_zarr(old_prior_path)
+                
+            posterior_path = os.path.join(args.load_dir, "posterior_check.zarr")
+            old_posterior_path = os.path.join(args.load_dir, "posterior.zarr")
+            if os.path.exists(posterior_path):
+                elections_model.posterior = arviz.from_zarr(posterior_path)
+            elif os.path.exists(old_posterior_path):
+                elections_model.posterior = arviz.from_zarr(old_posterior_path)
+        except Exception as e:
+            raise ValueError(f"Failed to load model: {e}")
+    else:
+        elections_model.load_inference_results()
+    
+    # Verify that trace was loaded properly
+    if elections_model.trace is None:
+        raise ValueError(f"Failed to load trace from {args.load_dir}. Make sure the directory contains a valid trace.zarr file.")
+    
+    # Explicitly build the model - this is needed for generating forecasts after loading
+    elections_model.model.model = elections_model.model.build_model()
+    print("Model successfully built after loading!")
+    
+    if args.notify:
+        requests.post("https://ntfy.sh/bc-estimador",
+            data="Loaded saved inference results".encode(encoding='utf-8'))
+    
+    return elections_model
+
+
+def generate_forecast(elections_model, args):
+    """Generate forecasts using the fitted model"""
+    try:
+        print(f"Generating forecast in {args.mode} mode...")
+        start_time = time.time()
+        
+        # Make sure the model is built properly
+        if not hasattr(elections_model.model, 'model') or elections_model.model.model is None:
+            print("Model not built yet, building model now...")
+            elections_model.model.model = elections_model.model.build_model()
+        
+        # Use the specified election date or the default from args
+        elections_model.generate_forecast(election_date=args.election_date)
+        
+        end_time = time.time()
+        print(f"Forecast generation took {end_time - start_time:.2f} seconds")
+        
+        if args.notify:
+            requests.post("https://ntfy.sh/bc-estimador",
+                data="Generated forecast".encode(encoding='utf-8'))
+        
+        # Print forecast summary
+        print_forecast_summary(elections_model)
+        
+    except Exception as e:
+        print(f"Error generating forecast: {e}")
+        import traceback
+        traceback.print_exc()
+        if args.notify:
+            requests.post("https://ntfy.sh/bc-estimador",
+                data=f"Error generating forecast: {e}".encode(encoding='utf-8'))
+
+
+def cross_validate(args):
+    """
+    Perform cross-validation by fitting models for each past election,
+    using only data available before that election
+    """
+    print("SAVE_MARKER: Entering cross_validate function")
+    # Create output directory for cross-validation results
+    cv_dir = os.path.join(args.output_dir, "cross_validation")
+    if not os.path.exists(cv_dir):
+        os.makedirs(cv_dir)
+    
+    # Get list of elections to validate
+    # Create a dummy model to access the historical_election_dates
+    temp_model = ElectionsFacade(
+        election_date=args.election_date,
+        baseline_timescales=args.baseline_timescales,
+        election_timescales=args.election_timescales
+    )
+    
+    # Skip the most recent election from cross-validation
+    elections_to_validate = temp_model.dataset.historical_election_dates[1:]
+    print(f"\nPerforming cross-validation for {len(elections_to_validate)} elections: {elections_to_validate}")
+    
+    # Store results for each election
+    cv_results = []
+    
+    # For each election, fit a model using only data before that election
+    for election_date in elections_to_validate:
+        print(f"\n{'='*50}")
+        print(f"Cross-validating for election: {election_date}")
+        print(f"{'='*50}")
+        
+        # Create an election-specific output directory
+        election_dir = os.path.join(cv_dir, election_date)
+        if not os.path.exists(election_dir):
+            os.makedirs(election_dir)
+        
+        # Fit a model using data up to a few days before this election
+        election_datetime = pd.to_datetime(election_date)
+        cutoff_date = (election_datetime - pd.Timedelta(days=1)).strftime('%Y-%m-%d')
+        
+        # Set the args for this specific election
+        this_args = argparse.Namespace(
+            mode="fit",  # Explicitly set mode to fit
+            election_date=election_date,
+            cutoff_date=None,  # Don't apply extra cutoff
+            baseline_timescales=args.baseline_timescales,
+            election_timescales=args.election_timescales,
+            weights=args.weights,
+            output_dir=election_dir,
+            debug=args.debug,
+            draws=args.draws, 
+            tune=args.tune,
+            notify=False,
+            fast=True  # Skip some expensive operations
+        )
+        
+        print("SAVE_MARKER: cross_validate - before calling fit_model")
+        # Fit model
+        elections_model = fit_model(this_args)
+        if elections_model is None:
+            print(f"Failed to fit model for election {election_date}, skipping")
+            continue
+        
+        print("SAVE_MARKER: cross_validate - before calling generate_forecast")
+        # Generate forecast
+        generate_forecast(elections_model, this_args)
+        
+        # Evaluate accuracy against actual results
+        accuracy_metrics = evaluate_retrodictive_accuracy(elections_model, election_date)
+        cv_results.append({
+            'election_date': election_date,
+            **accuracy_metrics
+        })
+        
+        # Save plots
+        if not args.fast:
+            save_plots(elections_model, election_dir)
+    
+    # Summarize cross-validation results
+    if cv_results:
+        cv_df = pd.DataFrame(cv_results)
+        print("\nCROSS-VALIDATION SUMMARY")
+        print("="*50)
+        print(cv_df)
+        print("="*50)
+        print(f"Mean absolute error: {cv_df['mae'].mean():.3f}")
+        print(f"Root mean squared error: {cv_df['rmse'].mean():.3f}")
+        
+        # Save results to CSV
+        cv_df.to_csv(os.path.join(cv_dir, "cross_validation_results.csv"), index=False)
+    
+    return cv_results
+
+
+def main():
+    """Main entry point for the application"""
+    print("\nSAVE_MARKER: Entering main function")
+    
+    # Debug to see where main is being called from
+    print("DEBUG: main() call stack:")
+    current_stack = traceback.extract_stack()
+    for frame in current_stack[:-1]:  # Skip the current frame
+        print(f"  File {frame.filename}, line {frame.lineno}, in {frame.name}")
+    
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="Election Forecast Model")
+    
+    # Required arguments
+    parser.add_argument('--mode', type=str, required=True, 
+                      choices=['fit', 'load', 'cross-validate'],
+                      help='Mode to run the model in')
+    
+    # File and directory arguments
+    parser.add_argument('--output-dir', type=str, default='outputs/latest',
+                      help='Directory to save outputs')
+    parser.add_argument('--load-dir', type=str, default=None,
+                      help='Directory to load saved model from')
+    
+    # Model parameters
+    parser.add_argument('--election-date', type=str, required=True,
+                      help='Target election date (YYYY-MM-DD)')
+    parser.add_argument('--baseline-timescales', type=float, nargs='+', default=[180, 365, 730],
+                      help='Baseline timescales for Gaussian process')
+    parser.add_argument('--election-timescales', type=float, nargs='+', default=[60, 30, 15],
+                      help='Election timescales for Gaussian process')
+    parser.add_argument('--weights', type=float, nargs='+', default=[0.5, 0.3, 0.2],
+                      help='Weights for each timescale component')
+    
+    # MCMC parameters
+    parser.add_argument('--draws', type=int, default=1000,
+                      help='Number of samples to draw')
+    parser.add_argument('--tune', type=int, default=1000,
+                      help='Number of tuning steps')
+    
+    # Cross-validation parameters
+    parser.add_argument('--cutoff-date', type=str, default=None,
+                      help='Cutoff date for retrodictive testing (YYYY-MM-DD)')
+    
+    # Flags
+    parser.add_argument('--fast', action='store_true',
+                      help='Run in fast mode (skip plots and diagnostics)')
+    parser.add_argument('--notify', action='store_true',
+                      help='Send notifications on completion')
+    parser.add_argument('--debug', action='store_true',
+                      help='Enable debug output')
+    
+    args = parser.parse_args()
+    
+    # Store mode in args to pass it to generate_forecast
+    args.mode = args.mode
+    
+    # Execute the requested mode
+    if args.mode == "fit":
+        print("SAVE_MARKER: main function - fit branch")
+        # Fit the model with the specified parameters
+        # Note: fit_model already saves the model, no need to save again
+        elections_model = fit_model(args)
+        if elections_model is not None:
+            # Generate forecast
+            generate_forecast(elections_model, args)
+            
+            # Save plots (skip in fast mode)
+            if not args.fast:
+                save_plots(elections_model, args.output_dir)
+                if args.notify:
+                    requests.post("https://ntfy.sh/bc-estimador",
+                        data="Finished analysis and saved plots".encode(encoding='utf-8'))
+        
+    elif args.mode == "load":
+        print("SAVE_MARKER: main function - load branch")
+        # Load the model from saved results
+        elections_model = load_model(args)
+        
+        # Generate forecast
+        generate_forecast(elections_model, args)
+        
+        # Save plots (skip in fast mode)
+        if not args.fast:
+            save_plots(elections_model, args.output_dir)
+            if args.notify:
+                requests.post("https://ntfy.sh/bc-estimador",
+                    data="Finished analysis and saved plots".encode(encoding='utf-8'))
+    
+    elif args.mode == "cross-validate":
+        print("SAVE_MARKER: main function - cross-validate branch")
+        # Perform cross-validation
+        cv_results = cross_validate(args)
 
 
 if __name__ == "__main__":

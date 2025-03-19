@@ -8,6 +8,7 @@ import xarray as xr
 import pymc as pm
 import time
 import datetime
+import zarr
 
 from src.data.dataset import ElectionDataset
 from src.models.election_model import ElectionModel
@@ -92,6 +93,9 @@ class ElectionsFacade:
             "seed": 12345,
         }
         
+        # Flag to track if inference results have been saved
+        self._inference_results_saved = False
+        
     def build_model(self):
         """Build the PyMC model"""
         return self.model.build_model()
@@ -148,7 +152,7 @@ class ElectionsFacade:
         
         return self.prior, self.trace, self.posterior
     
-    def save_inference_results(self, directory: str = "."):
+    def save_inference_results(self, directory: str = ".", force: bool = False):
         """
         Save inference results to disk.
         
@@ -156,21 +160,36 @@ class ElectionsFacade:
         -----------
         directory : str
             Directory where to save files
+        force : bool
+            If True, save even if results were already saved
         """
+        # Skip if already saved and not forcing
+        if hasattr(self, "_inference_results_saved") and self._inference_results_saved and not force:
+            print(f"Inference results already saved to {directory}, skipping")
+            return True
+            
         # Create output directory if it doesn't exist
         os.makedirs(directory, exist_ok=True)
+        print(f"Saving inference results to: {directory}")
         
         if hasattr(self, "prior") and self.prior is not None:
-            arviz.to_zarr(self.prior, os.path.join(directory, "prior.zarr"))
+            prior_path = os.path.join(directory, "prior_check.zarr")
+            print(f"Saving prior to: {prior_path}")
+            arviz.to_zarr(self.prior, prior_path)
         
         if hasattr(self, "trace") and self.trace is not None:
-            arviz.to_zarr(self.trace, os.path.join(directory, "trace.zarr"))
+            trace_path = os.path.join(directory, "trace.zarr")
+            print(f"Saving trace to: {trace_path}")
+            arviz.to_zarr(self.trace, trace_path)
         
         if hasattr(self, "posterior") and self.posterior is not None:
-            arviz.to_zarr(self.posterior, os.path.join(directory, "posterior.zarr"))
-        
-        # We no longer save prediction data to avoid zarr complexity
-        # Just return successfully
+            posterior_path = os.path.join(directory, "posterior_check.zarr")
+            print(f"Saving posterior to: {posterior_path}")
+            arviz.to_zarr(self.posterior, posterior_path)
+            
+        # Print confirmation of save
+        print(f"Successfully saved inference results to {directory}")
+        self._inference_results_saved = True
         return True
     
     def load_inference_results(self, directory: str = "."):
@@ -182,13 +201,18 @@ class ElectionsFacade:
         directory : str
             Directory where files are saved
         """
-        prior_path = os.path.join(directory, "prior.zarr")
+        prior_path = os.path.join(directory, "prior_check.zarr")
         trace_path = os.path.join(directory, "trace.zarr")
-        posterior_path = os.path.join(directory, "posterior.zarr")
-        prediction_path = os.path.join(directory, "prediction.zarr")
+        posterior_path = os.path.join(directory, "posterior_check.zarr")
+        
+        # Check for older file names for backward compatibility
+        old_prior_path = os.path.join(directory, "prior.zarr")
+        old_posterior_path = os.path.join(directory, "posterior.zarr")
         
         if os.path.exists(prior_path):
             self.prior = arviz.from_zarr(prior_path)
+        elif os.path.exists(old_prior_path):
+            self.prior = arviz.from_zarr(old_prior_path)
             
         if os.path.exists(trace_path):
             self.trace = arviz.from_zarr(trace_path)
@@ -197,10 +221,8 @@ class ElectionsFacade:
             
         if os.path.exists(posterior_path):
             self.posterior = arviz.from_zarr(posterior_path)
-            
-        if os.path.exists(prediction_path):
-            # Use our custom load_prediction method instead of arviz.from_zarr
-            self.load_prediction(prediction_path)
+        elif os.path.exists(old_posterior_path):
+            self.posterior = arviz.from_zarr(old_posterior_path)
     
     def _analyze_trace_quality(self, trace):
         """
@@ -247,109 +269,71 @@ class ElectionsFacade:
             else:
                 print(f"{param}: Not found in trace")
         
-        # Comprehensive check of all parameters for ESS and Rhat issues
-        print("\n=== COMPREHENSIVE CONVERGENCE DIAGNOSTICS ===")
-        print("Identifying parameters with convergence issues...\n")
-        
-        # Get all parameter names from the trace
-        all_params = list(trace.posterior.data_vars)
-        
-        # Check for convergence using effective sample size (ESS)
+        # Calculate and show ESS and Rhat for key parameters when debug is enabled
+        print("\n=== ESS and R-hat for Key Parameters ===")
         try:
-            ess = arviz.ess(trace)
+            # Calculate ESS for important parameters
+            ess_params = ['party_baseline', 'election_party_baseline', 'house_effects', 'lsd_baseline']
+            for param in ess_params:
+                if param in trace.posterior:
+                    ess = arviz.ess(trace, var_names=[param]).to_array().values.flatten()
+                    ess_mean = np.mean(ess)
+                    ess_min = np.min(ess)
+                    print(f"{param} ESS - Mean: {ess_mean:.1f}, Min: {ess_min:.1f}")
+                    
+                    # Highlight problematic values
+                    if ess_min < 100:
+                        print(f"  WARNING: {param} has very low ESS (< 100)")
             
-            # Find parameters with low ESS
-            low_ess_params = []
-            for param in all_params:
-                if param in ess:
-                    min_ess = float(ess[param].min())
-                    if min_ess < 100:  # This is the threshold mentioned in the warning
-                        low_ess_params.append((param, min_ess))
-            
-            # Report parameters with low ESS if debug is enabled
-            if low_ess_params:
-                print(f"Found {len(low_ess_params)} parameters with low ESS (<100):")
-                for param, min_ess in sorted(low_ess_params, key=lambda x: x[1]):
-                    print(f"  {param}: Min ESS = {min_ess:.1f}")
-            
+            # Calculate Rhat for important parameters
+            rhat_params = ['party_baseline', 'election_party_baseline', 'house_effects', 'lsd_baseline']
+            for param in rhat_params:
+                if param in trace.posterior:
+                    rhat = arviz.rhat(trace, var_names=[param]).to_array().values.flatten()
+                    rhat_max = np.max(rhat)
+                    rhat_mean = np.mean(rhat)
+                    print(f"{param} R-hat - Mean: {rhat_mean:.4f}, Max: {rhat_max:.4f}")
+                    
+                    # Highlight problematic values
+                    if rhat_max > 1.01:
+                        print(f"  WARNING: {param} has high R-hat (> 1.01)")
         except Exception as e:
-            print(f"Could not compute ESS: {e}")
+            print(f"Error calculating ESS/R-hat: {e}")
         
-        # Check for mixing using Rhat
-        try:
-            rhat = arviz.rhat(trace)
-            
-            # Find parameters with high Rhat
-            high_rhat_params = []
-            for param in all_params:
-                if param in rhat:
-                    max_rhat = float(rhat[param].max())
-                    if max_rhat > 1.01:  # This is the threshold mentioned in the warning
-                        high_rhat_params.append((param, max_rhat))
-            
-            # Report parameters with high Rhat if debug is enabled
-            if high_rhat_params:
-                print(f"\nFound {len(high_rhat_params)} parameters with high R-hat (>1.01):")
-                for param, max_rhat in sorted(high_rhat_params, key=lambda x: x[1], reverse=True):
-                    if max_rhat > 1.1:
-                        severity = "SEVERE"
-                    elif max_rhat > 1.05:
-                        severity = "HIGH"
-                    else:
-                        severity = "MODERATE"
-                    print(f"  {param}: Max R-hat = {max_rhat:.3f} ({severity})")
-            
-            # Summary statistics for all parameters
-            print("\nSummary of all parameter diagnostics:")
-            print(f"  Total parameters: {len(all_params)}")
-            print(f"  Parameters with low ESS: {len(low_ess_params)} ({len(low_ess_params)/len(all_params)*100:.1f}%)")
-            print(f"  Parameters with high R-hat: {len(high_rhat_params)} ({len(high_rhat_params)/len(all_params)*100:.1f}%)")
-            
-            # Recommendations based on diagnostics
-            if len(low_ess_params) > 0 or len(high_rhat_params) > 0:
-                print("\nRecommendations to improve convergence:")
-                print("  1. Increase the number of tuning steps")
-                print("  2. Increase the number of draws")
-                print("  3. Adjust model priors to be more appropriate")
-                print("  4. Simplify model structure if possible")
-                if len(high_rhat_params) > len(all_params) * 0.5:
-                    print("  5. Consider a different sampler or algorithm")
-            
-            print("============================================\n")
-            
-        except Exception as e:
-            print(f"Could not compute R-hat: {e}")
+        print("======= END TRACE ANALYSIS =======\n")
     
-    def generate_forecast(self):
+    def generate_forecast(self, election_date: str = None):
         """
-        Generate a forecast for the target election using the model's forecast_election method.
+        Generate a forecast for the given election date.
         
+        Parameters:
+        -----------
+        election_date : str
+            The election date to forecast, in format YYYY-MM-DD
+            
         Returns:
         --------
         tuple
-            raw_predictions, coords, dims
+            Raw forecast data and a summary DataFrame
         """
-        # Ensure that the model has been built
-        if not hasattr(self, "trace") or self.trace is None:
-            self._build_model()
+        if self.trace is None:
+            raise ValueError("No trace available for forecasting. Run inference first.")
         
-        # Print basic status information
-        print("\nGenerating forecast for election date:", self.dataset.election_date)
+        # Use specified election date or the target from the model
+        target_date = pd.to_datetime(election_date or self.dataset.election_date)
         
-        # Start timing
+        # Start time measurement
         start_time = time.time()
         
-        # Check if trace has divergences or other quality issues
-        if not self._check_trace_quality():
-            print("CRITICAL MODEL ISSUE: Trace contains NaN values for key parameters.")
-            print("This could indicate issues with model specification, data compatibility,")
-            print("or insufficient tuning. Please check your data and model configuration.")
-            raise ValueError("Trace quality issues detected, cannot generate forecast.")
-        
         try:
-            # First ensure the model is built in the ElectionModel as done in test_forecast.py
-            print("Building model for forecast...")
-            self.model.model = self.model.build_model()
+            # First ensure the model is built in the ElectionModel
+            if hasattr(self.model, 'model') and self.model.model is not None:
+                # Model is already built, use it directly
+                print("Using existing model for forecast...")
+            else:
+                # Build the model
+                print("Building model for forecast...")
+                self.model.model = self.model.build_model()
             
             # Use the forecasting method from ElectionModel directly
             print("Calling forecast_election...")
@@ -365,24 +349,21 @@ class ElectionsFacade:
             elapsed_time = end_time - start_time
             print(f"Forecast generated successfully in {elapsed_time:.2f} seconds")
             
-            # Print dimensions of prediction data only in debug mode
+            # Print dimensions of prediction data if in debug mode
             if self.debug:
-                print("\nForecast dimensions:")
-                for var_name, arr in raw_ppc.items():
-                    print(f"  {var_name}: shape {arr.shape}")
+                print("\nPrediction dimensions:")
+                for var_name, var_data in raw_ppc.items():
+                    print(f"  {var_name}: shape = {var_data.shape}")
+                print(f"Coordinates: {coords}")
                 
-                print("\nCoordinates:")
-                for coord_name, values in coords.items():
-                    print(f"  {coord_name}: {len(values)} values")
-                print("===========================")
-            
             return raw_ppc, coords, dims
             
         except Exception as e:
-            print(f"Error in forecast generation: {e}")
-            import traceback
-            traceback.print_exc()
-            raise ValueError(f"Failed to generate forecast: {e}")
+            print(f"Error generating forecast: {e}")
+            if self.debug:
+                import traceback
+                traceback.print_exc()
+            raise
     
     def _check_trace_quality(self):
         """
@@ -860,139 +841,37 @@ class ElectionsFacade:
             
         return self.model.posterior_predictive_check(self.posterior)
     
-    def load_prediction(self, prediction_path):
-        """
-        Load a saved prediction from a zarr file.
-        
-        Parameters:
-        -----------
-        prediction_path : str
-            Path to the zarr file containing the prediction
-            
-        Returns:
-        --------
-        dict
-            The raw prediction data
-        dict
-            The coordinates for the prediction data
-        dict
-            The dimensions for the prediction data
-        """
-        print(f"Loading prediction from {os.path.basename(prediction_path)}")
+    def load_prediction(self, prediction_path: str) -> None:
+        """Load prediction data from file."""
         try:
-            import zarr
-            
-            # Open the zarr store
-            store = zarr.DirectoryStore(prediction_path)
-            root = zarr.open(store)
-            
-            # More efficient loading when debug is off
-            if not self.debug:
-                # Only load essential arrays (latent_popularity) when not debugging
-                raw_ppc = {}
-                
-                # Get the essential prediction data
-                if 'latent_popularity' in root.array_keys():
-                    raw_ppc['latent_popularity'] = root['latent_popularity'][:]
-                    print("Loaded essential prediction data")
-                else:
-                    # If essential data is not available, load all data
-                    for var_name in root.array_keys():
-                        if var_name not in ['coords', 'dims']:
-                            raw_ppc[var_name] = root[var_name][:]
-            else:
-                # Debug mode: load all prediction data
-                raw_ppc = {}
-                for var_name in root.array_keys():
-                    if var_name not in ['coords', 'dims']:
-                        raw_ppc[var_name] = root[var_name][:]
-            
-            # Load the coordinates (needed for both modes)
-            coords = {}
-            if 'coords' in root:
-                for coord_name in root['coords'].array_keys():
-                    coord_values = root['coords'][coord_name][:]
-                    if coord_name == 'observations':
-                        # Convert string dates back to datetime
-                        coord_values = pd.to_datetime(coord_values)
-                    coords[coord_name] = coord_values
-            
-            # Load the dimensions (needed for both modes)
-            dims = {}
-            if 'dims' in root:
-                for var_name in root['dims'].array_keys():
-                    dims[var_name] = list(root['dims'][var_name][:])
-            
-            # Store the loaded data
-            self.prediction = raw_ppc
-            self.prediction_coords = coords
-            self.prediction_dims = dims
-            
-            if self.debug:
-                print("Using raw prediction data for plotting")
-                # Print dimensions of prediction data
-                print("\nPrediction dimensions:")
-                for var_name, arr in raw_ppc.items():
-                    print(f"  {var_name}: shape {arr.shape}")
-                
-                if coords:
-                    print("\nCoordinates:")
-                    for coord_name, values in coords.items():
-                        print(f"  {coord_name}: {len(values)} values")
-            
-            return raw_ppc, coords, dims
-            
-        except Exception as e:
-            if self.debug:
-                print(f"Error loading prediction from zarr: {e}")
-            
-            # Try loading with arviz as a fallback
+            # Try loading from .npz file first
+            if prediction_path.endswith('.npz'):
+                print(f"Loading prediction from {prediction_path}")
+                prediction_data = np.load(prediction_path)
+                self.prediction = az.convert_to_inference_data(prediction_data)
+                return
+
+            # Try loading from zarr directory
             try:
-                import arviz as az
-                idata = az.from_zarr(prediction_path)
-                if self.debug:
-                    print("Loaded prediction as InferenceData object")
-                
-                # Extract raw data, coordinates, and dimensions
-                # More efficient in non-debug mode: only extract essential data
-                raw_ppc = {}
-                coords = {}
-                dims = {}
-                
-                if hasattr(idata, 'posterior_predictive'):
-                    # In non-debug mode, only extract latent_popularity if available
-                    if not self.debug and 'latent_popularity' in idata.posterior_predictive.data_vars:
-                        raw_ppc['latent_popularity'] = idata.posterior_predictive['latent_popularity'].values
-                    else:
-                        # Either in debug mode or essential variable not available: extract all
-                        for var_name in idata.posterior_predictive.data_vars:
-                            raw_ppc[var_name] = idata.posterior_predictive[var_name].values
-                    
-                    # Extract coordinates
-                    for coord_name in idata.posterior_predictive.coords:
-                        coords[coord_name] = idata.posterior_predictive.coords[coord_name].values
-                    
-                    # Create dimensions
-                    for var_name in raw_ppc:
-                        var_dims = list(idata.posterior_predictive[var_name].dims)
-                        dims[var_name] = var_dims
-                
-                # Store the extracted data
-                self.prediction = raw_ppc
-                self.prediction_coords = coords
-                self.prediction_dims = dims
-                
-                if self.debug:
-                    print("Extracted raw data from InferenceData object")
-                return raw_ppc, coords, dims
-                
-            except Exception as nested_e:
-                error_msg = f"Failed to load prediction: {e} -> {nested_e}"
+                store = zarr.DirectoryStore(prediction_path)
+                self.prediction = az.from_zarr(store)
+                return
+            except zarr.errors.FSPathExistNotDir:
+                pass
+
+            # Try loading from zarr file
+            try:
+                self.prediction = az.from_zarr(prediction_path)
+                return
+            except Exception as e:
+                error_msg = f"Failed to load prediction: {str(e)}"
                 print(error_msg)
-                if self.debug:
-                    import traceback
-                    traceback.print_exc()
                 raise ValueError(error_msg)
+
+        except Exception as e:
+            error_msg = f"Failed to load prediction: {str(e)}"
+            print(error_msg)
+            raise ValueError(error_msg)
     
     def _build_model(self):
         """

@@ -62,18 +62,39 @@ forecast_fig = model.plot_forecast(hdi=True)
 
 ### Command-line Interface
 
-You can also run the model from the command line:
+You can run the model from the command line in different modes:
 
 ```bash
-# Run with default settings
-python src/main.py
+# Fit a new model for a future election (using all available data)
+python src/main.py --mode fit --election-date 2024-03-10 --draws 1000 --tune 1000
 
-# Run with custom settings
-python src/main.py --election-date 2024-03-10 --draws 500 --tune 200 --notify
+# Load a previously saved model and generate forecasts
+python src/main.py --mode load --election-date 2024-03-10 --load-dir outputs/your-model-directory
 
-# Load previously saved results
-python src/main.py --load-results --notify
+# Run retrodictive testing with data cutoff
+python src/main.py --mode fit --election-date 2024-03-10 --cutoff-date 2024-01-01
+
+# Run cross-validation across past elections
+python src/main.py --mode cross-validate --election-date 2024-03-10
 ```
+
+Available modes:
+- `fit`: Train a new model
+- `load`: Load a previously saved model
+- `cross-validate`: Perform cross-validation on past elections
+
+Key parameters:
+- `--election-date`: Target election date (YYYY-MM-DD)
+- `--cutoff-date`: Exclude data after this date for retrodictive testing
+- `--baseline-timescales`: Timescales for baseline GP in days (default: 365)
+- `--election-timescales`: Timescales for election-specific GP in days (default: 60)
+- `--draws`: Number of posterior samples (default: 1000)
+- `--tune`: Number of tuning steps for NUTS sampler (default: 1000)
+- `--load-dir`: Directory to load saved model from
+- `--output-dir`: Directory to save outputs
+- `--fast`: Skip plots and non-essential operations for faster execution
+- `--notify`: Send notifications via ntfy.sh
+- `--debug`: Enable detailed diagnostic output
 
 ## Model Description
 
