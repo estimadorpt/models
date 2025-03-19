@@ -485,428 +485,282 @@ def plot_predictive_accuracy(idata, observed_polls, parties_complete):
     return fig
 
 
-def plot_latent_trajectories(idata, dates=None, parties=None, polls_train=None, polls_test=None, election_date=None):
+def plot_latent_trajectories(
+    prediction_data,
+    coords=None,
+    dims=None,
+    polls_train=None,
+    polls_test=None,
+    election_date=None
+):
     """
-    Plot the evolution of latent trajectories for multiple parties.
+    Plot latent trajectories for all parties.
     
     Parameters:
     -----------
-    idata : arviz.InferenceData
-        The inference data object containing the posterior samples
-    dates : array-like, optional
-        The dates corresponding to the samples
-    parties : list, optional
-        The list of party names to plot
-    polls_train : pandas.DataFrame, optional
-        The training polls data to overlay on the plot
-    polls_test : pandas.DataFrame, optional
-        The test polls data to overlay on the plot
+    prediction_data : dict or InferenceData
+        The prediction data, either as a raw dictionary or InferenceData object
+    coords : dict, optional
+        Coordinates for the prediction data if using raw dictionary
+    dims : dict, optional
+        Dimensions for the prediction data if using raw dictionary
+    polls_train : pd.DataFrame, optional
+        Training poll data
+    polls_test : pd.DataFrame, optional
+        Test poll data
     election_date : str, optional
-        The election date to mark with a vertical line
-        
-    Returns:
-    --------
-    fig : matplotlib.figure.Figure
-        The figure with the latent trajectories
+        The target election date
     """
     import matplotlib.pyplot as plt
     import numpy as np
     import pandas as pd
+    import arviz as az
     
-    # Define party colors
-    party_colors = {
-        "Socialist Party": "#E4001C",  # Red
-        "Labour Party": "#BB0022",  # Dark red
-        "Social Democratic Party": "#CC0000",  # Another shade of red
-        "People's Party": "#0047AB",  # Blue
-        "Liberal Party": "#5F9EA0",  # Cadet blue
-        "Conservative Party": "#0C2577",  # Dark blue
-        "Christian Democratic Union": "#000000",  # Black
-        "Green Party": "#009E60",  # Green
-        "Left Party": "#800080",  # Purple
-        "National Rally": "#8B4513",  # Brown
-        "Freedom Party": "#8B4513",  # Brown
-        "Others": "#808080"  # Gray
-    }
-    
-    # Get the posterior predictive samples
-    posterior_pred = idata.posterior_predictive
-    
-    if "latent_popularity" not in posterior_pred:
-        raise ValueError("No latent_popularity variable in posterior_predictive")
-    
-    # Get the latent popularity samples
-    latent_pop = posterior_pred["latent_popularity"].values
-    
-    # Use provided dates or create default dates
-    if dates is None:
-        try:
-            dates = posterior_pred.coords["observations"].values
-        except (KeyError, AttributeError):
-            # Create default dates based on the number of observations
-            n_obs = latent_pop.shape[2]
-            if election_date is not None:
-                end_date = pd.to_datetime(election_date)
-                start_date = end_date - pd.Timedelta(days=100)
-                dates = pd.date_range(start=start_date, end=end_date, freq="D")
-            else:
-                dates = pd.date_range(end=pd.Timestamp.now(), periods=n_obs, freq="D")
-    
-    # Use provided party names or create default names
-    if parties is None:
-        try:
-            parties = posterior_pred.coords["parties_complete"].values
-        except (KeyError, AttributeError):
-            # Create default party names
-            n_parties = latent_pop.shape[3]
-            parties = [f"Party {i+1}" for i in range(n_parties)]
-    
-    # Create the figure
-    fig, ax = plt.subplots(figsize=(14, 8))
-    
-    # Get a colormap with distinct colors
-    cmap = plt.cm.get_cmap('tab10', len(parties))
-    
-    # Calculate mean trajectories
-    mean_latent = latent_pop.mean(axis=(0, 1))
-    
-    # Plot sample trajectories for uncertainty visualization (pollsposition style)
-    # Reduce the number of samples to decrease visual clutter
-    n_samples = min(50, latent_pop.shape[0] * latent_pop.shape[1])
-    samples_per_chain = n_samples // latent_pop.shape[0]
-    for i, party in enumerate(parties):
-        # Reshape to get all samples
-        party_samples = latent_pop[:, :, :, i].reshape(-1, latent_pop.shape[2])
-        
-        # Randomly select some samples to plot
-        sample_indices = np.random.choice(party_samples.shape[0], size=n_samples, replace=False)
-        
-        # Plot sample trajectories with low alpha for uncertainty visualization
-        for idx in sample_indices:
-            ax.plot(dates, party_samples[idx], color=cmap(i), alpha=0.02, linewidth=1)
-        
-        # Plot mean trajectory on top
-        ax.plot(dates, mean_latent[:, i], label=party, linewidth=2.5, color=cmap(i))
-    
-    # Add poll data points if available with jittering to reduce overlap
-    marker_size = 30  # Reduced marker size
-    if polls_train is not None:
-        for i, party in enumerate(parties):
-            if party in polls_train.columns:
-                # Try different column names for sample size
-                sample_size_col = None
-                for col in ['sample_size', 'samplesize', 'N']:
-                    if col in polls_train.columns:
-                        sample_size_col = col
-                        break
-                
-                if sample_size_col is None:
-                    print(f"Warning: Could not find sample size column in polls_train. Available columns: {polls_train.columns.tolist()}")
-                    continue
-                
-                # Calculate party support in polls
-                party_support = polls_train[party].values / polls_train[sample_size_col].values
-                
-                # Group polls by date to apply jittering
-                grouped_polls = polls_train.groupby('date')
-                
-                for j, (date, group) in enumerate(grouped_polls):
-                    # Apply jitter to avoid overplotting
-                    x_jitter = date + pd.Timedelta(hours=np.random.uniform(-12, 12))
-                    
-                    # Get the party support for this date group
-                    date_idx = polls_train.index[polls_train['date'] == date].tolist()
-                    if date_idx:
-                        y_values = party_support[date_idx]
-                        
-                        # Get a list of keys from the grouped_polls.groups
-                        group_keys = list(grouped_polls.groups.keys())
-                        first_date = group_keys[0] if group_keys else None
-                        
-                        # Plot the polls with small markers
-                        ax.scatter(
-                            [x_jitter] * len(y_values), 
-                            y_values,
-                            color=party_colors.get(party, f"C{i}"),
-                            s=15,  # Small marker size
-                            alpha=0.5,
-                            marker="o",
-                            label=f"{party} polls (train)" if date == first_date else ""
-                        )
-    
-    # Add test polls with X markers
-    if polls_test is not None and len(polls_test) > 0:
-        for i, party in enumerate(parties):
-            if party in polls_test.columns:
-                # Find sample size column
-                sample_size_col = None
-                for col in ['sample_size', 'samplesize', 'N']:
-                    if col in polls_test.columns:
-                        sample_size_col = col
-                        break
-                
-                if sample_size_col is None:
-                    continue
-                
-                # Calculate party support in test polls
-                party_support = polls_test[party].values / polls_test[sample_size_col].values
-                
-                # Group polls by date to apply jittering
-                grouped_polls = polls_test.groupby('date')
-                
-                for date, group in grouped_polls:
-                    if date in dates:
-                        # Get this party's support for this date's polls
-                        date_polls = group[party].values / group[sample_size_col].values
-                        
-                        # Apply small horizontal jitter for polls on the same date
-                        jitter = np.random.normal(0, 0.5, size=len(date_polls))  # in days
-                        jittered_dates = [pd.Timestamp(date) + pd.Timedelta(days=j) for j in jitter]
-                        
-                        # Plot with X markers for test polls
-                        ax.scatter(
-                            jittered_dates, 
-                            date_polls, 
-                            s=marker_size, 
-                            color=cmap(i), 
-                            alpha=0.6,
-                            marker='x',
-                            linewidths=1.5,
-                            label=f"{party} polls (test)" if date == list(grouped_polls.groups.keys())[0] else ""
-                        )
-    
-    # Add election date vertical line
-    if election_date is not None:
-        ax.axvline(
-            x=pd.to_datetime(election_date),
-            linestyle='--',
-            color='black',
-            alpha=0.8,
-            linewidth=1.5,
-            label='Election Day'
-        )
-    
-    # Add historical averages if party_baseline is available
-    try:
-        if 'party_baseline' in posterior_pred:
-            party_baselines = posterior_pred["party_baseline"].mean(("chain", "draw")).values
-            # Use softmax to convert to probabilities
-            baseline_probs = softmax(party_baselines)
-            
-            for i, party in enumerate(parties):
-                ax.axhline(
-                    y=baseline_probs[i],
-                    xmin=-0.01,
-                    xmax=1.0,
-                    ls="-.",
-                    c=cmap(i),
-                    alpha=0.5,
-                    linewidth=1.5
-                )
-    except Exception as e:
-        print(f"Could not add historical averages: {e}")
-    
-    # Set labels and title
-    ax.set_xlabel("Date", fontsize=12)
-    ax.set_ylabel("Support (%)", fontsize=12)
-    ax.set_title("Forecasted Party Support", fontsize=16, fontweight='bold')
-    
-    # Format the date axis
-    ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))  # Use month-year format for cleaner labels
-    
-    # Use fewer date ticks to avoid overcrowding
-    date_range = pd.date_range(start=min(dates), end=max(dates), freq='MS')  # Monthly ticks
-    if len(date_range) > 12:  # If too many months, use quarters instead
-        date_range = pd.date_range(start=min(dates), end=max(dates), freq='QS')
-    ax.set_xticks(date_range)
-    
-    # Rotate date labels for better readability
-    plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
-    
-    # Add a grid
-    ax.grid(True, alpha=0.3)
-    
-    # Set y-axis limits with some padding, handling NaN or Inf values
-    try:
-        max_val = np.nanmax(mean_latent) if np.any(np.isfinite(mean_latent)) else 0.5
-        if np.isfinite(max_val):
-            ax.set_ylim(0, min(max(max_val * 1.2, 0.5), 1.0))
-        else:
-            # Default if max is not finite
-            ax.set_ylim(0, 0.5)
-    except (ValueError, TypeError):
-        # Default if anything goes wrong
-        ax.set_ylim(0, 0.5)
-        
-    # Format y-axis as percentage
-    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'{x:.0%}'))
-    
-    # Add a legend with neat formatting - use a separate box to avoid overlap with plot
-    handles, labels = ax.get_legend_handles_labels()
-    by_label = dict(zip(labels, handles))
-    
-    # Clean up duplicate labels and place the legend to the right of the figure
-    ax.legend(
-        by_label.values(), 
-        by_label.keys(), 
-        loc='upper left', 
-        bbox_to_anchor=(1.02, 1), 
-        fontsize=10, 
-        framealpha=0.7
-    )
-    
-    # Adjust layout to make room for the legend
-    plt.tight_layout()
-    plt.subplots_adjust(right=0.85)
-    
-    return fig
-
-
-def plot_party_trajectory(idata, party=None, dates=None, polls_train=None, polls_test=None, election_date=None):
-    """
-    Plot the trajectory of a specific party's popularity over time.
-    
-    Parameters:
-    -----------
-    idata : arviz.InferenceData
-        The inference data object containing the posterior samples
-    party : str
-        The name of the party to plot
-    dates : array-like, optional
-        The dates corresponding to the samples
-    polls_train : pandas.DataFrame, optional
-        The training polls data to overlay on the plot
-    polls_test : pandas.DataFrame, optional
-        The test polls data to overlay on the plot
-    election_date : str, optional
-        The election date to mark with a vertical line
-        
-    Returns:
-    --------
-    fig : matplotlib.figure.Figure
-        The figure with the party trajectory
-    """
-    import matplotlib.pyplot as plt
-    import numpy as np
-    import pandas as pd
-    
-    # Define party colors
-    party_colors = {
-        "Socialist Party": "#E4001C",  # Red
-        "Labour Party": "#BB0022",  # Dark red
-        "Social Democratic Party": "#CC0000",  # Another shade of red
-        "People's Party": "#0047AB",  # Blue
-        "Liberal Party": "#5F9EA0",  # Cadet blue
-        "Conservative Party": "#0C2577",  # Dark blue
-        "Christian Democratic Union": "#000000",  # Black
-        "Green Party": "#009E60",  # Green
-        "Left Party": "#800080",  # Purple
-        "National Rally": "#8B4513",  # Brown
-        "Freedom Party": "#8B4513",  # Brown
-        "Others": "#808080"  # Gray
-    }
-    
-    # Get the posterior predictive samples
-    posterior_pred = idata.posterior_predictive
-    
-    # Check if party is provided
-    if party is None:
-        raise ValueError("Must specify a party to plot")
-    
-    # Get dates from posterior predictive
-    try:
-        dates = posterior_pred.coords["observations"].values
-    except (KeyError, AttributeError):
-        raise ValueError("No observations coordinate found in posterior predictive")
-    
-    # Get party names
-    try:
-        parties = posterior_pred.coords["parties_complete"].values
-    except (KeyError, AttributeError):
-        raise ValueError("No parties_complete coordinate found in posterior predictive")
-    
-    # Find the index of the specified party
-    try:
-        party_index = np.where(parties == party)[0][0]
-    except:
-        raise ValueError(f"Party '{party}' not found in posterior predictive. Available parties: {parties}")
-    
-    # Create figure
+    # Initialize the figure
     fig, ax = plt.subplots(figsize=(12, 8))
     
-    # Get the latent popularity for this party
-    if "latent_popularity" in posterior_pred:
-        latent_pop = posterior_pred["latent_popularity"].sel(parties_complete=party).values
-    else:
-        raise ValueError("No latent_popularity variable found in posterior predictive")
-    
-    # Calculate mean and credible intervals
-    mean_latent = latent_pop.mean(axis=(0, 1))
-    
-    # Calculate HDI interval (highest density interval)
-    lower_bound = np.percentile(latent_pop, 2.5, axis=(0, 1))
-    upper_bound = np.percentile(latent_pop, 97.5, axis=(0, 1))
-    
-    # Plot mean and credible intervals
-    ax.plot(dates, mean_latent, label=f"{party} Mean", color=party_colors.get(party, f"C0"), linewidth=2)
-    ax.fill_between(dates, lower_bound, upper_bound, alpha=0.2, color=party_colors.get(party, f"C0"))
-    
-    # Plot observed polls if available
-    if polls_train is not None and party in polls_train.columns:
-        # Look for the sample size column
-        sample_size_col = None
-        for col in ['sample_size', 'samplesize', 'N']:
-            if col in polls_train.columns:
-                sample_size_col = col
-                break
+    try:
+        # Handle both raw dictionary and InferenceData formats
+        if isinstance(prediction_data, az.InferenceData):
+            if hasattr(prediction_data, 'posterior_predictive'):
+                post_pred = prediction_data.posterior_predictive
+            else:
+                raise ValueError("InferenceData object does not have posterior_predictive group")
+        else:
+            # Use raw dictionary data
+            post_pred = prediction_data
+            
+            # Create a simple namespace object that mimics InferenceData structure
+            class SimpleNamespace:
+                def __init__(self, **kwargs):
+                    self.__dict__.update(kwargs)
+            
+            # Create a simple namespace object with the data
+            post_pred = SimpleNamespace(
+                data_vars=prediction_data.keys(),
+                observations=pd.to_datetime(coords.get('observations', [])),
+            )
+            
+            # Add the prediction arrays as attributes
+            for key, value in prediction_data.items():
+                setattr(post_pred, key, value)
         
-        if sample_size_col is not None:
-            # Calculate proportions
-            party_prop_train = polls_train[party].values / polls_train[sample_size_col].values
-            
-            # Apply jitter to dates for better visualization
-            jitter = pd.Timedelta(hours=np.random.uniform(-12, 12))
-            jittered_dates = polls_train["date"].apply(lambda d: d + jitter)
-            
-            # Plot with small marker size for better visibility
-            ax.scatter(jittered_dates, party_prop_train, color=party_colors.get(party, f"C0"), alpha=0.5, s=20, label=f"{party} Polls (Train)")
-    
-    # Plot test polls if available
-    if polls_test is not None and party in polls_test.columns:
-        # Look for the sample size column
-        sample_size_col = None
-        for col in ['sample_size', 'samplesize', 'N']:
-            if col in polls_test.columns:
-                sample_size_col = col
-                break
+        # Get the latent popularity data
+        if hasattr(post_pred, 'latent_popularity'):
+            latent_pop = post_pred.latent_popularity
+        else:
+            raise ValueError("No latent_popularity found in prediction data")
         
-        if sample_size_col is not None:
-            # Calculate proportions
-            party_prop_test = polls_test[party].values / polls_test[sample_size_col].values
+        # Get dates and parties
+        if hasattr(post_pred, 'observations'):
+            dates = pd.to_datetime(post_pred.observations)
+        else:
+            dates = pd.to_datetime(coords['observations'])
+        
+        # Make sure parties is always a list
+        parties = coords['parties_complete'] if coords else post_pred.parties_complete
+        if not isinstance(parties, list):
+            parties = list(parties)
+        
+        # Calculate mean and credible intervals
+        if isinstance(latent_pop, np.ndarray):
+            mean_pop = np.mean(latent_pop, axis=(0, 1))  # Average over chains and draws
+            lower_bound = np.percentile(latent_pop, 2.5, axis=(0, 1))
+            upper_bound = np.percentile(latent_pop, 97.5, axis=(0, 1))
+        else:
+            # Handle xarray DataArray
+            mean_pop = latent_pop.mean(("chain", "draw")).values
+            lower_bound = latent_pop.quantile(0.025, dim=("chain", "draw")).values
+            upper_bound = latent_pop.quantile(0.975, dim=("chain", "draw")).values
+        
+        # Plot for each party
+        for i, party in enumerate(parties):
+            ax.plot(dates, mean_pop[:, i], label=party)
+            ax.fill_between(dates, lower_bound[:, i], upper_bound[:, i], alpha=0.2)
+        
+        # Add historical polls if available
+        if polls_train is not None:
+            for party in parties:
+                if party in polls_train.columns:
+                    ax.scatter(polls_train['date'], 
+                             polls_train[party] / polls_train['sample_size'],
+                             alpha=0.3, marker='o', s=20)
+        
+        # Add test polls if available
+        if polls_test is not None:
+            for party in parties:
+                if party in polls_test.columns:
+                    ax.scatter(polls_test['date'],
+                             polls_test[party] / polls_test['sample_size'],
+                             alpha=0.5, marker='x', s=30, color='red')
+        
+        # Add election date line
+        if election_date:
+            election_date = pd.to_datetime(election_date)
+            ax.axvline(x=election_date, color='k', linestyle='--', alpha=0.5)
+            ax.text(election_date, ax.get_ylim()[1], 'Election',
+                   rotation=90, verticalalignment='top')
+        
+        # Customize the plot
+        ax.set_title('Latent Party Trajectories')
+        ax.set_xlabel('Date')
+        ax.set_ylabel('Vote Share')
+        ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
+        ax.grid(True, alpha=0.3)
+        
+        # Rotate x-axis labels for better readability
+        plt.xticks(rotation=45)
+        
+        # Adjust layout to fit the legend
+        plt.tight_layout()
+        
+        return fig
+        
+    except Exception as e:
+        print(f"Error in plot_latent_trajectories: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
+
+
+def plot_party_trajectory(
+    prediction_data,
+    coords=None,
+    dims=None,
+    party=None,
+    polls_train=None,
+    polls_test=None,
+    election_date=None
+):
+    """
+    Plot trajectory for a specific party.
+    
+    Parameters:
+    -----------
+    prediction_data : dict or InferenceData
+        The prediction data, either as a raw dictionary or InferenceData object
+    coords : dict, optional
+        Coordinates for the prediction data if using raw dictionary
+    dims : dict, optional
+        Dimensions for the prediction data if using raw dictionary
+    party : str
+        The party to plot
+    polls_train : pd.DataFrame, optional
+        Training poll data
+    polls_test : pd.DataFrame, optional
+        Test poll data
+    election_date : str, optional
+        The target election date
+    """
+    import matplotlib.pyplot as plt
+    import numpy as np
+    import pandas as pd
+    import arviz as az
+    
+    # Initialize the figure
+    fig, ax = plt.subplots(figsize=(12, 6))
+    
+    try:
+        # Handle both raw dictionary and InferenceData formats
+        if isinstance(prediction_data, az.InferenceData):
+            if hasattr(prediction_data, 'posterior_predictive'):
+                post_pred = prediction_data.posterior_predictive
+            else:
+                raise ValueError("InferenceData object does not have posterior_predictive group")
+        else:
+            # Use raw dictionary data
+            post_pred = prediction_data
             
-            # Apply jitter to dates for better visualization
-            jitter = pd.Timedelta(hours=np.random.uniform(-12, 12))
-            jittered_dates = polls_test["date"].apply(lambda d: d + jitter)
+            # Create a simple namespace object that mimics InferenceData structure
+            class SimpleNamespace:
+                def __init__(self, **kwargs):
+                    self.__dict__.update(kwargs)
             
-            # Plot with small marker size for better visibility
-            ax.scatter(jittered_dates, party_prop_test, color=party_colors.get(party, f"C0"), alpha=0.8, s=30, marker="x", label=f"{party} Polls (Test)")
-    
-    # Add election date if provided
-    if election_date is not None:
-        election_date = pd.to_datetime(election_date)
-        ax.axvline(x=election_date, color='gray', linestyle='--', alpha=0.7, label='Election Date')
-    
-    # Format x-axis with dates
-    plt.gcf().autofmt_xdate()
-    
-    # Add labels and title
-    ax.set_ylabel("Popularity (%)")
-    ax.set_title(f"Forecast Trajectory for {party}")
-    
-    # Add legend
-    ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
-    
-    # Adjust layout to fit the legend
-    plt.tight_layout()
-    
-    return fig 
+            # Create a simple namespace object with the data
+            post_pred = SimpleNamespace(
+                data_vars=prediction_data.keys(),
+                observations=pd.to_datetime(coords.get('observations', [])),
+            )
+            
+            # Add the prediction arrays as attributes
+            for key, value in prediction_data.items():
+                setattr(post_pred, key, value)
+        
+        # Get the latent popularity data
+        if hasattr(post_pred, 'latent_popularity'):
+            latent_pop = post_pred.latent_popularity
+        else:
+            raise ValueError("No latent_popularity found in prediction data")
+        
+        # Get dates and parties
+        if hasattr(post_pred, 'observations'):
+            dates = pd.to_datetime(post_pred.observations)
+        else:
+            dates = pd.to_datetime(coords['observations'])
+        
+        # Make sure parties is always a list
+        parties = coords['parties_complete'] if coords else post_pred.parties_complete
+        if not isinstance(parties, list):
+            parties = list(parties)
+        
+        # Find party index - use list index method for safety
+        if party in parties:
+            party_idx = parties.index(party)
+        else:
+            raise ValueError(f"Party '{party}' not found in the prediction data. Available parties: {parties}")
+        
+        # Calculate mean and credible intervals
+        if isinstance(latent_pop, np.ndarray):
+            mean_pop = np.mean(latent_pop, axis=(0, 1))  # Average over chains and draws
+            lower_bound = np.percentile(latent_pop, 2.5, axis=(0, 1))
+            upper_bound = np.percentile(latent_pop, 97.5, axis=(0, 1))
+        else:
+            # Handle xarray DataArray
+            mean_pop = latent_pop.mean(("chain", "draw")).values
+            lower_bound = latent_pop.quantile(0.025, dim=("chain", "draw")).values
+            upper_bound = latent_pop.quantile(0.975, dim=("chain", "draw")).values
+        
+        # Plot the trajectory
+        ax.plot(dates, mean_pop[:, party_idx], label='Mean')
+        ax.fill_between(dates, lower_bound[:, party_idx], upper_bound[:, party_idx],
+                       alpha=0.2, label='95% Credible Interval')
+        
+        # Add historical polls if available
+        if polls_train is not None and party in polls_train.columns:
+            ax.scatter(polls_train['date'],
+                      polls_train[party] / polls_train['sample_size'],
+                      alpha=0.3, marker='o', s=20, label='Historical Polls')
+        
+        # Add test polls if available
+        if polls_test is not None and party in polls_test.columns:
+            ax.scatter(polls_test['date'],
+                      polls_test[party] / polls_test['sample_size'],
+                      alpha=0.5, marker='x', s=30, color='red', label='Test Polls')
+        
+        # Add election date line
+        if election_date:
+            election_date = pd.to_datetime(election_date)
+            ax.axvline(x=election_date, color='k', linestyle='--', alpha=0.5)
+            ax.text(election_date, ax.get_ylim()[1], 'Election',
+                   rotation=90, verticalalignment='top')
+        
+        # Customize the plot
+        ax.set_title(f'Trajectory for {party}')
+        ax.set_xlabel('Date')
+        ax.set_ylabel('Vote Share')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        
+        # Rotate x-axis labels for better readability
+        plt.xticks(rotation=45)
+        
+        # Adjust layout to fit the legend
+        plt.tight_layout()
+        
+        return fig
+        
+    except Exception as e:
+        print(f"Error in plot_party_trajectory: {e}")
+        import traceback
+        traceback.print_exc()
+        raise 

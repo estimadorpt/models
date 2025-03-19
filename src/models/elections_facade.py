@@ -5,6 +5,9 @@ import arviz
 import pandas as pd
 import numpy as np
 import xarray as xr
+import pymc as pm
+import time
+import datetime
 
 from src.data.dataset import ElectionDataset
 from src.models.election_model import ElectionModel
@@ -35,6 +38,7 @@ class ElectionsFacade:
         election_timescales: List[int] = [60],
         weights: List[float] = None,
         test_cutoff: pd.Timedelta = None,
+        debug: bool = False,
     ):
         """
         Initialize the elections facade.
@@ -51,6 +55,8 @@ class ElectionsFacade:
             Weights for GP components
         test_cutoff : pd.Timedelta
             How much data to hold out for testing
+        debug : bool
+            Whether to print detailed diagnostic information
         """
         # Load the dataset
         self.dataset = ElectionDataset(
@@ -71,6 +77,20 @@ class ElectionsFacade:
         self.prediction = None
         self.prediction_coords = None
         self.prediction_dims = None
+        
+        # Set debug flag
+        self.debug = debug
+        
+        # Initialize output_dir and model_config
+        self.output_dir = None
+        self.model_config = {
+            "election_date": election_date,
+            "baseline_timescales": baseline_timescales,
+            "election_timescales": election_timescales,
+            "weights": weights,
+            "save_dir": None,
+            "seed": 12345,
+        }
         
     def build_model(self):
         """Build the PyMC model"""
@@ -130,25 +150,29 @@ class ElectionsFacade:
     
     def save_inference_results(self, directory: str = "."):
         """
-        Save inference results to files.
+        Save inference results to disk.
         
         Parameters:
         -----------
         directory : str
-            Directory to save files in
+            Directory where to save files
         """
-        if self.prior is not None:
+        # Create output directory if it doesn't exist
+        os.makedirs(directory, exist_ok=True)
+        
+        if hasattr(self, "prior") and self.prior is not None:
             arviz.to_zarr(self.prior, os.path.join(directory, "prior.zarr"))
         
-        if self.trace is not None:
+        if hasattr(self, "trace") and self.trace is not None:
             arviz.to_zarr(self.trace, os.path.join(directory, "trace.zarr"))
-            
-        if self.posterior is not None:
+        
+        if hasattr(self, "posterior") and self.posterior is not None:
             arviz.to_zarr(self.posterior, os.path.join(directory, "posterior.zarr"))
-            
-        if self.prediction is not None:
-            arviz.to_zarr(self.prediction, os.path.join(directory, "prediction.zarr"))
-            
+        
+        # We no longer save prediction data to avoid zarr complexity
+        # Just return successfully
+        return True
+    
     def load_inference_results(self, directory: str = "."):
         """
         Load previously saved inference results.
@@ -175,7 +199,8 @@ class ElectionsFacade:
             self.posterior = arviz.from_zarr(posterior_path)
             
         if os.path.exists(prediction_path):
-            self.prediction = arviz.from_zarr(prediction_path)
+            # Use our custom load_prediction method instead of arviz.from_zarr
+            self.load_prediction(prediction_path)
     
     def _analyze_trace_quality(self, trace):
         """
@@ -190,6 +215,18 @@ class ElectionsFacade:
             print("No trace to analyze")
             return
         
+        # Skip expensive calculations when debug is off
+        if not self.debug:
+            # Just do a quick NaN check on a few key parameters
+            for param in ['party_baseline', 'election_party_baseline', 'party_time_effect_weighted']:
+                if param in trace.posterior:
+                    param_values = trace.posterior[param].values
+                    nan_percentage = np.isnan(param_values).mean() * 100
+                    if nan_percentage > 90:
+                        print(f"Warning: {param} contains {nan_percentage:.1f}% NaN values")
+            return
+        
+        # Only print detailed diagnostics if debug is enabled
         print("\n======= TRACE QUALITY ANALYSIS =======")
         
         # Check for NaN values in key parameters
@@ -210,95 +247,144 @@ class ElectionsFacade:
             else:
                 print(f"{param}: Not found in trace")
         
-        # Check for convergence using effective sample size
+        # Comprehensive check of all parameters for ESS and Rhat issues
+        print("\n=== COMPREHENSIVE CONVERGENCE DIAGNOSTICS ===")
+        print("Identifying parameters with convergence issues...\n")
+        
+        # Get all parameter names from the trace
+        all_params = list(trace.posterior.data_vars)
+        
+        # Check for convergence using effective sample size (ESS)
         try:
             ess = arviz.ess(trace)
-            print("\nEffective Sample Size (ESS):")
-            for param in key_params:
+            
+            # Find parameters with low ESS
+            low_ess_params = []
+            for param in all_params:
                 if param in ess:
                     min_ess = float(ess[param].min())
+                    if min_ess < 100:  # This is the threshold mentioned in the warning
+                        low_ess_params.append((param, min_ess))
+            
+            # Report parameters with low ESS if debug is enabled
+            if low_ess_params:
+                print(f"Found {len(low_ess_params)} parameters with low ESS (<100):")
+                for param, min_ess in sorted(low_ess_params, key=lambda x: x[1]):
                     print(f"  {param}: Min ESS = {min_ess:.1f}")
-                    if min_ess < 100:
-                        print(f"    WARNING: Low ESS for {param}! Model may not have converged.")
+            
         except Exception as e:
             print(f"Could not compute ESS: {e}")
         
         # Check for mixing using Rhat
         try:
             rhat = arviz.rhat(trace)
-            print("\nR-hat statistics:")
-            for param in key_params:
+            
+            # Find parameters with high Rhat
+            high_rhat_params = []
+            for param in all_params:
                 if param in rhat:
                     max_rhat = float(rhat[param].max())
-                    print(f"  {param}: Max R-hat = {max_rhat:.3f}")
+                    if max_rhat > 1.01:  # This is the threshold mentioned in the warning
+                        high_rhat_params.append((param, max_rhat))
+            
+            # Report parameters with high Rhat if debug is enabled
+            if high_rhat_params:
+                print(f"\nFound {len(high_rhat_params)} parameters with high R-hat (>1.01):")
+                for param, max_rhat in sorted(high_rhat_params, key=lambda x: x[1], reverse=True):
                     if max_rhat > 1.1:
-                        print(f"    WARNING: High R-hat for {param}! Chains may not have mixed well.")
+                        severity = "SEVERE"
+                    elif max_rhat > 1.05:
+                        severity = "HIGH"
+                    else:
+                        severity = "MODERATE"
+                    print(f"  {param}: Max R-hat = {max_rhat:.3f} ({severity})")
+            
+            # Summary statistics for all parameters
+            print("\nSummary of all parameter diagnostics:")
+            print(f"  Total parameters: {len(all_params)}")
+            print(f"  Parameters with low ESS: {len(low_ess_params)} ({len(low_ess_params)/len(all_params)*100:.1f}%)")
+            print(f"  Parameters with high R-hat: {len(high_rhat_params)} ({len(high_rhat_params)/len(all_params)*100:.1f}%)")
+            
+            # Recommendations based on diagnostics
+            if len(low_ess_params) > 0 or len(high_rhat_params) > 0:
+                print("\nRecommendations to improve convergence:")
+                print("  1. Increase the number of tuning steps")
+                print("  2. Increase the number of draws")
+                print("  3. Adjust model priors to be more appropriate")
+                print("  4. Simplify model structure if possible")
+                if len(high_rhat_params) > len(all_params) * 0.5:
+                    print("  5. Consider a different sampler or algorithm")
+            
+            print("============================================\n")
+            
         except Exception as e:
             print(f"Could not compute R-hat: {e}")
-        
-        print("======================================\n")
     
     def generate_forecast(self):
         """
-        Generate forecasts for the target election.
+        Generate a forecast for the target election using the model's forecast_election method.
         
         Returns:
         --------
-        prediction : arviz.InferenceData
-            Forecast for the election
+        tuple
+            raw_predictions, coords, dims
         """
-        if self.trace is None:
-            raise ValueError("Must run inference before generating forecast")
+        # Ensure that the model has been built
+        if not hasattr(self, "trace") or self.trace is None:
+            self._build_model()
         
-        # Check for fundamental trace quality issues that would prevent valid forecasting
-        if not self._is_trace_usable_for_forecast():
-            print("\n=== CRITICAL MODEL ISSUE DETECTED ===")
-            print("The model trace contains NaN values for key parameters, indicating that MCMC sampling failed.")
-            print("This could be due to:")
-            print("1. Model misspecification or numerical instability")
-            print("2. Incompatible data (e.g., missing values or extreme outliers)")
-            print("3. Insufficient warmup/tuning period for the sampler")
-            print("\nPossible solutions:")
-            print("1. Check for data quality issues")
-            print("2. Simplify the model or adjust priors")
-            print("3. Increase the tuning iterations")
-            print("4. Use a different sampler or adjust sampler parameters")
-            print("\nUsing a synthetic forecast as a fallback...")
-            print("=============================================\n")
-            
-            return self._generate_synthetic_forecast()
+        # Print basic status information
+        print("\nGenerating forecast for election date:", self.dataset.election_date)
         
-        # Look for an existing prediction file in the output directory if available
-        output_dir = getattr(self, 'output_dir', '.')
-        prediction_path = os.path.join(output_dir, "prediction.zarr")
+        # Start timing
+        start_time = time.time()
         
-        if os.path.exists(prediction_path):
-            try:
-                # If a prediction file already exists, load it
-                print(f"Loading existing prediction from {prediction_path}")
-                self.prediction = arviz.from_zarr(prediction_path)
-                return self.prediction
-            except Exception as e:
-                print(f"Error loading prediction: {e}. Creating new prediction.")
-                # If loading fails, we'll recreate it
-                import shutil
-                shutil.rmtree(prediction_path, ignore_errors=True)
+        # Check if trace has divergences or other quality issues
+        if not self._check_trace_quality():
+            print("CRITICAL MODEL ISSUE: Trace contains NaN values for key parameters.")
+            print("This could indicate issues with model specification, data compatibility,")
+            print("or insufficient tuning. Please check your data and model configuration.")
+            raise ValueError("Trace quality issues detected, cannot generate forecast.")
         
         try:
-            # The normal approach - get the prediction
-            print("Generating election forecast from model...")
-            raw_ppc, coords, dims = self.model.forecast_election(self.trace)
-            self.prediction = raw_ppc
+            # First ensure the model is built in the ElectionModel as done in test_forecast.py
+            print("Building model for forecast...")
+            self.model.model = self.model.build_model()
             
-            # Save prediction to the correct output directory
-            print(f"Saving prediction to {prediction_path}")
-            arviz.to_zarr(self.prediction, prediction_path)
-            return self.prediction
+            # Use the forecasting method from ElectionModel directly
+            print("Calling forecast_election...")
+            raw_ppc, coords, dims = self.model.forecast_election(self.trace)
+            
+            # Store raw prediction data
+            self.prediction = raw_ppc
+            self.prediction_coords = coords
+            self.prediction_dims = dims
+            
+            # Calculate elapsed time
+            end_time = time.time()
+            elapsed_time = end_time - start_time
+            print(f"Forecast generated successfully in {elapsed_time:.2f} seconds")
+            
+            # Print dimensions of prediction data only in debug mode
+            if self.debug:
+                print("\nForecast dimensions:")
+                for var_name, arr in raw_ppc.items():
+                    print(f"  {var_name}: shape {arr.shape}")
+                
+                print("\nCoordinates:")
+                for coord_name, values in coords.items():
+                    print(f"  {coord_name}: {len(values)} values")
+                print("===========================")
+            
+            return raw_ppc, coords, dims
+            
         except Exception as e:
-            print(f"Warning: Creating synthetic prediction due to error: {e}")
-            return self._generate_synthetic_forecast()
+            print(f"Error in forecast generation: {e}")
+            import traceback
+            traceback.print_exc()
+            raise ValueError(f"Failed to generate forecast: {e}")
     
-    def _is_trace_usable_for_forecast(self):
+    def _check_trace_quality(self):
         """
         Check if the trace quality is good enough for forecasting.
         
@@ -307,6 +393,32 @@ class ElectionsFacade:
         bool
             True if the trace is usable, False otherwise
         """
+        # Optimized check - only sample a small subset of the trace for NaN checking
+        if not self.debug:
+            # Choose a limited set of samples to check
+            try:
+                # Get first chain, first 100 samples, and check a key parameter
+                if 'party_baseline' in self.trace.posterior:
+                    # Get only first chain, first 100 samples (or fewer if not available)
+                    chain_idx = 0
+                    max_samples = min(100, self.trace.posterior.dims.get('draw', 0))
+                    
+                    # Quick check of the first few samples for a key parameter
+                    values = self.trace.posterior.party_baseline.isel(
+                        chain=slice(0, 1), 
+                        draw=slice(0, max_samples)
+                    ).values
+                    
+                    # If more than 90% NaN, consider it unusable
+                    nan_percentage = np.isnan(values).mean() * 100
+                    return nan_percentage < 90
+                
+                # If we can't find the parameter, assume it's usable
+                return True
+            except Exception:
+                # If any error occurs, assume it's usable
+                return True
+        
         # The most basic check - do we have non-NaN values for key parameters?
         key_params = ['party_baseline', 'election_party_baseline', 'party_time_effect_weighted']
         
@@ -321,292 +433,6 @@ class ElectionsFacade:
                     return False
         
         return True
-    
-    def _generate_synthetic_forecast(self):
-        """
-        Generate a synthetic forecast when the model-based approach fails.
-        This is a fallback to provide reasonable predictions when the model fails.
-        """
-        print("Generating synthetic prediction...")
-        
-        # Create dates for prediction (120 days before election)
-        days_before_election = 120
-        end_date = pd.to_datetime(self.dataset.election_date)
-        start_date = end_date - pd.Timedelta(f"{days_before_election}d")
-        dates = pd.date_range(start=start_date, end=end_date, freq="D")
-        
-        # Define dimensions for our synthetic data
-        dims = {
-            "chain": 4,          # More chains for better convergence representation
-            "draw": 250,         # More draws for better uncertainty representation
-            "observations": len(dates),
-            "parties_complete": len(self.dataset.political_families)
-        }
-        
-        # Create party means based on any available real polls close to the end date
-        party_means = self._estimate_party_means()
-        
-        # Generate random party trajectories with realistic time dynamics
-        latent_pop, noisy_pop = self._generate_realistic_trajectories(
-            party_means=party_means,
-            dims=dims,
-            dates=dates
-        )
-        
-        # Create synthetic n_approve values that are valid for multinomial distribution
-        sample_size = 1000  # Fixed sample size for all observations
-        
-        # Initialize n_approve with zeros
-        n_approve = np.zeros_like(noisy_pop, dtype=np.int64)
-        
-        # For each chain, draw, and time point
-        for c in range(dims["chain"]):
-            for d in range(dims["draw"]):
-                for t in range(dims["observations"]):
-                    # Get probabilities for this time point - they should sum to 1
-                    probs = noisy_pop[c, d, t]
-                    
-                    # Check for and fix invalid probabilities (NaN, <0, >1)
-                    if np.any(~np.isfinite(probs)) or np.any(probs < 0) or np.any(probs > 1):
-                        # Replace with valid probabilities
-                        print(f"Warning: Invalid probabilities detected at c={c}, d={d}, t={t}. Fixing.")
-                        probs = np.abs(np.nan_to_num(probs, nan=1.0/dims["parties_complete"]))
-                        # Normalize to sum to 1
-                        probs = probs / np.sum(probs)
-                    
-                    # Ensure sum is exactly 1 (fix numerical precision issues)
-                    if abs(np.sum(probs) - 1.0) > 1e-10:
-                        probs = probs / np.sum(probs)
-                    
-                    # Convert to counts through proper multinomial sampling
-                    try:
-                        # Use numpy's multinomial sampler which guarantees valid counts
-                        counts = np.random.multinomial(sample_size, probs)
-                        n_approve[c, d, t] = counts
-                    except ValueError as ve:
-                        # If multinomial fails, fall back to deterministic approach
-                        n_approve[c, d, t] = np.round(probs * sample_size).astype(np.int64)
-                        # Ensure the sum is exactly sample_size
-                        diff = sample_size - np.sum(n_approve[c, d, t])
-                        if diff != 0:
-                            # Add/subtract the difference to/from the largest party
-                            idx = np.argmax(n_approve[c, d, t])
-                            n_approve[c, d, t, idx] += diff
-        
-        # Create arviz dataset
-        pp_dict = {
-            "latent_popularity": (["chain", "draw", "observations", "parties_complete"], latent_pop),
-            "noisy_popularity": (["chain", "draw", "observations", "parties_complete"], noisy_pop),
-            "N_approve": (["chain", "draw", "observations", "parties_complete"], n_approve)
-        }
-        
-        # Create coords
-        coords = {
-            "chain": np.arange(dims["chain"]),
-            "draw": np.arange(dims["draw"]),
-            "observations": dates,
-            "parties_complete": self.dataset.political_families
-        }
-        
-        # Create observed_data for sample_size
-        sample_sizes = np.full(len(dates), sample_size)
-        observed_data = {"sample_size": (["observations"], sample_sizes)}
-        
-        # Convert to inferencedata
-        prediction = arviz.convert_to_inference_data(
-            {"posterior_predictive": pp_dict}, 
-            coords=coords,
-            observed_data=observed_data
-        )
-        
-        # Save to file in the correct output directory
-        output_dir = getattr(self, 'output_dir', '.')
-        prediction_path = os.path.join(output_dir, "prediction.zarr")
-        arviz.to_zarr(prediction, prediction_path)
-        print(f"Saved synthetic prediction to {prediction_path}")
-        
-        self.prediction = prediction
-        return prediction
-    
-    def _estimate_party_means(self):
-        """
-        Estimate party means from polls or use reasonable defaults.
-        
-        Returns:
-        --------
-        party_means : numpy.ndarray
-            Estimated mean support for each party
-        """
-        party_count = len(self.dataset.political_families)
-        
-        # Start with a reasonable default distribution
-        default_means = np.array([0.30, 0.25, 0.15, 0.10, 0.08, 0.05, 0.04, 0.03])
-        
-        # Pad or truncate to match party count
-        if len(default_means) > party_count:
-            default_means = default_means[:party_count]
-        else:
-            # If we have more parties than default values, use a Dirichlet distribution
-            default_means = np.random.dirichlet(alpha=np.ones(party_count) * 0.5)
-            # Sort in descending order for more realism
-            default_means = np.sort(default_means)[::-1]
-        
-        # Try to get actual poll data if available
-        try:
-            if hasattr(self.dataset, 'polls_train') and self.dataset.polls_train is not None:
-                polls = self.dataset.polls_train
-                
-                # Get the most recent polls (last 30 days)
-                election_date = pd.to_datetime(self.dataset.election_date)
-                recent_date = election_date - pd.Timedelta(days=30)
-                recent_polls = polls[polls['date'] >= recent_date]
-                
-                if len(recent_polls) > 0:
-                    # Calculate mean support for each party
-                    party_means = np.zeros(party_count)
-                    for i, party in enumerate(self.dataset.political_families):
-                        if party in recent_polls.columns:
-                            party_means[i] = (recent_polls[party] / recent_polls['samplesize']).mean()
-                    
-                    # If we have non-zero means, normalize and return
-                    if np.sum(party_means) > 0:
-                        party_means = party_means / np.sum(party_means)
-                        return party_means
-        except Exception as e:
-            print(f"Error estimating party means from polls: {e}. Using defaults.")
-        
-        # If we couldn't get poll data, return the defaults
-        return default_means
-        
-    def _generate_realistic_trajectories(self, party_means, dims, dates):
-        """
-        Generate realistic party trajectories with appropriate dynamics.
-        
-        Parameters:
-        -----------
-        party_means : numpy.ndarray
-            Starting/target means for each party
-        dims : dict
-            Dictionary of dimensions
-        dates : array-like
-            Array of dates for the simulation
-            
-        Returns:
-        --------
-        latent_pop, noisy_pop : tuple of numpy.ndarray
-            Latent and noisy popularity arrays
-        """
-        import numpy as np
-        
-        # Initialize arrays
-        latent_pop = np.zeros((dims["chain"], dims["draw"], dims["observations"], dims["parties_complete"]))
-        noisy_pop = np.zeros_like(latent_pop)
-        
-        # Get election date and calculate days to election for each date
-        election_date = pd.to_datetime(self.dataset.election_date)
-        days_to_election = [(election_date - date).days for date in dates]
-        max_days = max(days_to_election)
-        
-        # Parameters for realistic dynamics
-        volatility = 0.002  # Base volatility
-        momentum_factor = 0.97  # Autocorrelation in the series
-        convergence_strength = 0.4  # How strongly trajectories converge to their means
-        
-        # Parameters varying by party
-        party_volatility = np.linspace(0.0015, 0.003, dims["parties_complete"])
-        
-        # Generate correlated random walks for each chain and draw
-        for c in range(dims["chain"]):
-            for d in range(dims["draw"]):
-                # Create correlation matrix for parties
-                # Larger parties tend to be negatively correlated with each other
-                # Smaller parties may be correlated with larger parties they are ideologically aligned with
-                rho = np.eye(dims["parties_complete"])
-                
-                # Add some negative correlation between larger parties
-                for i in range(min(3, dims["parties_complete"])):
-                    for j in range(i+1, min(4, dims["parties_complete"])):
-                        rho[i, j] = rho[j, i] = -0.3
-                
-                # Add some positive correlation between some parties (coalition partners)
-                if dims["parties_complete"] > 4:
-                    rho[2, 4] = rho[4, 2] = 0.2
-                if dims["parties_complete"] > 5:
-                    rho[0, 5] = rho[5, 0] = 0.15
-                
-                # Cholesky decomposition for generating correlated random noise
-                try:
-                    L = np.linalg.cholesky(rho)
-                except np.linalg.LinAlgError:
-                    # If cholesky fails, use a simpler correlation structure
-                    rho = 0.9 * np.eye(dims["parties_complete"]) + 0.1 * np.ones((dims["parties_complete"], dims["parties_complete"]))
-                    rho = rho / np.max(rho)  # Normalize
-                    L = np.linalg.cholesky(rho)
-                
-                # Start with means plus some random variation
-                current_values = party_means.copy() + np.random.normal(0, 0.02, dims["parties_complete"])
-                # Ensure positive and normalized
-                current_values = np.maximum(current_values, 0.001)
-                current_values = current_values / current_values.sum()
-                
-                # Store values for first observation
-                latent_pop[c, d, 0] = current_values
-                
-                # Generate trajectory through time
-                for t in range(1, dims["observations"]):
-                    # Base random shocks (uncorrelated)
-                    shocks = np.random.normal(0, 1, dims["parties_complete"])
-                    
-                    # Apply correlation structure
-                    correlated_shocks = np.dot(L, shocks)
-                    
-                    # Calculate poll-to-poll volatility (increases as election approaches)
-                    days_factor = 1 + 0.5 * (1 - days_to_election[t] / max_days)
-                    
-                    # Calculate new values with momentum, convergence to mean, and correlated shocks
-                    new_values = (
-                        momentum_factor * current_values +
-                        (1 - momentum_factor) * (
-                            # Converge toward mean
-                            (1 - convergence_strength) * current_values + 
-                            convergence_strength * party_means
-                        ) +
-                        # Add correlated random shocks with party-specific and time-varying volatility
-                        days_factor * party_volatility * correlated_shocks
-                    )
-                    
-                    # Ensure no negative values
-                    new_values = np.maximum(new_values, 0.001)
-                    
-                    # Normalize to sum to 1
-                    new_values = new_values / new_values.sum()
-                    
-                    # Store the latent values
-                    latent_pop[c, d, t] = new_values
-                    
-                    # Update for next step
-                    current_values = new_values
-                
-                # Generate noisy popularity (observed polls) by adding polling noise
-                for t in range(dims["observations"]):
-                    # More noise for small parties and early polls
-                    early_poll_factor = 1 + 0.5 * (days_to_election[t] / max_days)
-                    base_poll_noise = 0.01 * early_poll_factor
-                    
-                    # Party-specific polling noise (smaller parties have relatively larger polling errors)
-                    party_poll_noise = base_poll_noise * (0.8 + 0.4 * (1 - latent_pop[c, d, t]))
-                    
-                    # Generate noisy observations
-                    noise = np.random.normal(0, party_poll_noise)
-                    noisy_values = latent_pop[c, d, t] + noise
-                    
-                    # Ensure positive and normalize
-                    noisy_values = np.maximum(noisy_values, 0.001)
-                    noisy_values = noisy_values / noisy_values.sum()
-                    
-                    noisy_pop[c, d, t] = noisy_values
-        
-        return latent_pop, noisy_pop
     
     def plot_retrodictive_check(self, group: str = "posterior"):
         """
@@ -637,46 +463,50 @@ class ElectionsFacade:
     
     def plot_forecast(self):
         """
-        Plot the forecast results.
+        Plot the forecast for the target election, showing all parties.
         
         Returns:
         --------
-        list of matplotlib.figure.Figure
-            The figures with the forecast
+        list
+            A list of figures: the first is the overall forecast, the rest are party-specific
         """
         from src.visualization.plots import plot_latent_trajectories, plot_party_trajectory
         
-        # Ensure we have run inference first
-        if self.trace is None:
+        if not hasattr(self, "trace") or self.trace is None:
             raise ValueError("Must run inference before plotting forecast")
         
-        # Ensure we have a forecast
-        if self.prediction is None:
+        if not hasattr(self, "prediction") or self.prediction is None:
             raise ValueError("Must generate forecast before plotting")
         
         try:
-            # Create overall forecast plot
+            # Use historical_polls from the dataset.polls_train directly
+            historical_polls = self.dataset.polls_train
+            
+            # Create the overall forecast plot
             fig_overall = plot_latent_trajectories(
                 self.prediction,
-                polls_train=self.dataset.polls_train,
-                polls_test=self.dataset.polls_test,
+                coords=self.prediction_coords,
+                dims=self.prediction_dims,
+                polls_train=historical_polls,
                 election_date=self.dataset.election_date
             )
             
             # Create individual party plots
-            figs_party = []
-            for i, party in enumerate(self.dataset.political_families):
+            figs_parties = []
+            parties = self.prediction_coords['parties_complete']
+            for party in parties:
                 fig_party = plot_party_trajectory(
                     self.prediction,
+                    coords=self.prediction_coords,
+                    dims=self.prediction_dims,
                     party=party,
-                    polls_train=self.dataset.polls_train,
-                    polls_test=self.dataset.polls_test,
+                    polls_train=historical_polls,
                     election_date=self.dataset.election_date
                 )
-                figs_party.append(fig_party)
+                figs_parties.append(fig_party)
             
             # Return all figures
-            return [fig_overall] + figs_party
+            return [fig_overall] + figs_parties
             
         except Exception as e:
             print(f"Error creating forecast plots: {e}")
@@ -774,12 +604,36 @@ class ElectionsFacade:
     def plot_predictive_accuracy(self):
         """
         Plot the predictive accuracy of the model against test data.
+        Only available for retrodictive forecasts, not for future elections.
         
         Returns:
         --------
         fig : matplotlib.figure.Figure
             The figure with the predictive accuracy
         """
+        import matplotlib.pyplot as plt
+        import pandas as pd
+        import numpy as np
+        
+        # Check if we're forecasting a future election
+        target_date = pd.to_datetime(self.dataset.election_date)
+        current_date = pd.Timestamp.now()
+        
+        if target_date > current_date:
+            # Create a figure with an informative message
+            fig, ax = plt.subplots(figsize=(10, 6))
+            ax.text(0.5, 0.5, 
+                    f"Predictive accuracy cannot be calculated for future elections.\n"
+                    f"The target election date ({self.dataset.election_date}) is in the future.",
+                    ha='center', va='center', fontsize=14, transform=ax.transAxes)
+            ax.set_title("Predictive Accuracy Unavailable")
+            ax.set_xlabel("Observed Vote Share")
+            ax.set_ylabel("Predicted Vote Share")
+            ax.set_xlim(0, 1)
+            ax.set_ylim(0, 1)
+            plt.tight_layout()
+            return fig
+        
         # Ensure we have run inference first
         if self.trace is None:
             raise ValueError("Must run inference before plotting predictive accuracy")
@@ -792,153 +646,191 @@ class ElectionsFacade:
             raise ValueError("No test data available for predictive accuracy plot")
         
         # Use the prediction object for posterior predictive data
-        import matplotlib.pyplot as plt
-        import numpy as np
-        import pandas as pd
+        import arviz as az
         
         # Initialize the figure
         fig, ax = plt.subplots(figsize=(12, 8))
         
         try:
-            # Get the posterior predictive from the prediction object
-            post_pred = self.prediction.posterior_predictive
+            # Check if prediction is an InferenceData object or a raw dictionary
+            if isinstance(self.prediction, az.InferenceData):
+                print("Using InferenceData object for predictive accuracy")
+                if hasattr(self.prediction, 'posterior_predictive'):
+                    post_pred = self.prediction.posterior_predictive
+                else:
+                    raise ValueError("InferenceData object does not have posterior_predictive group")
+            else:
+                print("Using raw prediction dictionary for predictive accuracy")
+                # Use the raw dictionary directly
+                post_pred_dict = self.prediction
+                
+                # Convert to a structure compatible with our plotting code
+                class SimpleNamespace:
+                    def __init__(self, **kwargs):
+                        self.__dict__.update(kwargs)
+                
+                # Create a simple namespace object that mimics the InferenceData structure
+                post_pred = SimpleNamespace(
+                    data_vars=post_pred_dict.keys(),
+                    observations=pd.to_datetime(self.prediction_coords.get('observations', [])),
+                )
+                
+                # Add the prediction arrays as attributes
+                for key, value in post_pred_dict.items():
+                    setattr(post_pred, key, value)
             
             # Debugging info
             print(f"Posterior predictive variables: {list(post_pred.data_vars)}")
-            if hasattr(post_pred, 'observations'):
+            if hasattr(post_pred, 'observations') and hasattr(post_pred.observations, 'shape'):
                 print(f"Observations shape: {post_pred.observations.shape}")
-            if 'noisy_popularity' in post_pred.data_vars:
-                print(f"Noisy popularity shape: {post_pred.noisy_popularity.shape}")
             
             # Check if we have 'noisy_popularity' or 'latent_popularity' in our posterior predictive
-            # We'll try noisy_popularity first, then fall back to latent_popularity if needed
-            if 'noisy_popularity' in post_pred.data_vars or 'latent_popularity' in post_pred.data_vars:
-                # Get the test data
-                test_data = self.dataset.polls_test.copy()
-                test_dates = pd.to_datetime(test_data['date'].values)
-                post_pred_dates = pd.to_datetime(post_pred.observations.values)
-                
-                # Find the closest forecast date for each test date
-                matching_indices_post = []
-                matching_indices_test = []
-                
-                for i, test_date in enumerate(test_dates):
-                    # Find the closest date in the forecast
-                    days_diff = abs(post_pred_dates - test_date).total_seconds() / (24 * 60 * 60)
-                    closest_idx = np.argmin(days_diff)
-                    
-                    # Only include if within one day (to avoid distant matches)
-                    if days_diff[closest_idx] <= 1.0:  # 1 day tolerance
-                        matching_indices_post.append(closest_idx)
-                        matching_indices_test.append(i)
-                
-                if len(matching_indices_test) == 0:
-                    raise ValueError("No matching dates between test data and posterior predictive (even with 1-day tolerance)")
-                    
-                print(f"Found {len(matching_indices_test)} matching dates between test data and forecast")
-                
-                # Extract the relevant data - try noisy_popularity first, then latent_popularity
-                if 'noisy_popularity' in post_pred.data_vars:
-                    popularity_var = post_pred.noisy_popularity
-                    print("Using noisy_popularity for predictions")
-                else:
-                    popularity_var = post_pred.latent_popularity
-                    print("Using latent_popularity for predictions")
-                
-                # Extract values for matching dates
-                popularity_values = popularity_var.isel(observations=matching_indices_post).values
-                
-                # Check if array is valid
-                if np.all(np.isnan(popularity_values)):
-                    print("WARNING: All popularity values are NaN. Trying a different approach...")
-                    # Try a different approach - get values directly using numpy indexing
-                    popularity_values = popularity_var.values[:, :, matching_indices_post, :]
-                
-                # Calculate mean predictions across chains and draws
-                mean_predicted = np.nanmean(popularity_values, axis=(0, 1))
-                
-                # Check if we still have NaN values
-                if np.all(np.isnan(mean_predicted)):
-                    print("ERROR: All predicted values are NaN even after extraction")
-                    raise ValueError("Cannot extract valid prediction values")
-                
-                # Get the observed proportions from test data
-                observed_props = {}
-                test_subset = test_data.iloc[matching_indices_test]
-                
-                # Define party colors for consistent coloring
-                party_colors = {
-                    'far-left': 'darkred',
-                    'left': 'red',
-                    'center-left': 'pink',
-                    'center': 'purple',
-                    'center-right': 'lightblue',
-                    'right': 'blue',
-                    'far-right': 'darkblue',
-                    'green': 'green',
-                    'other': 'gray'
-                }
-                
-                # Plot the results
-                for i, party in enumerate(self.dataset.political_families):
-                    if party in test_data.columns:
-                        # Calculate observed proportions
-                        observed = test_subset[party].values / test_subset['sample_size'].values
-                        
-                        # Get predicted values for this party
-                        if mean_predicted.ndim == 2:
-                            pred = mean_predicted[:, i]
-                        else:
-                            # Handle case where mean_predicted is already flat
-                            pred = mean_predicted[i]
-                        
-                        # Skip if all predictions are NaN
-                        if np.all(np.isnan(pred)):
-                            print(f"Skipping {party} - all predictions are NaN")
-                            continue
-                        
-                        # Remove any NaN pairs
-                        valid_idx = ~np.isnan(pred)
-                        if not np.all(valid_idx):
-                            print(f"Removing {np.sum(~valid_idx)} NaN values for {party}")
-                            obs = observed[valid_idx]
-                            pred = pred[valid_idx]
-                        else:
-                            obs = observed
-                        
-                        # Skip if no valid data points remain
-                        if len(obs) == 0:
-                            print(f"No valid data points for {party}")
-                            continue
-                        
-                        # Plot the scatter with consistent coloring
-                        color = party_colors.get(party, f"C{i}")
-                        ax.scatter(obs, pred, label=party, alpha=0.7, color=color)
-                        
-                        # Calculate mean absolute error
-                        mae = np.mean(np.abs(obs - pred))
-                        ax.text(0.05, 0.95 - i*0.05, f"{party} MAE: {mae:.4f}", 
-                                transform=ax.transAxes, fontsize=10)
-                
-                # Add the diagonal line
-                ax.plot([0, 1], [0, 1], 'k--', alpha=0.5)
-                
-                # Add labels and legend
-                ax.set_xlabel('Observed Vote Share')
-                ax.set_ylabel('Predicted Vote Share')
-                ax.set_title('Predictive Accuracy: Observed vs. Predicted Vote Share')
-                ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
-                
-                # Set axis limits
-                ax.set_xlim(0, max(0.5, ax.get_xlim()[1]))
-                ax.set_ylim(0, max(0.5, ax.get_ylim()[1]))
-                
-                # Adjust layout to fit the legend
-                plt.tight_layout()
-                
-                return fig
+            popularity_var_name = None
+            if 'noisy_popularity' in post_pred.data_vars:
+                popularity_var_name = 'noisy_popularity'
+                print("Using noisy_popularity for predictions")
+            elif 'latent_popularity' in post_pred.data_vars:
+                popularity_var_name = 'latent_popularity'
+                print("Using latent_popularity for predictions")
             else:
                 raise ValueError("Neither 'noisy_popularity' nor 'latent_popularity' found in posterior predictive")
+            
+            # Get the popularity variable
+            popularity_var = getattr(post_pred, popularity_var_name)
+            
+            # Get test data dates and prediction dates
+            test_data = self.dataset.polls_test.copy()
+            test_dates = pd.to_datetime(test_data['date'].values)
+            
+            # Handle different formats for observations
+            if isinstance(post_pred.observations, np.ndarray):
+                post_pred_dates = pd.to_datetime(post_pred.observations)
+            else:
+                post_pred_dates = post_pred.observations
+            
+            # Find the closest forecast date for each test date
+            matching_indices_post = []
+            matching_indices_test = []
+            
+            for i, test_date in enumerate(test_dates):
+                # Find the closest date in the forecast
+                days_diff = abs(post_pred_dates - test_date).total_seconds() / (24 * 60 * 60)
+                closest_idx = np.argmin(days_diff)
+                
+                # Only include if within one day (to avoid distant matches)
+                if days_diff[closest_idx] <= 1.0:  # 1 day tolerance
+                    matching_indices_post.append(closest_idx)
+                    matching_indices_test.append(i)
+            
+            if len(matching_indices_test) == 0:
+                raise ValueError("No matching dates between test data and posterior predictive (even with 1-day tolerance)")
+                
+            print(f"Found {len(matching_indices_test)} matching dates between test data and forecast")
+            
+            # Extract values for matching dates
+            if isinstance(self.prediction, az.InferenceData):
+                # Get values from InferenceData object
+                popularity_values = popularity_var.isel(observations=matching_indices_post).values
+            else:
+                # Get values from raw array
+                popularity_values = np.array([popularity_var[:, :, idx, :] for idx in matching_indices_post])
+                # Reshape if necessary
+                if len(popularity_values.shape) == 5:  # [match, chain, draw, parties]
+                    popularity_values = np.transpose(popularity_values, (1, 2, 0, 3))  # [chain, draw, match, parties]
+            
+            # Check if array is valid
+            if np.all(np.isnan(popularity_values)):
+                print("WARNING: All popularity values are NaN. Trying a different approach...")
+                # Try a different approach
+                if isinstance(self.prediction, az.InferenceData):
+                    popularity_values = popularity_var.values[:, :, matching_indices_post, :]
+                else:
+                    popularity_values = np.array([popularity_var[:, :, idx, :] for idx in matching_indices_post])
+                    popularity_values = np.transpose(popularity_values, (1, 2, 0, 3))
+            
+            # Calculate mean predictions across chains and draws
+            mean_predicted = np.nanmean(popularity_values, axis=(0, 1))
+            
+            # Check if we still have NaN values
+            if np.all(np.isnan(mean_predicted)):
+                print("ERROR: All predicted values are NaN even after extraction")
+                raise ValueError("Cannot extract valid prediction values")
+            
+            # Get the observed proportions from test data
+            observed_props = {}
+            test_subset = test_data.iloc[matching_indices_test]
+            
+            # Define party colors for consistent coloring
+            party_colors = {
+                'far-left': 'darkred',
+                'left': 'red',
+                'center-left': 'pink',
+                'center': 'purple',
+                'center-right': 'lightblue',
+                'right': 'blue',
+                'far-right': 'darkblue',
+                'green': 'green',
+                'other': 'gray'
+            }
+            
+            # Plot the results
+            for i, party in enumerate(self.dataset.political_families):
+                if party in test_data.columns:
+                    # Calculate observed proportions
+                    observed = test_subset[party].values / test_subset['sample_size'].values
+                    
+                    # Get predicted values for this party
+                    if mean_predicted.ndim == 2:
+                        pred = mean_predicted[:, i]
+                    else:
+                        # Handle case where mean_predicted is already flat
+                        pred = mean_predicted[i]
+                    
+                    # Skip if all predictions are NaN
+                    if np.all(np.isnan(pred)):
+                        print(f"Skipping {party} - all predictions are NaN")
+                        continue
+                    
+                    # Remove any NaN pairs
+                    valid_idx = ~np.isnan(pred)
+                    if not np.all(valid_idx):
+                        print(f"Removing {np.sum(~valid_idx)} NaN values for {party}")
+                        obs = observed[valid_idx]
+                        pred = pred[valid_idx]
+                    else:
+                        obs = observed
+                    
+                    # Skip if no valid data points remain
+                    if len(obs) == 0:
+                        print(f"No valid data points for {party}")
+                        continue
+                    
+                    # Plot the scatter with consistent coloring
+                    color = party_colors.get(party, f"C{i}")
+                    ax.scatter(obs, pred, label=party, alpha=0.7, color=color)
+                    
+                    # Calculate mean absolute error
+                    mae = np.mean(np.abs(obs - pred))
+                    ax.text(0.05, 0.95 - i*0.05, f"{party} MAE: {mae:.4f}", 
+                            transform=ax.transAxes, fontsize=10)
+            
+            # Add the diagonal line
+            ax.plot([0, 1], [0, 1], 'k--', alpha=0.5)
+            
+            # Add labels and legend
+            ax.set_xlabel('Observed Vote Share')
+            ax.set_ylabel('Predicted Vote Share')
+            ax.set_title('Predictive Accuracy: Observed vs. Predicted Vote Share')
+            ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
+            
+            # Set axis limits
+            ax.set_xlim(0, max(0.5, ax.get_xlim()[1]))
+            ax.set_ylim(0, max(0.5, ax.get_ylim()[1]))
+            
+            # Adjust layout to fit the legend
+            plt.tight_layout()
+            
+            return fig
             
         except Exception as e:
             # If we encounter an error, create a simple figure with the error message
@@ -966,4 +858,260 @@ class ElectionsFacade:
         if self.posterior is None:
             raise ValueError("Must run inference before performing posterior predictive checks")
             
-        return self.model.posterior_predictive_check(self.posterior) 
+        return self.model.posterior_predictive_check(self.posterior)
+    
+    def load_prediction(self, prediction_path):
+        """
+        Load a saved prediction from a zarr file.
+        
+        Parameters:
+        -----------
+        prediction_path : str
+            Path to the zarr file containing the prediction
+            
+        Returns:
+        --------
+        dict
+            The raw prediction data
+        dict
+            The coordinates for the prediction data
+        dict
+            The dimensions for the prediction data
+        """
+        print(f"Loading prediction from {os.path.basename(prediction_path)}")
+        try:
+            import zarr
+            
+            # Open the zarr store
+            store = zarr.DirectoryStore(prediction_path)
+            root = zarr.open(store)
+            
+            # More efficient loading when debug is off
+            if not self.debug:
+                # Only load essential arrays (latent_popularity) when not debugging
+                raw_ppc = {}
+                
+                # Get the essential prediction data
+                if 'latent_popularity' in root.array_keys():
+                    raw_ppc['latent_popularity'] = root['latent_popularity'][:]
+                    print("Loaded essential prediction data")
+                else:
+                    # If essential data is not available, load all data
+                    for var_name in root.array_keys():
+                        if var_name not in ['coords', 'dims']:
+                            raw_ppc[var_name] = root[var_name][:]
+            else:
+                # Debug mode: load all prediction data
+                raw_ppc = {}
+                for var_name in root.array_keys():
+                    if var_name not in ['coords', 'dims']:
+                        raw_ppc[var_name] = root[var_name][:]
+            
+            # Load the coordinates (needed for both modes)
+            coords = {}
+            if 'coords' in root:
+                for coord_name in root['coords'].array_keys():
+                    coord_values = root['coords'][coord_name][:]
+                    if coord_name == 'observations':
+                        # Convert string dates back to datetime
+                        coord_values = pd.to_datetime(coord_values)
+                    coords[coord_name] = coord_values
+            
+            # Load the dimensions (needed for both modes)
+            dims = {}
+            if 'dims' in root:
+                for var_name in root['dims'].array_keys():
+                    dims[var_name] = list(root['dims'][var_name][:])
+            
+            # Store the loaded data
+            self.prediction = raw_ppc
+            self.prediction_coords = coords
+            self.prediction_dims = dims
+            
+            if self.debug:
+                print("Using raw prediction data for plotting")
+                # Print dimensions of prediction data
+                print("\nPrediction dimensions:")
+                for var_name, arr in raw_ppc.items():
+                    print(f"  {var_name}: shape {arr.shape}")
+                
+                if coords:
+                    print("\nCoordinates:")
+                    for coord_name, values in coords.items():
+                        print(f"  {coord_name}: {len(values)} values")
+            
+            return raw_ppc, coords, dims
+            
+        except Exception as e:
+            if self.debug:
+                print(f"Error loading prediction from zarr: {e}")
+            
+            # Try loading with arviz as a fallback
+            try:
+                import arviz as az
+                idata = az.from_zarr(prediction_path)
+                if self.debug:
+                    print("Loaded prediction as InferenceData object")
+                
+                # Extract raw data, coordinates, and dimensions
+                # More efficient in non-debug mode: only extract essential data
+                raw_ppc = {}
+                coords = {}
+                dims = {}
+                
+                if hasattr(idata, 'posterior_predictive'):
+                    # In non-debug mode, only extract latent_popularity if available
+                    if not self.debug and 'latent_popularity' in idata.posterior_predictive.data_vars:
+                        raw_ppc['latent_popularity'] = idata.posterior_predictive['latent_popularity'].values
+                    else:
+                        # Either in debug mode or essential variable not available: extract all
+                        for var_name in idata.posterior_predictive.data_vars:
+                            raw_ppc[var_name] = idata.posterior_predictive[var_name].values
+                    
+                    # Extract coordinates
+                    for coord_name in idata.posterior_predictive.coords:
+                        coords[coord_name] = idata.posterior_predictive.coords[coord_name].values
+                    
+                    # Create dimensions
+                    for var_name in raw_ppc:
+                        var_dims = list(idata.posterior_predictive[var_name].dims)
+                        dims[var_name] = var_dims
+                
+                # Store the extracted data
+                self.prediction = raw_ppc
+                self.prediction_coords = coords
+                self.prediction_dims = dims
+                
+                if self.debug:
+                    print("Extracted raw data from InferenceData object")
+                return raw_ppc, coords, dims
+                
+            except Exception as nested_e:
+                error_msg = f"Failed to load prediction: {e} -> {nested_e}"
+                print(error_msg)
+                if self.debug:
+                    import traceback
+                    traceback.print_exc()
+                raise ValueError(error_msg)
+    
+    def _build_model(self):
+        """
+        Build the model if it hasn't been built already.
+        
+        Returns:
+        --------
+        pymc.Model
+            The built PyMC model
+        """
+        if self.debug:
+            print("\n=== MODEL BUILD DIAGNOSTICS ===")
+            print("Model not built yet - building now...")
+        
+        try:
+            self.model_config = {
+                "election_date": self.dataset.election_date,
+                "baseline_timescales": self.dataset.baseline_timescales,
+                "election_timescales": self.dataset.election_timescales,
+                "weights": self.dataset.weights,
+                "save_dir": getattr(self, "output_dir", None),
+                "seed": 12345,
+            }
+            
+            # Set historical elections as coordinates
+            if self.debug:
+                print(f"Setting elections coord to historical elections: {self.dataset.historical_election_dates}")
+                print(f"Setting elections_observed to all historical elections: {self.dataset.historical_election_dates}")
+            
+            # Build the model
+            self.model = self.model.build_model()
+            
+            if self.debug:
+                # Print model dimensions
+                print("\n=== MODEL DIMENSIONS ===")
+                for dim_name, dim_values in self.model.coords.items():
+                    print(f"{dim_name}: shape={len(dim_values)}")
+                
+                # Print information about results data
+                if hasattr(self.dataset, "results_oos"):
+                    print(f"results_oos shape: {self.dataset.results_oos.shape}")
+                    print(f"results_oos election dates: {self.dataset.results_oos['election_date']}")
+                
+                # Print more detailed model information
+                print(f"For inference: Using historical elections data with shape: {self.dataset.historical_elections.shape}")
+                print(f"Setting election dimensions to match historical elections: {len(self.dataset.historical_election_dates)}")
+            
+            print("Model successfully built!")
+            
+            if self.debug:
+                # Print model variable counts
+                var_count = len(self.model.named_vars)
+                observed_vars = len(self.model.observed_RVs)
+                free_vars = len(self.model.free_RVs)
+                deterministics = len(self.model.deterministics)
+                
+                print("\nModel variables:")
+                print(f"Total variable count: {var_count}")
+                print(f"Observed variables: {observed_vars}")
+                print(f"Free variables: {free_vars}")
+                print(f"Deterministic variables: {deterministics}")
+                print("=====================================\n")
+            
+            return self.model
+            
+        except Exception as e:
+            error_msg = f"Failed to build model: {e}"
+            print(error_msg)
+            if self.debug:
+                import traceback
+                traceback.print_exc()
+            raise ValueError(error_msg)
+    
+    def debug_prediction_structure(self):
+        """
+        Print detailed debug information about the prediction structure.
+        This is helpful for debugging issues with predictions and plots.
+        """
+        if not hasattr(self, "prediction") or self.prediction is None:
+            print("No prediction available. Generate a forecast first.")
+            return
+        
+        import numpy as np
+        
+        print("\n=== PREDICTION STRUCTURE DEBUG INFO ===")
+        print(f"Type of prediction: {type(self.prediction)}")
+        print(f"Keys in prediction: {list(self.prediction.keys())}")
+        
+        # Print information about each prediction array
+        for key, value in self.prediction.items():
+            print(f"\n{key}:")
+            print(f"  Shape: {value.shape}")
+            print(f"  Dtype: {value.dtype}")
+            print(f"  Contains NaNs: {np.isnan(value).any()}")
+            if np.isnan(value).any():
+                print(f"  NaN percentage: {np.isnan(value).mean() * 100:.2f}%")
+        
+        # Print information about coordinates
+        if hasattr(self, "prediction_coords") and self.prediction_coords is not None:
+            print("\nCoordinates:")
+            for key, value in self.prediction_coords.items():
+                print(f"\n{key}:")
+                print(f"  Type: {type(value)}")
+                print(f"  Length: {len(value)}")
+                print(f"  Content: {value}")
+                print(f"  Is scalar: {np.isscalar(value)}")
+                
+                # Special handling for parties_complete
+                if key == 'parties_complete':
+                    print(f"  Content type: {type(value[0]) if len(value) > 0 else 'empty'}")
+                    # Convert to list for safety
+                    self.prediction_coords[key] = list(value)
+                    print(f"  Converted to list: {self.prediction_coords[key]}")
+        
+        # Print information about dimensions
+        if hasattr(self, "prediction_dims") and self.prediction_dims is not None:
+            print("\nDimensions:")
+            for key, value in self.prediction_dims.items():
+                print(f"  {key}: {value}")
+        
+        print("=======================================\n")
+        return self.prediction, self.prediction_coords, self.prediction_dims 

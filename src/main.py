@@ -5,6 +5,7 @@ import requests
 import matplotlib.pyplot as plt
 import datetime
 import seaborn as sns
+import numpy as np
 
 from src.models.elections_facade import ElectionsFacade
 
@@ -277,11 +278,11 @@ def main():
         "--election-date", type=str, default="2024-03-10", help="Target election date (YYYY-MM-DD)"
     )
     parser.add_argument(
-        "--baseline-timescales", type=int, nargs="+", default=[1000, 120, 30], 
+        "--baseline-timescales", type=int, nargs="+", default=[365], 
         help="Timescales for baseline GP in days"
     )
     parser.add_argument(
-        "--election-timescales", type=int, nargs="+", default=[90, 30, 15], 
+        "--election-timescales", type=int, nargs="+", default=[60], 
         help="Timescales for election-specific GP in days"
     )
     parser.add_argument(
@@ -304,6 +305,14 @@ def main():
         "--notify", action="store_true", default=False,
         help="Send notifications via ntfy.sh"
     )
+    parser.add_argument(
+        "--debug", action="store_true", default=False,
+        help="Enable detailed diagnostic output"
+    )
+    parser.add_argument(
+        "--fast", action="store_true", default=False,
+        help="Skip plots and other time-consuming operations for maximum speed"
+    )
     
     args = parser.parse_args()
     
@@ -323,11 +332,13 @@ def main():
         baseline_timescales=args.baseline_timescales,
         election_timescales=args.election_timescales,
         weights=args.weights,
+        debug=args.debug,
     )
     
     # Store the output directory in the ElectionsFacade instance
     elections_model.output_dir = args.output_dir
     
+    # Step 1: Either load results or run inference
     if args.load_results:
         # If a specific directory is provided, load from there
         if args.load_dir:
@@ -337,14 +348,6 @@ def main():
         else:
             elections_model.load_inference_results()
         
-        # Force a new forecast even if we're loading results
-        try:
-            # Generate forecast without using synthetic data
-            print("Generating model-based forecast using loaded results...")
-            prediction = elections_model.generate_forecast()
-        except Exception as e:
-            print(f"Error generating forecast: {str(e)}")
-        
         if args.notify:
             requests.post("https://ntfy.sh/bc-estimador",
                 data="Loaded saved inference results".encode(encoding='utf-8'))
@@ -353,7 +356,8 @@ def main():
         try:
             elections_model.run_inference(draws=args.draws, tune=args.tune)
             # Save inference results to output directory
-            elections_model.save_inference_results(directory=args.output_dir)
+            if not args.fast:
+                elections_model.save_inference_results(directory=args.output_dir)
             if args.notify:
                 requests.post("https://ntfy.sh/bc-estimador",
                     data="Finished sampling".encode(encoding='utf-8'))
@@ -364,11 +368,14 @@ def main():
                     data=f"Error running inference: {e}".encode(encoding='utf-8'))
             return
     
-    # Generate forecast
+    # Step 2: Generate forecast once
     try:
+        print("Generating forecast...")
         elections_model.generate_forecast()
+        
         # Save inference results including prediction to output directory
-        elections_model.save_inference_results(directory=args.output_dir)
+        if not args.fast:
+            elections_model.save_inference_results(directory=args.output_dir)
         if args.notify:
             requests.post("https://ntfy.sh/bc-estimador",
                 data="Generated forecast".encode(encoding='utf-8'))
@@ -378,17 +385,46 @@ def main():
             requests.post("https://ntfy.sh/bc-estimador",
                 data=f"Error generating forecast: {e}".encode(encoding='utf-8'))
     
-    # Save plots
+    # Step 3: Save plots (skip in fast mode)
+    if not args.fast:
+        try:
+            save_plots(elections_model, args.output_dir)
+            if args.notify:
+                requests.post("https://ntfy.sh/bc-estimador",
+                    data="Finished analysis and saved plots".encode(encoding='utf-8'))
+        except Exception as e:
+            print(f"Error saving plots: {e}")
+            if args.notify:
+                requests.post("https://ntfy.sh/bc-estimador",
+                    data=f"Error saving plots: {e}".encode(encoding='utf-8'))
+    else:
+        print("Fast mode: Skipped plot generation")
+        
+    # Step 4: Print forecast summary
     try:
-        save_plots(elections_model, args.output_dir)
-        if args.notify:
-            requests.post("https://ntfy.sh/bc-estimador",
-                data="Finished analysis and saved plots".encode(encoding='utf-8'))
+        # Extract the forecast data for the election date
+        if hasattr(elections_model, "prediction") and elections_model.prediction is not None:
+            latent_pop = elections_model.prediction.get('latent_popularity')
+            if latent_pop is not None:
+                # Get forecast for the last date (election day)
+                election_day_forecast = latent_pop[:, :, -1, :]
+                
+                # Calculate mean and credible intervals
+                mean_forecast = np.mean(election_day_forecast, axis=(0, 1))
+                lower_bound = np.percentile(election_day_forecast, 2.5, axis=(0, 1))
+                upper_bound = np.percentile(election_day_forecast, 97.5, axis=(0, 1))
+                
+                # Get party names
+                parties = elections_model.prediction_coords['parties_complete']
+                
+                # Print forecast summary
+                print("\nELECTION FORECAST SUMMARY FOR", elections_model.dataset.election_date)
+                print("="*50)
+                for i, party in enumerate(parties):
+                    print(f"{party:15s}: {mean_forecast[i]:.1%} [{lower_bound[i]:.1%} - {upper_bound[i]:.1%}]")
+                print("="*50)
     except Exception as e:
-        print(f"Error saving plots: {e}")
-        if args.notify:
-            requests.post("https://ntfy.sh/bc-estimador",
-                data=f"Error saving plots: {e}".encode(encoding='utf-8'))
+        print(f"Error printing forecast summary: {e}")
 
 
 if __name__ == "__main__":
