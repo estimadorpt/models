@@ -6,3 +6,4 @@ notebooks/.ipynb_checkpoints/elections_model-checkpoint.ipynb
 .DS_Store
 *.zarr/
 *.png
+outputs/

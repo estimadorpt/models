@@ -1,58 +1,102 @@
-# My Python Notebook Project
+# Election Model
 
-This is a Python project that includes Jupyter Notebooks, Python scripts, data files, and a requirements.txt file.
+A Bayesian hierarchical model for election forecasting based on polling data.
 
 ## Project Structure
 
-The project has the following structure:
+The project is organized in a modular way to facilitate maintainability and reusability:
 
 ```
-my-python-notebook-project
-├── notebooks
-│   └── example_notebook.ipynb
-├── src
-│   └── example_script.py
-├── data
-├── requirements.txt
-└── README.md
+project/
+├── data/               # Data files
+├── notebooks/          # Jupyter notebooks for analysis
+├── src/                # Source code
+│   ├── data/           # Data loading and processing
+│   │   ├── loaders.py  # Functions for loading data
+│   │   └── dataset.py  # ElectionDataset class
+│   ├── models/         # Model implementation
+│   │   ├── election_model.py     # Core Bayesian model
+│   │   └── elections_facade.py   # Facade for simplifying API
+│   ├── visualization/  # Visualization utilities
+│   │   └── plots.py    # Plotting functions
+│   ├── utils/          # General utilities
+│   ├── config.py       # Configuration settings
+│   └── main.py         # Main entry point
+├── .github/            # GitHub configuration
+├── .vscode/            # VSCode configuration
+└── environment.yml     # Conda environment specification
 ```
 
-## Files and Directories
+## Data Structure
 
-- `notebooks/example_notebook.ipynb`: This file is a Jupyter Notebook that contains Python code and markdown cells. It can be used for data analysis, visualization, and documentation.
+The model uses several data sources:
 
-- `src/example_script.py`: This file is a Python script that contains code for data processing, analysis, or any other functionality required for the project.
+1. Poll data (marktest_polls.csv, polls_renascenca.tsv, popstar_sondagens_data.csv)
+2. Election results (legislativas_*.parquet)
+3. Economic indicators (gdp.csv)
 
-- `data`: This directory is used to store data files that are used by the notebooks or scripts.
+## How to Use
 
-- `requirements.txt`: This file lists the Python packages and their versions required for the project. It can be used to install the dependencies using `pip`.
+### Basic Usage
 
-## Setup
+```python
+from src.models.elections_facade import ElectionsFacade
 
-To set up the project, follow these steps:
+# Create a model for a specific election
+model = ElectionsFacade(
+    election_date='2024-03-10',
+    baseline_timescales=[365],
+    election_timescales=[60]
+)
 
-1. Clone the repository to your local machine.
+# Run inference
+prior, trace, posterior = model.run_inference(draws=200, tune=100)
 
-2. Install the required Python packages by running the following command:
+# Generate forecast
+prediction = model.generate_forecast()
 
-   ```
-   pip install -r requirements.txt
-   ```
+# Create plots
+retro_fig = model.plot_retrodictive_check()
+forecast_fig = model.plot_forecast(hdi=True)
+```
 
-3. You can now run the Jupyter Notebooks or execute the Python scripts in the `src` directory.
+### Command-line Interface
 
-## Usage
+You can also run the model from the command line:
 
-- Open the Jupyter Notebook `notebooks/example_notebook.ipynb` to start working on your data analysis, visualization, or documentation tasks.
+```bash
+# Run with default settings
+python src/main.py
 
-- Modify the Python script `src/example_script.py` to add or modify functionality for data processing or analysis.
+# Run with custom settings
+python src/main.py --election-date 2024-03-10 --draws 500 --tune 200 --notify
 
-- Store your data files in the `data` directory and access them from the notebooks or scripts.
+# Load previously saved results
+python src/main.py --load-results --notify
+```
 
-## Contributing
+## Model Description
 
-Contributions to this project are welcome. If you find any issues or have suggestions for improvements, please open an issue or submit a pull request.
+The model is a Bayesian hierarchical model that incorporates:
 
-## License
+1. **Baseline party support**: Long-term average support for each party
+2. **Time-varying components**: Using Gaussian Process priors to capture trends over time
+3. **House effects**: Systematic biases by polling organizations
+4. **Election-specific effects**: Unique dynamics of each election cycle
 
-This project is licensed under the [MIT License](LICENSE).
+The model uses PyMC for Bayesian inference, performing MCMC sampling to estimate the posterior distribution of model parameters.
+
+## Visualizations
+
+The model provides various visualizations:
+
+1. Retrodictive check: How well the model fits historical polling data
+2. Forecast plot: Predictions for the upcoming election
+3. House effects: Systematic biases by polling organizations
+4. Party correlations: Relationships between party vote shares
+5. Component plots: Visualizations of various model components
+
+## References
+
+- [PyMC Documentation](https://docs.pymc.io/)
+- [ArviZ Documentation](https://arviz-devs.github.io/arviz/)
