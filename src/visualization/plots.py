@@ -6,6 +6,7 @@ import seaborn as sns
 from scipy.special import softmax
 from typing import List
 import matplotlib.dates as mdates
+import os
 
 
 def set_plot_style():
@@ -764,3 +765,193 @@ def plot_party_trajectory(
         import traceback
         traceback.print_exc()
         raise 
+
+def save_plots(elections_model, output_dir):
+    """
+    Save various plots from the model
+    
+    Parameters:
+    -----------
+    elections_model : ElectionsFacade
+        The elections model to generate plots from
+    output_dir : str
+        Directory to save plots in
+    """
+    # Create plots directory if it doesn't exist
+    plots_dir = os.path.join(output_dir, "plots")
+    if not os.path.exists(plots_dir):
+        os.makedirs(plots_dir)
+    
+    plot_functions = [
+        ("retrodictive_check", lambda: elections_model.plot_retrodictive_check(), "latent_popularity_evolution_with_observed_and_results.png"),
+        ("forecast", lambda: elections_model.plot_forecast(), None),  # Special handling for forecast plots
+        ("party_correlations", lambda: elections_model.plot_party_correlations(), "party_correlations.png"),
+        ("predictive_accuracy", lambda: elections_model.plot_predictive_accuracy(), "polling_accuracy.png")
+    ]
+    
+    for name, plot_func, filename in plot_functions:
+        try:
+            result = plot_func()
+            
+            # Special handling for forecast plots which can return a list
+            if name == "forecast":
+                if isinstance(result, list):
+                    for i, fig in enumerate(result):
+                        fig.savefig(os.path.join(plots_dir, f"forecast_plot_{i}.png"))
+                        plt.close(fig)
+                else:
+                    result.savefig(os.path.join(plots_dir, "latent_popularity_evolution_last_year.png"))
+                    plt.close(result)
+            else:
+                result.savefig(os.path.join(plots_dir, filename))
+                plt.close(result)
+                
+        except Exception as e:
+            print(f"Error saving {name} plot: {e}")
+    
+    # Save house effects for each pollster
+    house_effects_dir = os.path.join(plots_dir, "house_effects")
+    if not os.path.exists(house_effects_dir):
+        os.makedirs(house_effects_dir)
+        
+    for pollster in elections_model.dataset.unique_pollsters:
+        try:
+            house_fig = elections_model.plot_house_effects(pollster)
+            house_fig.savefig(os.path.join(house_effects_dir, f"house_effects_{pollster.replace('/', '_')}.png"))
+            plt.close(house_fig)
+        except Exception as e:
+            print(f"Error plotting house effects for {pollster}: {e}")
+    
+    # Plot individual model components
+    components_dir = os.path.join(plots_dir, "components")
+    if not os.path.exists(components_dir):
+        os.makedirs(components_dir)
+        
+    try:
+        plot_model_components(elections_model, components_dir)
+    except Exception as e:
+        print(f"Error plotting model components: {e}")
+
+
+def plot_model_components(elections_model, output_dir):
+    """
+    Plot various model components
+    
+    Parameters:
+    -----------
+    elections_model : ElectionsFacade
+        The elections model to generate plots from
+    output_dir : str
+        Directory to save plots in
+    """
+    trace = elections_model.trace
+    
+    component_plots = [
+        # Component name, data extraction function, plot function, filename
+        ("party_baseline", 
+         lambda: trace.posterior.party_baseline.mean(("chain", "draw")),
+         lambda df: plt.bar(df["parties_complete"], df["value"]),
+         "party_baseline_by_party.png"),
+         
+        ("election_party_baseline", 
+         lambda: trace.posterior.election_party_baseline.mean(("chain", "draw")),
+         lambda df: sns.lineplot(data=df, x="elections", y="value", hue="parties_complete", marker="o"),
+         "election_party_baseline_by_party_and_election.png"),
+         
+        ("poll_bias", 
+         lambda: trace.posterior.poll_bias.mean(("chain", "draw")),
+         lambda df: plt.bar(df["parties_complete"], df["value"]),
+         "poll_bias_by_party.png"),
+         
+        ("party_time_effect_weighted", 
+         lambda: trace.posterior.party_time_effect_weighted.mean(("chain", "draw")),
+         lambda df: sns.lineplot(data=df, x="countdown", y="value", hue="parties_complete"),
+         "party_time_effect_weighted_by_party_and_countdown.png"),
+         
+        ("latent_popularity", 
+         lambda: trace.posterior.latent_popularity.mean(("chain", "draw")),
+         lambda df: sns.lineplot(data=df, x="observations", y="value", hue="parties_complete"),
+         "latent_popularity_by_party_over_time.png"),
+         
+        ("noisy_popularity", 
+         lambda: trace.posterior.noisy_popularity.mean(("chain", "draw")),
+         lambda df: sns.lineplot(data=df, x="observations", y="value", hue="parties_complete"),
+         "noisy_popularity_by_party_over_time.png"),
+    ]
+    
+    for name, data_func, plot_func, filename in component_plots:
+        try:
+            # Extract data
+            data = data_func()
+            
+            # Convert to dataframe for plotting
+            df = data.to_dataframe(name="value").reset_index()
+            
+            # Create plot
+            plt.figure(figsize=(12, 8))
+            plot_func(df)
+            plt.title(f"{name.replace('_', ' ').title()}")
+            plt.xticks(rotation=45)
+            plt.tight_layout()
+            plt.savefig(os.path.join(output_dir, filename))
+            plt.close()
+        except Exception as e:
+            print(f"Error plotting {name}: {e}")
+    
+    # Handle special cases with more complex plotting requirements
+    try:
+        # House effects heatmap
+        house_effects = trace.posterior.house_effects.mean(("chain", "draw"))
+        df = house_effects.to_dataframe(name="value").reset_index()
+        pivot_df = df.pivot(index="pollsters", columns="parties_complete", values="value")
+        
+        plt.figure(figsize=(14, 10))
+        sns.heatmap(pivot_df, annot=True, cmap="coolwarm", center=0)
+        plt.title("House Effects by Party and Pollsters")
+        plt.tight_layout()
+        plt.savefig(os.path.join(output_dir, "house_effects_by_party_and_pollsters.png"))
+        plt.close()
+    except Exception as e:
+        print(f"Error plotting house effects heatmap: {e}")
+    
+    try:
+        # House election effects - multiple plots
+        house_election_effects = trace.posterior.house_election_effects.mean(("chain", "draw"))
+        df = house_election_effects.to_dataframe(name="value").reset_index()
+        
+        # Group by election and create separate plots
+        for election in df["elections"].unique():
+            election_df = df[df["elections"] == election]
+            pivot_df = election_df.pivot(index="pollsters", columns="parties_complete", values="value")
+            
+            plt.figure(figsize=(14, 10))
+            sns.heatmap(pivot_df, annot=True, cmap="coolwarm", center=0)
+            plt.title(f"House Election Effects - Election {election}")
+            plt.tight_layout()
+            plt.savefig(os.path.join(output_dir, f"house_election_effects_election_{election}.png"))
+            plt.close()
+        
+        # Summary plot
+        plt.figure(figsize=(12, 8))
+        sns.lineplot(data=df, x="elections", y="value", hue="parties_complete")
+        plt.title("House Election Effects by Party and Election")
+        plt.tight_layout()
+        plt.savefig(os.path.join(output_dir, "house_election_effects_by_party_and_election.png"))
+        plt.close()
+    except Exception as e:
+        print(f"Error plotting house election effects: {e}")
+    
+    try:
+        # Election party time effect weighted
+        election_party_time_effect_weighted = trace.posterior.election_party_time_effect_weighted.mean(("chain", "draw"))
+        eptew_at_zero = election_party_time_effect_weighted.isel(countdown=0)
+        df = eptew_at_zero.to_dataframe(name="value").reset_index()
+        
+        plt.figure(figsize=(12, 8))
+        sns.lineplot(data=df, x="elections", y="value", hue="parties_complete", marker="o")
+        plt.title("Election Party Time Effect Weighted by Party and Election (Countdown=0)")
+        plt.tight_layout()
+        plt.savefig(os.path.join(output_dir, "election_party_time_effect_weighted_by_party_and_election.png"))
+        plt.close()
+    except Exception as e:
+        print(f"Error plotting election party time effect weighted: {e}") 

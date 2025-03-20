@@ -173,15 +173,17 @@ def calculate_error_metrics(predictions, actual_results):
     squared_errors = (pred_series - actual_results) ** 2
     
     # Calculate percentage errors, avoiding division by zero
-    percentage_errors = np.zeros_like(absolute_errors)
+    percentage_errors = pd.Series(index=actual_results.index)
     for party in actual_results.index:
         if actual_results[party] > 0.001:  # threshold to avoid division by very small numbers
             percentage_errors[party] = absolute_errors[party] / actual_results[party] * 100
+        else:
+            percentage_errors[party] = 0  # Set to zero for very small actual values
     
     # Calculate overall metrics
     mae = np.mean(absolute_errors)
     rmse = np.sqrt(np.mean(squared_errors))
-    mape = np.mean(percentage_errors)
+    mape = np.mean(percentage_errors[~np.isnan(percentage_errors)])  # Exclude NaN values
     
     return {
         "mae": mae,

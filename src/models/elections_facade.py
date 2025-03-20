@@ -674,7 +674,20 @@ class ElectionsFacade:
                 popularity_var_name = 'latent_popularity'
                 print("Using latent_popularity for predictions")
             else:
-                raise ValueError("Neither 'noisy_popularity' nor 'latent_popularity' found in posterior predictive")
+                print("Neither 'noisy_popularity' nor 'latent_popularity' found in posterior predictive")
+                # Create a figure with an informative message instead of raising an error
+                ax.text(0.5, 0.5, 
+                        "Neither 'noisy_popularity' nor 'latent_popularity' found in posterior predictive.\n"
+                        "These variables are required for calculating predictive accuracy.",
+                        ha='center', va='center', fontsize=12, transform=ax.transAxes,
+                        wrap=True)
+                ax.set_title("Predictive Accuracy Unavailable")
+                ax.set_xlabel("Observed Vote Share")
+                ax.set_ylabel("Predicted Vote Share")
+                ax.set_xlim(0, 1)
+                ax.set_ylim(0, 1)
+                plt.tight_layout()
+                return fig
             
             # Get the popularity variable
             popularity_var = getattr(post_pred, popularity_var_name)
@@ -704,7 +717,20 @@ class ElectionsFacade:
                     matching_indices_test.append(i)
             
             if len(matching_indices_test) == 0:
-                raise ValueError("No matching dates between test data and posterior predictive (even with 1-day tolerance)")
+                print("No matching dates between test data and posterior predictive (even with 1-day tolerance)")
+                # Create a figure with an informative message instead of raising an error
+                ax.text(0.5, 0.5, 
+                        "No matching dates found between test data and posterior predictive.\n"
+                        "This may occur during cross-validation when test poll dates don't align with forecast dates.",
+                        ha='center', va='center', fontsize=12, transform=ax.transAxes,
+                        wrap=True)
+                ax.set_title("Predictive Accuracy Unavailable")
+                ax.set_xlabel("Observed Vote Share")
+                ax.set_ylabel("Predicted Vote Share")
+                ax.set_xlim(0, 1)
+                ax.set_ylim(0, 1)
+                plt.tight_layout()
+                return fig
                 
             print(f"Found {len(matching_indices_test)} matching dates between test data and forecast")
             
@@ -723,11 +749,14 @@ class ElectionsFacade:
             if np.all(np.isnan(popularity_values)):
                 print("WARNING: All popularity values are NaN. Trying a different approach...")
                 # Try a different approach
-                if isinstance(self.prediction, az.InferenceData):
-                    popularity_values = popularity_var.values[:, :, matching_indices_post, :]
-                else:
-                    popularity_values = np.array([popularity_var[:, :, idx, :] for idx in matching_indices_post])
-                    popularity_values = np.transpose(popularity_values, (1, 2, 0, 3))
+                try:
+                    if isinstance(self.prediction, az.InferenceData):
+                        popularity_values = popularity_var.values[:, :, matching_indices_post, :]
+                    else:
+                        popularity_values = np.array([popularity_var[:, :, idx, :] for idx in matching_indices_post])
+                        popularity_values = np.transpose(popularity_values, (1, 2, 0, 3))
+                except Exception as e:
+                    print(f"Error with alternative extraction approach: {e}")
             
             # Calculate mean predictions across chains and draws
             mean_predicted = np.nanmean(popularity_values, axis=(0, 1))
@@ -735,7 +764,20 @@ class ElectionsFacade:
             # Check if we still have NaN values
             if np.all(np.isnan(mean_predicted)):
                 print("ERROR: All predicted values are NaN even after extraction")
-                raise ValueError("Cannot extract valid prediction values")
+                # Create a figure with an informative message instead of raising an error
+                ax.text(0.5, 0.5, 
+                        "Cannot extract valid prediction values.\n"
+                        "All predicted values are NaN even after extraction.\n"
+                        "This may occur when the posterior predictive values are not properly aligned.",
+                        ha='center', va='center', fontsize=12, transform=ax.transAxes,
+                        wrap=True)
+                ax.set_title("Predictive Accuracy Unavailable")
+                ax.set_xlabel("Observed Vote Share")
+                ax.set_ylabel("Predicted Vote Share")
+                ax.set_xlim(0, 1)
+                ax.set_ylim(0, 1)
+                plt.tight_layout()
+                return fig
             
             # Get the observed proportions from test data
             observed_props = {}
