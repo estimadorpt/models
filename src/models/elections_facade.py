@@ -37,7 +37,6 @@ class ElectionsFacade:
         election_date: str,
         baseline_timescales: List[int] = [365],
         election_timescales: List[int] = [60],
-        weights: List[float] = None,
         test_cutoff: pd.Timedelta = None,
         debug: bool = False,
     ):
@@ -52,8 +51,6 @@ class ElectionsFacade:
             Timescales for baseline GP components in days
         election_timescales : List[int]
             Timescales for election-specific GP components in days
-        weights : List[float]
-            Weights for GP components
         test_cutoff : pd.Timedelta
             How much data to hold out for testing
         debug : bool
@@ -64,7 +61,6 @@ class ElectionsFacade:
             election_date=election_date,
             baseline_timescales=baseline_timescales,
             election_timescales=election_timescales,
-            weights=weights,
             test_cutoff=test_cutoff,
         )
         
@@ -88,7 +84,6 @@ class ElectionsFacade:
             "election_date": election_date,
             "baseline_timescales": baseline_timescales,
             "election_timescales": election_timescales,
-            "weights": weights,
             "save_dir": None,
             "seed": 12345,
         }
@@ -104,7 +99,7 @@ class ElectionsFacade:
         self, 
         draws: int = 200, 
         tune: int = 100, 
-        target_accept: float = 0.995, 
+        target_accept: float = 0.9, 
         **sampler_kwargs
     ):
         """
@@ -225,82 +220,89 @@ class ElectionsFacade:
             self.posterior = arviz.from_zarr(old_posterior_path)
     
     def _analyze_trace_quality(self, trace):
-        """
-        Analyze the quality of the MCMC trace and check for convergence issues.
-        
-        Parameters:
-        -----------
-        trace : arviz.InferenceData
-            The trace to analyze
-        """
-        if trace is None:
-            print("No trace to analyze")
-            return
-        
-        # Skip expensive calculations when debug is off
-        if not self.debug:
-            # Just do a quick NaN check on a few key parameters
-            for param in ['party_baseline', 'election_party_baseline', 'party_time_effect_weighted']:
-                if param in trace.posterior:
-                    param_values = trace.posterior[param].values
-                    nan_percentage = np.isnan(param_values).mean() * 100
-                    if nan_percentage > 90:
-                        print(f"Warning: {param} contains {nan_percentage:.1f}% NaN values")
-            return
-        
-        # Only print detailed diagnostics if debug is enabled
-        print("\n======= TRACE QUALITY ANALYSIS =======")
-        
-        # Check for NaN values in key parameters
-        key_params = ['party_baseline', 'election_party_baseline', 'party_time_effect_weighted']
-        for param in key_params:
+        """Analyze trace quality and print diagnostics."""
+        try:  
+            # Handle division by zero warnings in arviz functions
+            import warnings
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=RuntimeWarning, message="invalid value encountered in scalar divide")
+                
+                if 'diverging' in trace.sample_stats:
+                    n_divergent = trace.sample_stats.diverging.sum().item()
+                    if n_divergent > 0:
+                        pct_divergent = n_divergent / (trace.posterior.dims['chain'] * trace.posterior.dims['draw'])
+                        print(f"WARNING: {n_divergent} divergent transitions detected ({pct_divergent:.1%} of samples)")
+                        
+                        # If there are divergences, try to identify which parameters might be problematic
+                        # Look at parameters with high R-hat that might be related to divergences
+                        summary = arviz.summary(trace, var_names=['~house_effects', '~house_election_effects'])
+                        high_rhat = summary[summary.r_hat > 1.05]
+                        if not high_rhat.empty:
+                            print("Parameters with high R-hat that might be related to divergences:")
+                            print(high_rhat[['mean', 'sd', 'hdi_3%', 'hdi_97%', 'r_hat']])
+                
+                # Check energy statistics
+                if 'energy' in trace.sample_stats:
+                    energy = trace.sample_stats.energy
+                    energy_diff = np.abs(energy - np.mean(energy)) / np.std(energy)
+                    energy_frac = np.mean(energy_diff > 0.2)
+                    print(f"Energy fraction: {energy_frac:.3f} (should be close to 0.1 for good mixing)")
+                    if energy_frac > 0.3:
+                        print("WARNING: Energy fraction is high, indicating potential sampling issues")
+
+                # Check for tree depth issues
+                if 'tree_depth' in trace.sample_stats:
+                    max_treedepth = trace.sample_stats.attrs.get('max_treedepth', 10)
+                    max_depths = (trace.sample_stats.tree_depth >= max_treedepth).sum().item()
+                    if max_depths > 0:
+                        pct_max_depth = max_depths / (trace.posterior.dims['chain'] * trace.posterior.dims['draw'])
+                        print(f"WARNING: {max_depths} samples ({pct_max_depth:.1%}) reached maximum tree depth")
+                        if pct_max_depth > 0.1:
+                            print("Consider increasing max_treedepth in sampler parameters")
+                
+                # Compute ESS and R-hat for key parameters
+                key_params = ['party_baseline', 'election_party_baseline', 'party_time_effect_weighted',
+                            'concentration_polls', 'concentration_results', 'lsd_baseline',
+                            'party_time_weight', 'house_effects_sd', 'log_concentration_polls',
+                            'log_concentration_results']
+                
+                available_params = [p for p in key_params if p in trace.posterior]
+                if available_params:
+                    print("\n=== KEY PARAMETER DIAGNOSTICS ===")
+                    summary = arviz.summary(trace, var_names=available_params)
+                    
+                    # Print parameters with low ESS or high R-hat
+                    low_ess = summary[summary.ess_bulk < 400]
+                    if not low_ess.empty:
+                        print("\nParameters with low effective sample size (ESS < 400):")
+                        print(low_ess[['mean', 'sd', 'ess_bulk', 'ess_tail', 'r_hat']])
+                    
+                    high_rhat = summary[summary.r_hat > 1.01]
+                    if not high_rhat.empty:
+                        print("\nParameters with high R-hat (> 1.01):")
+                        print(high_rhat[['mean', 'sd', 'ess_bulk', 'ess_tail', 'r_hat']])
+                    
+                    # If no issues found, print a positive message
+                    if low_ess.empty and high_rhat.empty:
+                        print("All key parameters show good convergence (ESS > 400, R-hat < 1.01)")
+        except Exception as e:
+            print(f"Error in trace quality analysis: {str(e)}")
+            
+        # Analyze concentration parameters specifically - outside the warning suppression
+        for param in ['concentration_polls', 'concentration_results', 
+                      'log_concentration_polls', 'log_concentration_results']:
             if param in trace.posterior:
                 param_values = trace.posterior[param].values
-                nan_percentage = np.isnan(param_values).mean() * 100
-                if nan_percentage > 0:
-                    print(f"WARNING: {param} contains {nan_percentage:.2f}% NaN values!")
-                else:
-                    print(f"{param}: No NaN values detected")
-                    
-                # Print shape and some statistics
-                print(f"  Shape: {param_values.shape}")
-                print(f"  Range: [{np.nanmin(param_values):.4f}, {np.nanmax(param_values):.4f}]")
-                print(f"  Mean: {np.nanmean(param_values):.4f}")
-            else:
-                print(f"{param}: Not found in trace")
-        
-        # Calculate and show ESS and Rhat for key parameters when debug is enabled
-        print("\n=== ESS and R-hat for Key Parameters ===")
-        try:
-            # Calculate ESS for important parameters
-            ess_params = ['party_baseline', 'election_party_baseline', 'house_effects', 'lsd_baseline']
-            for param in ess_params:
-                if param in trace.posterior:
-                    ess = arviz.ess(trace, var_names=[param]).to_array().values.flatten()
-                    ess_mean = np.mean(ess)
-                    ess_min = np.min(ess)
-                    print(f"{param} ESS - Mean: {ess_mean:.1f}, Min: {ess_min:.1f}")
-                    
-                    # Highlight problematic values
-                    if ess_min < 100:
-                        print(f"  WARNING: {param} has very low ESS (< 100)")
-            
-            # Calculate Rhat for important parameters
-            rhat_params = ['party_baseline', 'election_party_baseline', 'house_effects', 'lsd_baseline']
-            for param in rhat_params:
-                if param in trace.posterior:
-                    rhat = arviz.rhat(trace, var_names=[param]).to_array().values.flatten()
-                    rhat_max = np.max(rhat)
-                    rhat_mean = np.mean(rhat)
-                    print(f"{param} R-hat - Mean: {rhat_mean:.4f}, Max: {rhat_max:.4f}")
-                    
-                    # Highlight problematic values
-                    if rhat_max > 1.01:
-                        print(f"  WARNING: {param} has high R-hat (> 1.01)")
-        except Exception as e:
-            print(f"Error calculating ESS/R-hat: {e}")
-        
-        print("======= END TRACE ANALYSIS =======\n")
+                param_mean = np.mean(param_values)
+                param_std = np.std(param_values)
+                print(f"\n{param}: mean={param_mean:.2f}, std={param_std:.2f}")
+                
+                # For log-parameterized versions, also show the exponentiated statistics
+                if param.startswith('log_'):
+                    exp_values = np.exp(param_values)
+                    exp_mean = np.mean(exp_values)
+                    exp_std = np.std(exp_values)
+                    print(f"exp({param}): mean={exp_mean:.2f}, std={exp_std:.2f}")
     
     def generate_forecast(self, election_date: str = None):
         """
@@ -933,7 +935,6 @@ class ElectionsFacade:
                 "election_date": self.dataset.election_date,
                 "baseline_timescales": self.dataset.baseline_timescales,
                 "election_timescales": self.dataset.election_timescales,
-                "weights": self.dataset.weights,
                 "save_dir": getattr(self, "output_dir", None),
                 "seed": 12345,
             }

@@ -49,13 +49,11 @@ class ElectionDataset:
         election_date: str,
         baseline_timescales=[365],
         election_timescales=[60],
-        weights: List[float] = None,
         test_cutoff: pd.Timedelta = None,
     ):
         self.election_date = election_date
         self.baseline_timescales = baseline_timescales
         self.election_timescales = election_timescales
-        self.weights = weights
         self.test_cutoff = test_cutoff
         
         # Use only historical elections for training, not future elections

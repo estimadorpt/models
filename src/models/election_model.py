@@ -24,7 +24,6 @@ class ElectionModel:
             "kernel": "matern52",
             "zerosum": True,
             "variance_limit": 0.8,
-            "variance_weight": dataset.weights,
         }
 
     def _build_coords(self, polls: pd.DataFrame = None):
@@ -254,7 +253,15 @@ class ElectionModel:
             # --------------------------------------------------------
             #                   BASELINE COMPONENTS
             # --------------------------------------------------------
-            party_baseline_sd = pm.HalfNormal("party_baseline_sd", sigma=0.5)
+            party_baseline_raw = pm.Normal(
+                "party_baseline_raw",
+                0.0,
+                1.0,
+                dims="parties_complete",
+            )
+
+            # More flexibility for party baseline standard deviation - further increased
+            party_baseline_sd = pm.HalfNormal("party_baseline_sd", sigma=0.5)  # Increased from 0.4
             party_baseline = pm.ZeroSumNormal(
                 "party_baseline", sigma=party_baseline_sd, dims="parties_complete"
             )
@@ -263,7 +270,17 @@ class ElectionModel:
             num_elections = len(self.dataset.historical_election_dates)
             print(f"Setting election dimensions to match historical elections: {num_elections}")
             
-            election_party_baseline_sd = pm.HalfNormal("election_party_baseline_sd", sigma=0.05)
+            # Election-specific party baseline.
+            # Represents election-specific deviation from party baseline
+            election_party_baseline_raw = pm.Normal(
+                "election_party_baseline_raw",
+                0.0,
+                1.0,
+                dims=("elections", "parties_complete"),
+            )
+
+            # Increased flexibility for election-party effects
+            election_party_baseline_sd = pm.HalfNormal("election_party_baseline_sd", sigma=0.3)  # Increased from 0.2
             election_party_baseline = pm.ZeroSumNormal(
                 "election_party_baseline",
                 sigma=election_party_baseline_sd,
@@ -308,11 +325,11 @@ class ElectionModel:
             )
 
             # Weights for baseline component
-            lsd_baseline = pm.Normal("lsd_baseline", mu=-2, sigma=0.2)
+            lsd_baseline = pm.Normal("lsd_baseline", mu=-1.8, sigma=0.4)  # Increased from 0.3
             lsd_party_effect = pm.ZeroSumNormal(
                 "lsd_party_effect_party_amplitude",
-                sigma=0.05,
-                dims="parties_complete"
+                sigma=0.15,  # Increased from 0.1
+                dims="parties_complete",
             )
             party_time_weight = pm.Deterministic(
                 "party_time_weight",
@@ -360,15 +377,17 @@ class ElectionModel:
             # Weights for election-specific component
             lsd_party_effect_election = pm.ZeroSumNormal(
                 "lsd_party_effect_election_party_amplitude",
-                sigma=0.1,
-                dims="parties_complete"
+                sigma=0.15,  # Increased from 0.1
+                dims="parties_complete",
             )
             lsd_election_effect = pm.ZeroSumNormal(
                 "lsd_election_effect",
-                sigma=0.1,
+                sigma=0.15,  # Increased from 0.1
                 dims="elections"
             )
-            lsd_election_party_sd = pm.HalfNormal("lsd_election_party_sd", sigma=0.2)
+            lsd_election_party_sd = pm.HalfNormal(
+                "lsd_election_party_sd", sigma=0.3  # Increased from 0.2
+            )
             lsd_election_party_effect = pm.ZeroSumNormal(
                 "lsd_election_party_effect",
                 sigma=lsd_election_party_sd,
@@ -403,13 +422,13 @@ class ElectionModel:
 
             house_effects = pm.ZeroSumNormal(
                 "house_effects",
-                sigma=0.5,
+                sigma=0.25,
                 dims=("pollsters", "parties_complete"),
             )
 
             house_election_effects_sd = pm.HalfNormal(
                 "house_election_effects_sd",
-                0.5,
+                sigma=0.15,  # Increased from 0.1
                 dims=("pollsters", "parties_complete"),
             )
             house_election_effects_raw = pm.ZeroSumNormal(
@@ -469,9 +488,22 @@ class ElectionModel:
             )
 
             # The concentration parameter of a Dirichlet-Multinomial distribution
-            concentration_polls = pm.InverseGamma(
-                "concentration_polls", mu=1000, sigma=200
-            )
+            # Parameterize log-normal to match desired mean and standard deviation
+            desired_mean_polls = 250  # Your intuitive "sample size" interpretation
+            desired_sd_polls = 50     # Uncertainty around this mean
+            
+            # Parameterize log-normal to match desired mean and standard deviation
+            log_mean_polls = np.log(desired_mean_polls) - 0.5 * np.log(1 + (desired_sd_polls/desired_mean_polls)**2)
+            log_sd_polls = np.sqrt(np.log(1 + (desired_sd_polls/desired_mean_polls)**2))
+            
+            # Define the log-normal prior
+            log_concentration_polls = pm.Normal("log_concentration_polls", 
+                                                mu=log_mean_polls, 
+                                                sigma=log_sd_polls)
+                                                
+            # Transform back to natural scale
+            concentration_polls = pm.Deterministic("concentration_polls", 
+                                                   pt.exp(log_concentration_polls))
 
             # Generate counts from Dirichlet-Multinomial
             N_approve = pm.DirichletMultinomial(
@@ -507,9 +539,22 @@ class ElectionModel:
                     dims=("elections", "parties_complete"),
                 )
 
-                concentration_results = pm.InverseGamma(
-                    "concentration_results", mu=1000, sigma=200
-                )
+                # Parameterize log-normal to match desired mean and standard deviation
+                desired_mean_results = 2000  # Your intuitive "sample size" interpretation
+                desired_sd_results = 200     # Uncertainty around this mean
+                
+                # Parameterize log-normal to match desired mean and standard deviation
+                log_mean_results = np.log(desired_mean_results) - 0.5 * np.log(1 + (desired_sd_results/desired_mean_results)**2)
+                log_sd_results = np.sqrt(np.log(1 + (desired_sd_results/desired_mean_results)**2))
+                
+                # Define the log-normal prior
+                log_concentration_results = pm.Normal("log_concentration_results", 
+                                                    mu=log_mean_results, 
+                                                    sigma=log_sd_results)
+                                                    
+                # Transform back to natural scale
+                concentration_results = pm.Deterministic("concentration_results", 
+                                                       pt.exp(log_concentration_results))
 
                 # DirichletMultinomial for the observed results
                 R = pm.DirichletMultinomial(
@@ -545,9 +590,50 @@ class ElectionModel:
         sampler_kwargs.setdefault('nuts_sampler', 'numpyro')
         sampler_kwargs.setdefault('return_inferencedata', True)
         
+        # Increase defaults for draws and tune if not specified
+        sampler_kwargs.setdefault('draws', 3000)  # Increased from 2000
+        sampler_kwargs.setdefault('tune', 3000)   # Increased from 2000
+        
+        # Add chain initialization strategy if not specified
+        if 'init' not in sampler_kwargs:
+            # Use jitter+adapt_diag for better initialization that's more robust
+            sampler_kwargs['init'] = 'jitter+adapt_diag'
+        
+        # Set number of chains if not specified
+        sampler_kwargs.setdefault('chains', 4)
+        
+        # Set max tree depth
+        sampler_kwargs.setdefault('max_treedepth', 15)  # Increased from default 10
+        
+        # Recommend sampling parameters for better performance
+        sampler_kwargs.setdefault('target_accept', 0.9)  # Maintains the already good target
+        
         with model:
             prior_checks = pm.sample_prior_predictive()
+            
+            # Sample with improved diagnostics
             trace = pm.sample(**sampler_kwargs)
+            
+            # Store additional convergence diagnostics
+            if trace is not None and isinstance(trace, arviz.InferenceData):
+                # Check for divergences
+                n_divergent = trace.sample_stats.diverging.sum().item()
+                if n_divergent > 0:
+                    print(f"WARNING: {n_divergent} divergent transitions detected")
+                
+                # Check energy fraction - should be close to 0.5 for good mixing
+                energy = trace.sample_stats.energy
+                energy_frac = np.mean(np.abs(energy - np.mean(energy)) / np.std(energy) > 0.2)
+                if energy_frac > 0.1:
+                    print(f"WARNING: Energy fraction {energy_frac:.2f} indicates potential issues with energy conservation")
+                
+                # Check if any parameters hit max tree depth frequently
+                if 'tree_depth' in trace.sample_stats:
+                    max_depths = (trace.sample_stats.tree_depth >= sampler_kwargs.get('max_treedepth', 10)).sum().item()
+                    if max_depths > 0:
+                        pct_max_depth = max_depths / (trace.posterior.dims['chain'] * trace.posterior.dims['draw'])
+                        print(f"WARNING: {max_depths} samples ({pct_max_depth:.1%}) reached maximum tree depth")
+            
             post_checks = pm.sample_posterior_predictive(
                 trace, var_names=var_names
             )

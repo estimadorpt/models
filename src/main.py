@@ -59,7 +59,6 @@ def fit_model(args):
         election_date=args.election_date,
         baseline_timescales=args.baseline_timescales,
         election_timescales=args.election_timescales,
-        weights=args.weights,
         test_cutoff=test_cutoff,
         debug=args.debug,
     )
@@ -73,6 +72,11 @@ def fit_model(args):
             print(f"Running inference with {args.draws} draws and {args.tune} tuning steps")
         
         elections_model.run_inference(draws=args.draws, tune=args.tune)
+        
+        # Analyze trace quality after inference
+        if args.debug:
+            print("\n=== TRACE QUALITY ANALYSIS ===")
+            elections_model._analyze_trace_quality(elections_model.trace)
         
         # Save inference results to output directory
         print(f"Saving model to {args.output_dir}")
@@ -98,7 +102,6 @@ def load_model(args):
         election_date=args.election_date,
         baseline_timescales=args.baseline_timescales,
         election_timescales=args.election_timescales,
-        weights=args.weights,
         debug=args.debug,
     )
     
@@ -111,46 +114,28 @@ def load_model(args):
             load_path = args.load_dir
         else:
             load_path = args.output_dir
-            
-        trace_path = os.path.join(load_path, "trace.zarr")
-        if os.path.exists(trace_path):
-            if args.debug:
-                print(f"Loading trace from {trace_path}")
-            elections_model.trace = arviz.from_zarr(trace_path)
-        else:
-            raise ValueError(f"Trace file not found at {trace_path}")
-                
-        # Optional: load prior and posterior if they exist
-        prior_path = os.path.join(load_path, "prior_check.zarr")
-        old_prior_path = os.path.join(load_path, "prior.zarr")
-        if os.path.exists(prior_path):
-            elections_model.prior = arviz.from_zarr(prior_path)
-        elif os.path.exists(old_prior_path):
-            elections_model.prior = arviz.from_zarr(old_prior_path)
-                
-        posterior_path = os.path.join(load_path, "posterior_check.zarr")
-        old_posterior_path = os.path.join(load_path, "posterior.zarr")
-        if os.path.exists(posterior_path):
-            elections_model.posterior = arviz.from_zarr(posterior_path)
-        elif os.path.exists(old_posterior_path):
-            elections_model.posterior = arviz.from_zarr(old_posterior_path)
+        
+        # Use the load_inference_results method which will also call _analyze_trace_quality
+        if args.debug:
+            print(f"Loading inference results from {load_path}")
+        elections_model.load_inference_results(directory=load_path)
+        
+        # Verify that trace was loaded properly
+        if elections_model.trace is None:
+            raise ValueError(f"Failed to load trace. Make sure the directory contains a valid trace.zarr file.")
+        
+        # Explicitly build the model - this is needed for generating forecasts after loading
+        elections_model.model.model = elections_model.model.build_model()
+        if args.debug:
+            print("Model successfully built after loading!")
+        
+        if args.notify:
+            requests.post("https://ntfy.sh/bc-estimador",
+                data="Loaded saved inference results".encode(encoding='utf-8'))
+        
+        return elections_model
     except Exception as e:
         raise ValueError(f"Failed to load model: {e}")
-    
-    # Verify that trace was loaded properly
-    if elections_model.trace is None:
-        raise ValueError(f"Failed to load trace. Make sure the directory contains a valid trace.zarr file.")
-    
-    # Explicitly build the model - this is needed for generating forecasts after loading
-    elections_model.model.model = elections_model.model.build_model()
-    if args.debug:
-        print("Model successfully built after loading!")
-    
-    if args.notify:
-        requests.post("https://ntfy.sh/bc-estimador",
-            data="Loaded saved inference results".encode(encoding='utf-8'))
-    
-    return elections_model
 
 
 def generate_forecast(elections_model, args):
@@ -234,7 +219,6 @@ def cross_validate(args):
             cutoff_date=None,  # Don't apply extra cutoff
             baseline_timescales=args.baseline_timescales,
             election_timescales=args.election_timescales,
-            weights=args.weights,
             output_dir=election_dir,
             debug=args.debug,
             draws=args.draws, 
@@ -318,15 +302,13 @@ def main():
     # Model parameters
     parser.add_argument('--election-date', type=str, required=True,
                       help='Target election date (YYYY-MM-DD)')
-    parser.add_argument('--baseline-timescales', type=float, nargs='+', default=[180, 365, 730],
+    parser.add_argument('--baseline-timescales', type=float, nargs='+', default= [365],
                       help='Baseline timescales for Gaussian process')
-    parser.add_argument('--election-timescales', type=float, nargs='+', default=[60, 30, 15],
+    parser.add_argument('--election-timescales', type=float, nargs='+', default=[60],
                       help='Election timescales for Gaussian process')
-    parser.add_argument('--weights', type=float, nargs='+', default=[0.5, 0.3, 0.2],
-                      help='Weights for each timescale component')
     
     # MCMC parameters
-    parser.add_argument('--draws', type=int, default=1000,
+    parser.add_argument('--draws', type=int, default=2000,
                       help='Number of samples to draw')
     parser.add_argument('--tune', type=int, default=1000,
                       help='Number of tuning steps')
