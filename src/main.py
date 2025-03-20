@@ -12,6 +12,7 @@ import numpy as np
 from src.models.elections_facade import ElectionsFacade
 from src.evaluation.retrodictive import evaluate_retrodictive_accuracy
 from src.visualization.plots import save_plots, plot_model_components
+from src.config import DEFAULT_BASELINE_TIMESCALE, DEFAULT_ELECTION_TIMESCALES
 
 def print_forecast_summary(elections_model):
     """Print a summary of the forecast results"""
@@ -302,10 +303,10 @@ def main():
     # Model parameters
     parser.add_argument('--election-date', type=str, required=True,
                       help='Target election date (YYYY-MM-DD)')
-    parser.add_argument('--baseline-timescales', type=float, nargs='+', default= [365],
-                      help='Baseline timescales for Gaussian process')
-    parser.add_argument('--election-timescales', type=float, nargs='+', default=[60],
-                      help='Election timescales for Gaussian process')
+    parser.add_argument('--baseline-timescales', type=float, nargs='+', default=[DEFAULT_BASELINE_TIMESCALE],
+                      help='Baseline timescale for annual cycle (in days)')
+    parser.add_argument('--election-timescales', type=float, nargs='+', default=DEFAULT_ELECTION_TIMESCALES,
+                      help='Election timescales for pre-campaign (30 days) and official campaign (15 days)')
     
     # MCMC parameters
     parser.add_argument('--draws', type=int, default=2000,

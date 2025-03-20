@@ -47,8 +47,8 @@ class ElectionDataset:
     def __init__(
         self,
         election_date: str,
-        baseline_timescales=[365],
-        election_timescales=[60],
+        baseline_timescales: List[int],  # Annual cycle
+        election_timescales: List[int],  # Pre-campaign and official campaign periods
         test_cutoff: pd.Timedelta = None,
     ):
         self.election_date = election_date

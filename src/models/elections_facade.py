@@ -35,8 +35,8 @@ class ElectionsFacade:
     def __init__(
         self,
         election_date: str,
-        baseline_timescales: List[int] = [365],
-        election_timescales: List[int] = [60],
+        baseline_timescales: List[int] = [365],  # Annual cycle
+        election_timescales: List[int] = [30, 15],  # Pre-campaign and official campaign
         test_cutoff: pd.Timedelta = None,
         debug: bool = False,
     ):
