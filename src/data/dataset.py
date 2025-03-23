@@ -60,7 +60,8 @@ class ElectionDataset:
         self.election_dates = self.historical_election_dates.copy()
         
         # Check if our target election is in the future (not in historical dates)
-        if election_date not in self.historical_election_dates:
+        is_future_election = election_date not in self.historical_election_dates
+        if is_future_election:
             print(f"\nTarget election date {election_date} is in the future (not in historical data).")
             # We'll still use this date for forecasting, but not for training
         else:
@@ -77,11 +78,18 @@ class ElectionDataset:
         self.polls_mult = self.cast_as_multinomial(historical_polls)
         self.results_mult = self._load_results()
 
-        # Split data into train/test
-        (
-            self.polls_train,
-            self.polls_test,
-        ) = train_test_split(self.polls_mult, test_cutoff)
+        # For future elections, use all historical polls for training
+        if is_future_election:
+            print(f"\nUsing ALL historical polls for training (future election forecasting mode)")
+            self.polls_train = self.polls_mult.copy()
+            self.polls_test = pd.DataFrame(columns=self.polls_mult.columns)  # Empty test set
+        else:
+            # For historical elections, split data into train/test for validation
+            print(f"\nSplitting polls into train/test sets (historical election validation mode)")
+            (
+                self.polls_train,
+                self.polls_test,
+            ) = train_test_split(self.polls_mult, test_cutoff)
 
         # Process data
         _, self.unique_elections = self.polls_train["election_date"].factorize()
