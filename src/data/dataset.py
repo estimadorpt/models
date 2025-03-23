@@ -177,6 +177,15 @@ class ElectionDataset:
             
         election_datetime = [pd.to_datetime(date) for date in all_elections]
         row_date = row['date']
+        
+        # Get the last historical election date (most recent, which is at index 0)
+        last_historical_election = pd.to_datetime(self.historical_election_dates[0])
+        
+        # If the poll date is after the last historical election, assign the target date
+        if row_date > last_historical_election and self.election_date not in self.historical_election_dates:
+            return pd.to_datetime(self.election_date)
+            
+        # Otherwise, find the closest upcoming election date
         filtered_dates = [date for date in election_datetime if date > row_date]
         return min(filtered_dates, default=pd.NaT)
 
