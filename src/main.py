@@ -215,7 +215,7 @@ def cross_validate(args):
 def main():
     """Main entry point for the application"""
     # Parse command line arguments
-    parser = argparse.ArgumentParser(description="Election Forecast Model")
+    parser = argparse.ArgumentParser(description="Election Analysis Model")
     
     # Required arguments
     parser.add_argument('--mode', type=str, required=True, 

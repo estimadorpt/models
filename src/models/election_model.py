@@ -68,161 +68,84 @@ class ElectionModel:
 
         return pollster_id, countdown_id, election_id, COORDS
 
-    def _build_data_containers(self, polls: pd.DataFrame = None, is_forecast: bool = False):
+    def _build_data_containers(self, polls: pd.DataFrame = None):
         """Build the data containers for the PyMC model
         
         Parameters
         ----------
         polls : pd.DataFrame, optional
             Poll data to use. If None, use the training data.
-        is_forecast : bool, optional
-            Whether this is for forecasting. If True, handle election dimensions differently.
         """
         if polls is None:
             polls = self.dataset.polls_train
         is_here = polls[self.dataset.political_families].astype(bool).astype(int)
         
-        # Store is_forecast attribute to use in _build_coords
-        self.is_forecast = is_forecast
+        # Create non_competing_parties_results based on the actual historical election results
+        non_competing_parties_results = (
+            self.dataset.results_mult[self.dataset.political_families]
+            .astype(bool)
+            .astype(int)
+            .replace(to_replace=0, value=-10)
+            .replace(to_replace=1, value=0)
+            .to_numpy()
+        )
         
-        # For forecasting, we only need the target election
-        if is_forecast:
-            # Use only the target election for forecasting
-            target_election_date = self.dataset.election_date
-            target_idx = np.where(self.dataset.unique_elections == target_election_date)[0]
-            
-            # If target election is not in the training data, use the last election
-            if len(target_idx) == 0:
-                target_idx = [len(self.dataset.unique_elections) - 1]
-                
-            print(f"Using target election index: {target_idx[0]} for date: {target_election_date}")
-            
-            # Create single-election versions of election-related data
-            election_results = self.dataset.results_oos.iloc[[target_idx[0]]] if target_idx[0] < len(self.dataset.results_oos) else pd.DataFrame()
-            election_gdp = np.array([self.dataset.results_preds["gdp"].to_numpy()[target_idx[0]]])
-            government_status = self.dataset.government_status.values[[target_idx[0]]].astype(int)
-            
-            # Create non_competing_parties_results based on the actual historical election results
-            # Important: we need to match the dimensions expected by other arrays in the model
-            historical_non_competing = (
-                self.dataset.results_mult[self.dataset.political_families]
-                .astype(bool)
-                .astype(int)
-                .replace(to_replace=0, value=-10)
-                .replace(to_replace=1, value=0)
-                .to_numpy()
+        print(f"For inference: Using historical elections data with shape: {non_competing_parties_results.shape}")
+        
+        # Data containers for inference (historical elections)
+        data_containers = dict(
+            election_idx=pm.Data("election_idx", self.election_id, dims="observations"),
+            pollster_idx=pm.Data("pollster_idx", self.pollster_id, dims="observations"),
+            countdown_idx=pm.Data("countdown_idx", self.countdown_id, dims="observations"),
+            stdz_gdp=pm.Data("stdz_gdp", self.dataset.campaign_preds["gdp"].to_numpy(), dims="observations"),
+            election_gdp=pm.Data("election_gdp", self.dataset.results_preds["gdp"].to_numpy(), dims="elections"),
+            observed_N=pm.Data("observed_N", polls["sample_size"].to_numpy(), dims="observations"),
+            observed_polls=pm.Data(
+                "observed_polls",
+                polls[self.dataset.political_families].to_numpy(),
+                dims=("observations", "parties_complete"),
+            ),
+            results_N=pm.Data(
+                "results_N", 
+                self.dataset.results_mult["sample_size"].to_numpy(),  # All historical elections
+                dims="elections_observed"
+            ),
+            observed_results=pm.Data(
+                "observed_results",
+                self.dataset.results_mult[self.dataset.political_families].to_numpy(),  # All historical elections
+                dims=("elections_observed", "parties_complete"),
+            ),
+            non_competing_parties_results=pm.Data(
+                "non_competing_parties_results",
+                non_competing_parties_results,
+                dims=("elections", "parties_complete"),
+            ),
+            non_competing_polls_additive=pm.Data(
+                "non_competing_polls_additive",
+                is_here.replace(to_replace=0, value=-10).replace(to_replace=1, value=0).to_numpy(),
+                dims=("observations", "parties_complete"),
+            ),
+            non_competing_polls_multiplicative=pm.Data(
+                "non_competing_polls_multiplicative",
+                is_here.to_numpy(),
+                dims=("observations", "parties_complete"),
+            ),
+            government_status=pm.Data(
+                "government_status",
+                self.dataset.government_status.values.astype(int),
+                dims=("elections", "parties_complete"),
             )
-            
-            print(f"Created non_competing_parties_results with shape: {historical_non_competing.shape}")
-            
-            data_containers = dict(
-                election_idx=pm.Data("election_idx", np.zeros(len(polls), dtype=int), dims="observations"),
-                pollster_idx=pm.Data("pollster_idx", self.pollster_id, dims="observations"),
-                countdown_idx=pm.Data("countdown_idx", self.countdown_id, dims="observations"),
-                stdz_gdp=pm.Data("stdz_gdp", np.zeros(len(polls)), dims="observations"),  # Use zeros as placeholder
-                election_gdp=pm.Data("election_gdp", election_gdp, dims="elections"),
-                observed_N=pm.Data("observed_N", polls["sample_size"].to_numpy(), dims="observations"),
-                observed_polls=pm.Data(
-                    "observed_polls",
-                    polls[self.dataset.political_families].to_numpy(),
-                    dims=("observations", "parties_complete"),
-                ),
-                results_N=pm.Data("results_N", np.array([1000]), dims="elections_observed"),  # Placeholder
-                observed_results=pm.Data(
-                    "observed_results",
-                    np.zeros((1, len(self.dataset.political_families))),  # Placeholder
-                    dims=("elections_observed", "parties_complete"),
-                ),
-                non_competing_parties_results=pm.Data(
-                    "non_competing_parties_results",
-                    historical_non_competing,  # Use actual historical data
-                    dims=("elections", "parties_complete"),
-                ),
-                non_competing_polls_additive=pm.Data(
-                    "non_competing_polls_additive",
-                    is_here.replace(to_replace=0, value=-10).replace(to_replace=1, value=0).to_numpy(),
-                    dims=("observations", "parties_complete"),
-                ),
-                non_competing_polls_multiplicative=pm.Data(
-                    "non_competing_polls_multiplicative",
-                    is_here.to_numpy(),
-                    dims=("observations", "parties_complete"),
-                ),
-                government_status=pm.Data(
-                    "government_status",
-                    government_status,
-                    dims=("elections", "parties_complete"),
-                )
-            )
-        else:
-            # For inference, use only historical elections
-            non_competing_parties_results = (
-                self.dataset.results_mult[self.dataset.political_families]
-                .astype(bool)
-                .astype(int)
-                .replace(to_replace=0, value=-10)
-                .replace(to_replace=1, value=0)
-                .to_numpy()
-            )
-            
-            print(f"For inference: Using historical elections data with shape: {non_competing_parties_results.shape}")
-            
-            # Original implementation for training
-            data_containers = dict(
-                election_idx=pm.Data("election_idx", self.election_id, dims="observations"),
-                pollster_idx=pm.Data("pollster_idx", self.pollster_id, dims="observations"),
-                countdown_idx=pm.Data("countdown_idx", self.countdown_id, dims="observations"),
-                stdz_gdp=pm.Data("stdz_gdp", self.dataset.campaign_preds["gdp"].to_numpy(), dims="observations"),
-                election_gdp=pm.Data("election_gdp", self.dataset.results_preds["gdp"].to_numpy(), dims="elections"),
-                observed_N=pm.Data("observed_N", polls["sample_size"].to_numpy(), dims="observations"),
-                observed_polls=pm.Data(
-                    "observed_polls",
-                    polls[self.dataset.political_families].to_numpy(),
-                    dims=("observations", "parties_complete"),
-                ),
-                results_N=pm.Data(
-                    "results_N", 
-                    self.dataset.results_mult["sample_size"].to_numpy(),  # All historical elections
-                    dims="elections_observed"
-                ),
-                observed_results=pm.Data(
-                    "observed_results",
-                    self.dataset.results_mult[self.dataset.political_families].to_numpy(),  # All historical elections
-                    dims=("elections_observed", "parties_complete"),
-                ),
-                non_competing_parties_results=pm.Data(
-                    "non_competing_parties_results",
-                    non_competing_parties_results,
-                    dims=("elections", "parties_complete"),
-                ),
-                non_competing_polls_additive=pm.Data(
-                    "non_competing_polls_additive",
-                    is_here.replace(to_replace=0, value=-10).replace(to_replace=1, value=0).to_numpy(),
-                    dims=("observations", "parties_complete"),
-                ),
-                non_competing_polls_multiplicative=pm.Data(
-                    "non_competing_polls_multiplicative",
-                    is_here.to_numpy(),
-                    dims=("observations", "parties_complete"),
-                ),
-                government_status=pm.Data(
-                    "government_status",
-                    self.dataset.government_status.values.astype(int),
-                    dims=("elections", "parties_complete"),
-                )
-            )
+        )
 
         return data_containers
 
-    def build_model(self, polls: pd.DataFrame = None, is_forecast: bool = False) -> pm.Model:
+    def build_model(self, polls: pd.DataFrame = None) -> pm.Model:
         """Build the PyMC model
         
         Parameters
         ----------
         polls : pd.DataFrame, optional
             Poll data to use. If None, use the training data.
-        is_forecast : bool, optional
-            Whether this is for forecasting. If True, handle election dimensions differently.
         """
         (
             self.pollster_id,
@@ -248,7 +171,7 @@ class ElectionModel:
             print(f"WARNING: Mismatch between results_oos ({num_oos}) and elections_observed ({num_observed})")
             
         with pm.Model(coords=self.coords) as model:
-            data_containers = self._build_data_containers(polls, is_forecast=is_forecast)
+            data_containers = self._build_data_containers(polls)
 
             # --------------------------------------------------------
             #                   BASELINE COMPONENTS
@@ -510,60 +433,59 @@ class ElectionModel:
                 "N_approve",
                 a=concentration_polls * noisy_popularity,
                 n=data_containers["observed_N"],
-                observed=None if is_forecast else data_containers["observed_polls"],
+                observed=data_containers["observed_polls"],
                 dims=("observations", "parties_complete"),
             )
 
-            if not is_forecast:
-                # --------------------------------------------------------
-                #                    ELECTION RESULTS
-                # --------------------------------------------------------
+            # --------------------------------------------------------
+            #                    ELECTION RESULTS
+            # --------------------------------------------------------
 
-                # Compute latent_mu_t0
-                latent_mu_t0 = pm.Deterministic(
-                    "latent_mu_t0",
-                    (
-                        party_baseline[None, :]
-                        + election_party_baseline
-                        + party_time_effect_weighted[0]
-                        + election_party_time_effect_weighted[0].transpose((1, 0))
-                        + data_containers['non_competing_parties_results']
-                    ),
-                    dims=("elections", "parties_complete")
-                )
+            # Compute latent_mu_t0
+            latent_mu_t0 = pm.Deterministic(
+                "latent_mu_t0",
+                (
+                    party_baseline[None, :]
+                    + election_party_baseline
+                    + party_time_effect_weighted[0]
+                    + election_party_time_effect_weighted[0].transpose((1, 0))
+                    + data_containers['non_competing_parties_results']
+                ),
+                dims=("elections", "parties_complete")
+            )
 
-                # Apply softmax over parties for each observation
-                latent_pop_t0 = pm.Deterministic(
-                    "latent_pop_t0",
-                    pt.special.softmax(latent_mu_t0, axis=1),
-                    dims=("elections", "parties_complete"),
-                )
+            # Apply softmax over parties for each observation
+            latent_pop_t0 = pm.Deterministic(
+                "latent_pop_t0",
+                pt.special.softmax(latent_mu_t0, axis=1),
+                dims=("elections", "parties_complete"),
+            )
 
-                # Parameterize log-normal to match desired mean and standard deviation
-                desired_mean_results = 2000  # Your intuitive "sample size" interpretation
-                desired_sd_results = 200     # Uncertainty around this mean
-                
-                # Parameterize log-normal to match desired mean and standard deviation
-                log_mean_results = np.log(desired_mean_results) - 0.5 * np.log(1 + (desired_sd_results/desired_mean_results)**2)
-                log_sd_results = np.sqrt(np.log(1 + (desired_sd_results/desired_mean_results)**2))
-                
-                # Define the log-normal prior
-                log_concentration_results = pm.Normal("log_concentration_results", 
-                                                    mu=log_mean_results, 
-                                                    sigma=log_sd_results)
-                                                    
-                # Transform back to natural scale
-                concentration_results = pm.Deterministic("concentration_results", 
-                                                       pt.exp(log_concentration_results))
+            # Parameterize log-normal to match desired mean and standard deviation
+            desired_mean_results = 2000  # Your intuitive "sample size" interpretation
+            desired_sd_results = 200     # Uncertainty around this mean
+            
+            # Parameterize log-normal to match desired mean and standard deviation
+            log_mean_results = np.log(desired_mean_results) - 0.5 * np.log(1 + (desired_sd_results/desired_mean_results)**2)
+            log_sd_results = np.sqrt(np.log(1 + (desired_sd_results/desired_mean_results)**2))
+            
+            # Define the log-normal prior
+            log_concentration_results = pm.Normal("log_concentration_results", 
+                                                mu=log_mean_results, 
+                                                sigma=log_sd_results)
+                                                
+            # Transform back to natural scale
+            concentration_results = pm.Deterministic("concentration_results", 
+                                                   pt.exp(log_concentration_results))
 
-                # DirichletMultinomial for the observed results
-                R = pm.DirichletMultinomial(
-                    "R",
-                    n=data_containers["results_N"],
-                    a=concentration_results * latent_pop_t0,  # Use all historical elections
-                    observed=data_containers["observed_results"],
-                    dims=("elections_observed", "parties_complete"),
-                )
+            # DirichletMultinomial for the observed results
+            R = pm.DirichletMultinomial(
+                "R",
+                n=data_containers["results_N"],
+                a=concentration_results * latent_pop_t0,  # Use all historical elections
+                observed=data_containers["observed_results"],
+                dims=("elections_observed", "parties_complete"),
+            )
 
         return model
 

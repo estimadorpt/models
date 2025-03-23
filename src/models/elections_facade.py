@@ -471,7 +471,7 @@ class ElectionsFacade:
     def plot_predictive_accuracy(self):
         """
         Plot the predictive accuracy of the model against test data.
-        Only available for retrodictive forecasts, not for future elections.
+        Only available for retrodictive analysis of past elections.
         
         Returns:
         --------
@@ -482,7 +482,7 @@ class ElectionsFacade:
         import pandas as pd
         import numpy as np
         
-        # Check if we're forecasting a future election
+        # Check if the target date is valid
         target_date = pd.to_datetime(self.dataset.election_date)
         current_date = pd.Timestamp.now()
         
@@ -490,7 +490,7 @@ class ElectionsFacade:
             # Create a figure with an informative message
             fig, ax = plt.subplots(figsize=(10, 6))
             ax.text(0.5, 0.5, 
-                    f"Predictive accuracy cannot be calculated for future elections.\n"
+                    f"Predictive accuracy cannot be calculated for future dates.\n"
                     f"The target election date ({self.dataset.election_date}) is in the future.",
                     ha='center', va='center', fontsize=14, transform=ax.transAxes)
             ax.set_title("Predictive Accuracy Unavailable")
@@ -507,7 +507,7 @@ class ElectionsFacade:
         
         # Ensure we have a prediction
         if self.prediction is None:
-            raise ValueError("Must generate forecast before plotting predictive accuracy")
+            raise ValueError("Must generate prediction before plotting predictive accuracy")
         
         if not hasattr(self.dataset, "polls_test") or self.dataset.polls_test is None or len(self.dataset.polls_test) == 0:
             raise ValueError("No test data available for predictive accuracy plot")
@@ -588,12 +588,12 @@ class ElectionsFacade:
             else:
                 post_pred_dates = post_pred.observations
             
-            # Find the closest forecast date for each test date
+            # Find the closest prediction date for each test date
             matching_indices_post = []
             matching_indices_test = []
             
             for i, test_date in enumerate(test_dates):
-                # Find the closest date in the forecast
+                # Find the closest date in the prediction
                 days_diff = abs(post_pred_dates - test_date).total_seconds() / (24 * 60 * 60)
                 closest_idx = np.argmin(days_diff)
                 
@@ -607,7 +607,7 @@ class ElectionsFacade:
                 # Create a figure with an informative message instead of raising an error
                 ax.text(0.5, 0.5, 
                         "No matching dates found between test data and posterior predictive.\n"
-                        "This may occur during cross-validation when test poll dates don't align with forecast dates.",
+                        "This may occur during cross-validation when test poll dates don't align with prediction dates.",
                         ha='center', va='center', fontsize=12, transform=ax.transAxes,
                         wrap=True)
                 ax.set_title("Predictive Accuracy Unavailable")
@@ -618,7 +618,7 @@ class ElectionsFacade:
                 plt.tight_layout()
                 return fig
                 
-            print(f"Found {len(matching_indices_test)} matching dates between test data and forecast")
+            print(f"Found {len(matching_indices_test)} matching dates between test data and prediction")
             
             # Extract values for matching dates
             if isinstance(self.prediction, az.InferenceData):
@@ -878,7 +878,7 @@ class ElectionsFacade:
         This is helpful for debugging issues with predictions and plots.
         """
         if not hasattr(self, "prediction") or self.prediction is None:
-            print("No prediction available. Generate a forecast first.")
+            print("No prediction available. Generate a prediction first.")
             return
         
         import numpy as np
