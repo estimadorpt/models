@@ -784,7 +784,6 @@ def save_plots(elections_model, output_dir):
     
     plot_functions = [
         ("retrodictive_check", lambda: elections_model.plot_retrodictive_check(), "latent_popularity_evolution_with_observed_and_results.png"),
-        ("forecast", lambda: elections_model.plot_forecast(), None),  # Special handling for forecast plots
         ("party_correlations", lambda: elections_model.plot_party_correlations(), "party_correlations.png"),
         ("predictive_accuracy", lambda: elections_model.plot_predictive_accuracy(), "polling_accuracy.png")
     ]
@@ -792,20 +791,8 @@ def save_plots(elections_model, output_dir):
     for name, plot_func, filename in plot_functions:
         try:
             result = plot_func()
-            
-            # Special handling for forecast plots which can return a list
-            if name == "forecast":
-                if isinstance(result, list):
-                    for i, fig in enumerate(result):
-                        fig.savefig(os.path.join(plots_dir, f"forecast_plot_{i}.png"))
-                        plt.close(fig)
-                else:
-                    result.savefig(os.path.join(plots_dir, "latent_popularity_evolution_last_year.png"))
-                    plt.close(result)
-            else:
-                result.savefig(os.path.join(plots_dir, filename))
-                plt.close(result)
-                
+            result.savefig(os.path.join(plots_dir, filename))
+            plt.close(result)
         except Exception as e:
             print(f"Error saving {name} plot: {e}")
     

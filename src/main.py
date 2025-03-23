@@ -14,275 +14,203 @@ from src.evaluation.retrodictive import evaluate_retrodictive_accuracy
 from src.visualization.plots import save_plots, plot_model_components
 from src.config import DEFAULT_BASELINE_TIMESCALE, DEFAULT_ELECTION_TIMESCALES
 
-def print_forecast_summary(elections_model):
-    """Print a summary of the forecast results"""
-    try:
-        # Extract the forecast data for the election date
-        if hasattr(elections_model, "prediction") and elections_model.prediction is not None:
-            latent_pop = elections_model.prediction.get('latent_popularity')
-            if latent_pop is not None:
-                # Get forecast for the last date (election day)
-                election_day_forecast = latent_pop[:, :, -1, :]
-                
-                # Calculate mean and credible intervals
-                mean_forecast = np.mean(election_day_forecast, axis=(0, 1))
-                lower_bound = np.percentile(election_day_forecast, 2.5, axis=(0, 1))
-                upper_bound = np.percentile(election_day_forecast, 97.5, axis=(0, 1))
-                
-                # Get party names
-                parties = elections_model.prediction_coords['parties_complete']
-                
-                # Print forecast summary
-                print("\nELECTION FORECAST SUMMARY FOR", elections_model.dataset.election_date)
-                print("="*50)
-                for i, party in enumerate(parties):
-                    print(f"{party:15s}: {mean_forecast[i]:.1%} [{lower_bound[i]:.1%} - {upper_bound[i]:.1%}]")
-                print("="*50)
-    except Exception as e:
-        print(f"Error printing forecast summary: {e}")
-
-
 def fit_model(args):
-    """Fit a model with the specified parameters"""
-    # Create output directory if it doesn't exist
-    if not os.path.exists(args.output_dir):
-        os.makedirs(args.output_dir)
-    
-    # Determine if we're doing a cutoff for retrodictive testing
-    test_cutoff = None
-    if args.cutoff_date:
-        cutoff_date = pd.to_datetime(args.cutoff_date)
-        target_date = pd.to_datetime(args.election_date)
-        test_cutoff = target_date - cutoff_date
-
-    # Create an instance of the elections model
-    elections_model = ElectionsFacade(
-        election_date=args.election_date,
-        baseline_timescales=args.baseline_timescales,
-        election_timescales=args.election_timescales,
-        test_cutoff=test_cutoff,
-        debug=args.debug,
-    )
-    
-    # Store the output directory in the ElectionsFacade instance
-    elections_model.output_dir = args.output_dir
-    
-    # Run inference
+    """Fit a new model with the specified parameters"""
     try:
         if args.debug:
-            print(f"Running inference with {args.draws} draws and {args.tune} tuning steps")
+            print(f"Fitting model for election date {args.election_date}")
+            print(f"Using baseline timescales: {args.baseline_timescales}")
+            print(f"Using election timescales: {args.election_timescales}")
         
-        elections_model.run_inference(draws=args.draws, tune=args.tune)
+        # Create the model output directory with timestamp
+        timestamp = pd.Timestamp.now().strftime("%Y-%m-%d_%H%M%S")
+        output_dir = os.path.join(args.output_dir, timestamp)
+        os.makedirs(output_dir, exist_ok=True)
         
-        # Analyze trace quality after inference
-        if args.debug:
-            print("\n=== TRACE QUALITY ANALYSIS ===")
-            elections_model._analyze_trace_quality(elections_model.trace)
-        
-        # Save inference results to output directory
-        print(f"Saving model to {args.output_dir}")
-        elections_model.save_inference_results(directory=args.output_dir)
-        
-        if args.notify:
-            requests.post("https://ntfy.sh/bc-estimador",
-                data="Finished sampling".encode(encoding='utf-8'))
-    except Exception as e:
-        print(f"Error running inference: {e}")
-        if args.notify:
-            requests.post("https://ntfy.sh/bc-estimador",
-                data=f"Error running inference: {e}".encode(encoding='utf-8'))
-        return None
-    
-    return elections_model
-
-
-def load_model(args):
-    """Load a previously fitted model"""
-    # Create an instance of the elections model
-    elections_model = ElectionsFacade(
-        election_date=args.election_date,
-        baseline_timescales=args.baseline_timescales,
-        election_timescales=args.election_timescales,
-        debug=args.debug,
-    )
-    
-    # Store the output directory in the ElectionsFacade instance
-    elections_model.output_dir = args.output_dir
-    
-    try:
-        # If a specific directory is provided, load from there
-        if args.load_dir:
-            load_path = args.load_dir
-        else:
-            load_path = args.output_dir
-        
-        # Use the load_inference_results method which will also call _analyze_trace_quality
-        if args.debug:
-            print(f"Loading inference results from {load_path}")
-        elections_model.load_inference_results(directory=load_path)
-        
-        # Verify that trace was loaded properly
-        if elections_model.trace is None:
-            raise ValueError(f"Failed to load trace. Make sure the directory contains a valid trace.zarr file.")
-        
-        # Explicitly build the model - this is needed for generating forecasts after loading
-        elections_model.model.model = elections_model.model.build_model()
-        if args.debug:
-            print("Model successfully built after loading!")
-        
-        if args.notify:
-            requests.post("https://ntfy.sh/bc-estimador",
-                data="Loaded saved inference results".encode(encoding='utf-8'))
-        
-        return elections_model
-    except Exception as e:
-        raise ValueError(f"Failed to load model: {e}")
-
-
-def generate_forecast(elections_model, args):
-    """Generate forecasts using the fitted model"""
-    try:
-        if args.debug:
-            print(f"Generating forecast...")
-        start_time = time.time()
-        
-        # Make sure the model is built properly
-        if not hasattr(elections_model.model, 'model') or elections_model.model.model is None:
-            print("Model not built yet, building model now...")
-            elections_model.model.model = elections_model.model.build_model()
-        
-        # Generate forecast for the election date
-        elections_model.generate_forecast(election_date=args.election_date)
-        
-        if args.debug:
-            end_time = time.time()
-            print(f"Forecast generation took {end_time - start_time:.2f} seconds")
-        
-        if args.notify:
-            requests.post("https://ntfy.sh/bc-estimador",
-                data="Generated forecast".encode(encoding='utf-8'))
-        
-        # Print forecast summary
-        print_forecast_summary(elections_model)
-        
-    except Exception as e:
-        print(f"Error generating forecast: {e}")
-        if args.debug:
-            traceback.print_exc()
-        if args.notify:
-            requests.post("https://ntfy.sh/bc-estimador",
-                data=f"Error generating forecast: {e}".encode(encoding='utf-8'))
-
-
-def cross_validate(args):
-    """
-    Perform cross-validation by fitting models for each past election,
-    using only data available before that election
-    """
-    if args.debug:
-        print("SAVE_MARKER: Entering cross_validate function")
-        
-    # Create output directory for cross-validation results
-    cv_dir = os.path.join(args.output_dir, "cross_validation")
-    if not os.path.exists(cv_dir):
-        os.makedirs(cv_dir)
-    
-    # Get list of elections to validate
-    # Create a dummy model to access the historical_election_dates
-    temp_model = ElectionsFacade(
-        election_date=args.election_date,
-        baseline_timescales=args.baseline_timescales,
-        election_timescales=args.election_timescales
-    )
-    
-    # Skip the most recent election from cross-validation
-    elections_to_validate = temp_model.dataset.historical_election_dates[1:]
-    print(f"\nPerforming cross-validation for {len(elections_to_validate)} elections: {elections_to_validate}")
-    
-    # Store results for each election
-    cv_results = []
-    
-    # For each election, fit a model using only data before that election
-    for election_date in elections_to_validate:
-        print(f"\n{'='*50}")
-        print(f"Cross-validating for election: {election_date}")
-        print(f"{'='*50}")
-        
-        # Create an election-specific output directory
-        election_dir = os.path.join(cv_dir, election_date)
-        if not os.path.exists(election_dir):
-            os.makedirs(election_dir)
-        
-        # Set the args for this specific election
-        this_args = argparse.Namespace(
-            mode="fit",  # Explicitly set mode to fit
-            election_date=election_date,
-            cutoff_date=None,  # Don't apply extra cutoff
+        # Initialize the elections model
+        elections_model = ElectionsFacade(
+            election_date=args.election_date,
             baseline_timescales=args.baseline_timescales,
             election_timescales=args.election_timescales,
-            output_dir=election_dir,
-            debug=args.debug,
-            draws=args.draws, 
-            tune=args.tune,
-            notify=False,
-            fast=True  # Skip some expensive operations
+            test_cutoff=pd.Timedelta(args.cutoff_date) if args.cutoff_date else None,
+            debug=args.debug
         )
         
-        if args.debug:
-            print("SAVE_MARKER: cross_validate - before calling fit_model")
+        # Start time measurement
+        start_time = time.time()
         
-        # Fit model
-        elections_model = fit_model(this_args)
-        if elections_model is None:
-            print(f"Failed to fit model for election {election_date}, skipping")
-            continue
+        # Run inference
+        elections_model.run_inference(
+            draws=args.draws,
+            tune=args.tune,
+            target_accept=0.9
+        )
         
-        if args.debug:
-            print("SAVE_MARKER: cross_validate - before calling generate_forecast")
+        # Calculate elapsed time
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        print(f"Model fitting completed in {elapsed_time:.2f} seconds")
         
-        # Generate forecast
-        generate_forecast(elections_model, this_args)
+        # Send notification if requested
+        if args.notify:
+            requests.post("https://ntfy.sh/bc-estimador",
+                data=f"Model fit completed in {elapsed_time:.2f} seconds".encode(encoding='utf-8'))
         
-        # Evaluate accuracy against actual results
+        # Save the trace and model
+        elections_model.save_inference_results(output_dir)
+        
+        # Create a symbolic link to the latest run
+        latest_dir = os.path.join(os.path.dirname(args.output_dir), "latest")
+        if os.path.exists(latest_dir):
+            if os.path.islink(latest_dir):
+                os.unlink(latest_dir)
+            else:
+                import shutil
+                shutil.rmtree(latest_dir)
+        
         try:
-            accuracy_metrics = evaluate_retrodictive_accuracy(elections_model, election_date)
-            cv_results.append({
-                'election_date': election_date,
-                **accuracy_metrics
-            })
-        except Exception as e:
-            print(f"Error evaluating accuracy for election {election_date}: {e}")
+            os.symlink(output_dir, latest_dir, target_is_directory=True)
+        except OSError as e:
+            print(f"Warning: Could not create symbolic link: {e}")
+        
+        return elections_model
+        
+    except Exception as e:
+        print(f"Error fitting model: {e}")
+        if args.debug:
+            traceback.print_exc()
+        if args.notify:
+            requests.post("https://ntfy.sh/bc-estimador",
+                data=f"Error fitting model: {e}".encode(encoding='utf-8'))
+        return None
+
+def load_model(args):
+    """Load a saved model"""
+    try:
+        if args.debug:
+            print(f"Loading model from {args.load_dir}")
+        
+        # Initialize the elections model with the same parameters
+        elections_model = ElectionsFacade(
+            election_date=args.election_date,
+            baseline_timescales=args.baseline_timescales,
+            election_timescales=args.election_timescales,
+            debug=args.debug
+        )
+        
+        # Load the saved trace
+        elections_model.load_inference_results(args.load_dir)
+        
+        # Build the model
+        elections_model.model.model = elections_model.model.build_model()
+        
+        return elections_model
+        
+    except Exception as e:
+        print(f"Error loading model: {e}")
+        if args.debug:
+            traceback.print_exc()
+        if args.notify:
+            requests.post("https://ntfy.sh/bc-estimador",
+                data=f"Error loading model: {e}".encode(encoding='utf-8'))
+        return None
+
+def cross_validate(args):
+    """Perform cross-validation on historical elections"""
+    try:
+        if args.debug:
+            print("Starting cross-validation...")
+        
+        # Create cross-validation directory
+        cv_dir = os.path.join(args.output_dir, "cross_validation")
+        os.makedirs(cv_dir, exist_ok=True)
+        
+        # Get all historical elections from the dataset
+        from src.data.dataset import ElectionDataset
+        all_elections = ElectionDataset.historical_election_dates
+        if args.debug:
+            print(f"Found {len(all_elections)} historical elections: {all_elections}")
+        
+        # Store results for each election
+        cv_results = []
+        
+        # Process each election
+        for election_date in all_elections:
+            print(f"\nCross-validating election: {election_date}")
+            
+            # Create directory for this election's results
+            election_dir = os.path.join(cv_dir, election_date.replace("-", ""))
+            os.makedirs(election_dir, exist_ok=True)
+            
+            # Initialize model for this election
+            elections_model = ElectionsFacade(
+                election_date=election_date,
+                baseline_timescales=args.baseline_timescales,
+                election_timescales=args.election_timescales,
+                debug=args.debug
+            )
+            
+            # Fit the model
+            try:
+                elections_model.run_inference(
+                    draws=args.draws,
+                    tune=args.tune,
+                    target_accept=0.9
+                )
+                
+                # Save the inference results
+                elections_model.save_inference_results(election_dir)
+                
+                # Evaluate accuracy
+                accuracy_metrics = evaluate_retrodictive_accuracy(elections_model)
+                
+                # Store results
+                cv_results.append({
+                    'election_date': election_date,
+                    **accuracy_metrics
+                })
+            except Exception as e:
+                print(f"Error evaluating accuracy for election {election_date}: {e}")
+                import traceback
+                traceback.print_exc()
+                
+                # Add a placeholder result with NaN values
+                cv_results.append({
+                    'election_date': election_date,
+                    'mae': np.nan,
+                    'rmse': np.nan,
+                    'mape': np.nan,
+                    'error': str(e)
+                })
+                
+            # Save plots
+            if not args.fast:
+                save_plots(elections_model, election_dir)
+        
+        # Summarize cross-validation results
+        if cv_results:
+            cv_df = pd.DataFrame(cv_results)
+            print("\nCROSS-VALIDATION SUMMARY")
+            print("="*50)
+            print(cv_df)
+            print("="*50)
+            print(f"Mean absolute error: {cv_df['mae'].mean():.3f}")
+            print(f"Root mean squared error: {cv_df['rmse'].mean():.3f}")
+            
+            # Save results to CSV
+            cv_df.to_csv(os.path.join(cv_dir, "cross_validation_results.csv"), index=False)
+        
+        return cv_results
+    
+    except Exception as e:
+        print(f"Error in cross-validation: {e}")
+        if args.debug:
             import traceback
             traceback.print_exc()
-            
-            # Add a placeholder result with NaN values
-            cv_results.append({
-                'election_date': election_date,
-                'mae': np.nan,
-                'rmse': np.nan,
-                'mape': np.nan,
-                'error': str(e)
-            })
-            
-        # Save plots
-        if not args.fast:
-            save_plots(elections_model, election_dir)
-    
-    # Summarize cross-validation results
-    if cv_results:
-        cv_df = pd.DataFrame(cv_results)
-        print("\nCROSS-VALIDATION SUMMARY")
-        print("="*50)
-        print(cv_df)
-        print("="*50)
-        print(f"Mean absolute error: {cv_df['mae'].mean():.3f}")
-        print(f"Root mean squared error: {cv_df['rmse'].mean():.3f}")
-        
-        # Save results to CSV
-        cv_df.to_csv(os.path.join(cv_dir, "cross_validation_results.csv"), index=False)
-    
-    return cv_results
-
+        if args.notify:
+            requests.post("https://ntfy.sh/bc-estimador",
+                data=f"Error in cross-validation: {e}".encode(encoding='utf-8'))
+        return []
 
 def main():
     """Main entry point for the application"""
@@ -336,9 +264,6 @@ def main():
         # Fit the model with the specified parameters
         elections_model = fit_model(args)
         if elections_model is not None:
-            # Generate forecast
-            generate_forecast(elections_model, args)
-            
             # Save plots (skip in fast mode)
             if not args.fast:
                 save_plots(elections_model, args.output_dir)
@@ -352,9 +277,6 @@ def main():
             
         # Load the model from saved results
         elections_model = load_model(args)
-        
-        # Generate forecast
-        generate_forecast(elections_model, args)
         
         # Save plots (skip in fast mode)
         if not args.fast:

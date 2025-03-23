@@ -304,72 +304,9 @@ class ElectionsFacade:
                     exp_std = np.std(exp_values)
                     print(f"exp({param}): mean={exp_mean:.2f}, std={exp_std:.2f}")
     
-    def generate_forecast(self, election_date: str = None):
-        """
-        Generate a forecast for the given election date.
-        
-        Parameters:
-        -----------
-        election_date : str
-            The election date to forecast, in format YYYY-MM-DD
-            
-        Returns:
-        --------
-        tuple
-            Raw forecast data and a summary DataFrame
-        """
-        if self.trace is None:
-            raise ValueError("No trace available for forecasting. Run inference first.")
-        
-        # Use specified election date or the target from the model
-        target_date = pd.to_datetime(election_date or self.dataset.election_date)
-        
-        # Start time measurement
-        start_time = time.time()
-        
-        try:
-            # First ensure the model is built in the ElectionModel
-            if hasattr(self.model, 'model') and self.model.model is not None:
-                # Model is already built, use it directly
-                print("Using existing model for forecast...")
-            else:
-                # Build the model
-                print("Building model for forecast...")
-                self.model.model = self.model.build_model()
-            
-            # Use the forecasting method from ElectionModel directly
-            print("Calling forecast_election...")
-            raw_ppc, coords, dims = self.model.forecast_election(self.trace)
-            
-            # Store raw prediction data
-            self.prediction = raw_ppc
-            self.prediction_coords = coords
-            self.prediction_dims = dims
-            
-            # Calculate elapsed time
-            end_time = time.time()
-            elapsed_time = end_time - start_time
-            print(f"Forecast generated successfully in {elapsed_time:.2f} seconds")
-            
-            # Print dimensions of prediction data if in debug mode
-            if self.debug:
-                print("\nPrediction dimensions:")
-                for var_name, var_data in raw_ppc.items():
-                    print(f"  {var_name}: shape = {var_data.shape}")
-                print(f"Coordinates: {coords}")
-                
-            return raw_ppc, coords, dims
-            
-        except Exception as e:
-            print(f"Error generating forecast: {e}")
-            if self.debug:
-                import traceback
-                traceback.print_exc()
-            raise
-    
     def _check_trace_quality(self):
         """
-        Check if the trace quality is good enough for forecasting.
+        Check if the trace quality is good enough for analysis.
         
         Returns:
         --------
@@ -443,59 +380,6 @@ class ElectionsFacade:
             polls_train=self.dataset.polls_train,
             group=group
         )
-    
-    def plot_forecast(self):
-        """
-        Plot the forecast for the target election, showing all parties.
-        
-        Returns:
-        --------
-        list
-            A list of figures: the first is the overall forecast, the rest are party-specific
-        """
-        from src.visualization.plots import plot_latent_trajectories, plot_party_trajectory
-        
-        if not hasattr(self, "trace") or self.trace is None:
-            raise ValueError("Must run inference before plotting forecast")
-        
-        if not hasattr(self, "prediction") or self.prediction is None:
-            raise ValueError("Must generate forecast before plotting")
-        
-        try:
-            # Use historical_polls from the dataset.polls_train directly
-            historical_polls = self.dataset.polls_train
-            
-            # Create the overall forecast plot
-            fig_overall = plot_latent_trajectories(
-                self.prediction,
-                coords=self.prediction_coords,
-                dims=self.prediction_dims,
-                polls_train=historical_polls,
-                election_date=self.dataset.election_date
-            )
-            
-            # Create individual party plots
-            figs_parties = []
-            parties = self.prediction_coords['parties_complete']
-            for party in parties:
-                fig_party = plot_party_trajectory(
-                    self.prediction,
-                    coords=self.prediction_coords,
-                    dims=self.prediction_dims,
-                    party=party,
-                    polls_train=historical_polls,
-                    election_date=self.dataset.election_date
-                )
-                figs_parties.append(fig_party)
-            
-            # Return all figures
-            return [fig_overall] + figs_parties
-            
-        except Exception as e:
-            print(f"Error creating forecast plots: {e}")
-            import traceback
-            traceback.print_exc()
-            raise
     
     def plot_house_effects(self, pollster: str):
         """
