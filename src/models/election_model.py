@@ -176,6 +176,14 @@ class ElectionModel:
         if num_oos != num_observed:
             print(f"WARNING: Mismatch between results_oos ({num_oos}) and elections_observed ({num_observed})")
             
+        # Ensure baseline_lengthscale is a list
+        if not isinstance(self.gp_config["baseline_lengthscale"], list):
+            self.gp_config["baseline_lengthscale"] = [self.gp_config["baseline_lengthscale"]]
+            
+        # Ensure election_lengthscale is a list
+        if not isinstance(self.gp_config["election_lengthscale"], list):
+            self.gp_config["election_lengthscale"] = [self.gp_config["election_lengthscale"]]
+
         with pm.Model(coords=self.coords) as model:
             data_containers = self._build_data_containers(polls)
 
@@ -345,19 +353,19 @@ class ElectionModel:
 
             poll_bias = pm.ZeroSumNormal(
                 "poll_bias",
-                sigma=0.25,
+                sigma=0.20,
                 dims="parties_complete",
             )
 
             house_effects = pm.ZeroSumNormal(
                 "house_effects",
-                sigma=0.25,
+                sigma=0.15,
                 dims=("pollsters", "parties_complete"),
             )
 
             house_election_effects_sd = pm.HalfNormal(
                 "house_election_effects_sd",
-                sigma=0.15,  # Increased from 0.1
+                sigma=0.1,  # Increased from 0.1
                 dims=("pollsters", "parties_complete"),
             )
             house_election_effects_raw = pm.ZeroSumNormal(
@@ -418,8 +426,8 @@ class ElectionModel:
 
             # The concentration parameter of a Dirichlet-Multinomial distribution
             # Parameterize log-normal to match desired mean and standard deviation
-            desired_mean_polls = 250  # Your intuitive "sample size" interpretation
-            desired_sd_polls = 50     # Uncertainty around this mean
+            desired_mean_polls = 1000  # Your intuitive "sample size" interpretation
+            desired_sd_polls = 100     # Uncertainty around this mean
             
             # Parameterize log-normal to match desired mean and standard deviation
             log_mean_polls = np.log(desired_mean_polls) - 0.5 * np.log(1 + (desired_sd_polls/desired_mean_polls)**2)
@@ -534,7 +542,7 @@ class ElectionModel:
         sampler_kwargs.setdefault('max_treedepth', 15)  # Increased from default 10
         
         # Recommend sampling parameters for better performance
-        sampler_kwargs.setdefault('target_accept', 0.9)  # Maintains the already good target
+        sampler_kwargs.setdefault('target_accept', 0.95)  # Maintains the already good target
         
         with model:
             prior_checks = pm.sample_prior_predictive()

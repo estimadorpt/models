@@ -21,19 +21,30 @@ def fit_model(args):
     try:
         if args.debug:
             print(f"Fitting model for election date {args.election_date}")
-            print(f"Using baseline timescales: {args.baseline_timescales}")
-            print(f"Using election timescales: {args.election_timescales}")
+            print(f"Using baseline timescales: {args.baseline_timescale}")
+            print(f"Using election timescales: {args.election_timescale}")
         
         # Create the model output directory with timestamp
         timestamp = pd.Timestamp.now().strftime("%Y-%m-%d_%H%M%S")
-        output_dir = os.path.join(args.output_dir, timestamp)
+        
+        # Create output directory with timestamp as a subdirectory
+        base_output_dir = args.output_dir.rstrip('/')
+        if base_output_dir.endswith('/latest'):
+            base_output_dir = os.path.dirname(base_output_dir)
+            
+        output_dir = os.path.join(base_output_dir, timestamp)
+        
+        # Make sure all parent directories exist
         os.makedirs(output_dir, exist_ok=True)
+        
+        if args.debug:
+            print(f"Using output directory: {output_dir}")
         
         # Initialize the elections model
         elections_model = ElectionsFacade(
             election_date=args.election_date,
-            baseline_timescales=args.baseline_timescales,
-            election_timescales=args.election_timescales,
+            baseline_timescales=args.baseline_timescale,
+            election_timescales=args.election_timescale,
             test_cutoff=pd.Timedelta(args.cutoff_date) if args.cutoff_date else None,
             debug=args.debug
         )
@@ -62,7 +73,7 @@ def fit_model(args):
         elections_model.save_inference_results(output_dir)
         
         # Create a symbolic link to the latest run
-        latest_dir = os.path.join(os.path.dirname(args.output_dir), "latest")
+        latest_dir = os.path.join(base_output_dir, "latest")
         if os.path.exists(latest_dir):
             if os.path.islink(latest_dir):
                 os.unlink(latest_dir)
@@ -72,6 +83,8 @@ def fit_model(args):
         
         try:
             os.symlink(output_dir, latest_dir, target_is_directory=True)
+            if args.debug:
+                print(f"Created symbolic link from {latest_dir} to {output_dir}")
         except OSError as e:
             print(f"Warning: Could not create symbolic link: {e}")
         
@@ -243,6 +256,44 @@ def nowcast(args):
     print(f"Nowcast completed in {(time.time() - start_time)/60:.2f} minutes")
     print(f"Results saved to {output_dir}")
     print("==========================================\n")
+
+def visualize(args):
+    """Generate visualizations for a saved model"""
+    try:
+        if args.debug:
+            print(f"Generating visualizations for model in {args.load_dir}")
+        
+        # Create visualization output directory
+        # Make sure the parent directory exists
+        model_dir = os.path.abspath(args.load_dir)
+        if not os.path.exists(model_dir):
+            raise ValueError(f"Model directory not found: {model_dir}")
+            
+        viz_dir = os.path.join(model_dir, "visualizations")
+        os.makedirs(viz_dir, exist_ok=True)
+        
+        # Load the model
+        elections_model = load_model(
+            directory=model_dir,
+            debug=args.debug,
+            baseline_timescales=args.baseline_timescale if hasattr(args, 'baseline_timescale') else [365],
+            election_timescales=args.election_timescale if hasattr(args, 'election_timescale') else [30, 15]
+        )
+        
+        if elections_model is None:
+            raise ValueError(f"Failed to load model from {model_dir}")
+        
+        # Generate and save plots
+        print("Generating model diagnostics and visualization plots...")
+        save_plots(elections_model, viz_dir)
+        
+        print(f"Visualizations saved to {viz_dir}")
+        
+    except Exception as e:
+        print(f"Error generating visualizations: {e}")
+        if args.debug:
+            traceback.print_exc()
+        return None
 
 def cross_validate(args):
     """Perform cross-validation on historical elections"""
@@ -425,6 +476,10 @@ def main(args=None):
         action="store_true",
         help="Enable debugging output",
     )
+    parser.add_argument(
+        "--cutoff-date",
+        help="Exclude data after this date for retrodictive testing",
+    )
     
     args = parser.parse_args(args)
     
@@ -435,8 +490,9 @@ def main(args=None):
     if args.mode in ["train", "predict"]:
         if not args.election_date:
             parser.error("--election-date is required for train/predict modes")
-        if not args.dataset and args.mode == "train":
-            parser.error("--dataset is required for train mode")
+        # Remove dataset requirement for train mode since data is loaded internally
+        # if not args.dataset and args.mode == "train":
+        #    parser.error("--dataset is required for train mode")
     
     if args.mode == "predict" and not args.load_dir:
         parser.error("--load-dir is required for predict mode")
@@ -444,7 +500,7 @@ def main(args=None):
     # Run the selected mode
     try:
         if args.mode == "train":
-            train(args)
+            fit_model(args)
         elif args.mode == "predict":
             predict(args)
         elif args.mode == "predict-history":

@@ -212,7 +212,7 @@ class ElectionsFacade:
         if os.path.exists(trace_path):
             self.trace = arviz.from_zarr(trace_path)
             # Check trace quality
-            #self._analyze_trace_quality(self.trace)
+            self._analyze_trace_quality(self.trace)
             
         if os.path.exists(posterior_path):
             self.posterior = arviz.from_zarr(posterior_path)
