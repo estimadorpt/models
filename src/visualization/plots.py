@@ -7,6 +7,9 @@ from scipy.special import softmax
 from typing import List
 import matplotlib.dates as mdates
 import os
+import matplotlib.cm as cm
+import datetime
+import xarray as xr
 
 
 def set_plot_style():
@@ -941,4 +944,158 @@ def plot_model_components(elections_model, output_dir):
         plt.savefig(os.path.join(output_dir, "election_party_time_effect_weighted_by_party_and_election.png"))
         plt.close()
     except Exception as e:
-        print(f"Error plotting election party time effect weighted: {e}") 
+        print(f"Error plotting election party time effect weighted: {e}")
+
+
+def plot_nowcast_results(nowcast_ppc, current_polls, election_date=None, title="Nowcast of Party Support", filename=None):
+    """
+    Plot the nowcast results showing party support trajectories
+    
+    Parameters:
+    -----------
+    nowcast_ppc : arviz.InferenceData
+        The nowcast posterior predictive samples
+    current_polls : pd.DataFrame
+        The current poll data used for the nowcast
+    election_date : str, optional
+        The date of the election to predict/nowcast
+    title : str, optional
+        The title for the plot
+    filename : str, optional
+        If provided, save the plot to this file
+    
+    Returns:
+    --------
+    fig : matplotlib.Figure
+        The figure object
+    """
+    # Set up the figure
+    fig, ax = plt.subplots(figsize=(12, 8))
+    
+    # Get the latent popularity from the posterior predictive
+    latent_pop = nowcast_ppc.posterior_predictive.latent_popularity
+    
+    # Get parties from the coordinates
+    parties = latent_pop.coords["parties_complete"].values
+    
+    # Get dates
+    try:
+        # First, try to use dates directly if observations are already datetime objects
+        dates = latent_pop.coords["observations"].values
+        # Check if dates are already datetime objects
+        if not isinstance(dates[0], (pd.Timestamp, np.datetime64, datetime.datetime)):
+            # If not, try to convert from datetime strings
+            dates = pd.to_datetime(dates)
+    except Exception as e:
+        # As a fallback, use the dates from current_polls
+        print(f"Warning: Could not use dates from prediction output: {e}")
+        print("Using dates from current polls instead.")
+        dates = pd.to_datetime(current_polls['date'])
+    
+    # Create a color mapping for parties
+    # Using a categorical colormap for better distinction between parties
+    colors = cm.tab10(np.linspace(0, 1, len(parties)))
+    party_colors = {party: colors[i] for i, party in enumerate(parties)}
+    
+    # Plot the latent popularity for each party
+    for i, party in enumerate(parties):
+        # Calculate mean and credible intervals using HDI
+        party_latent = latent_pop.sel(parties_complete=party)
+        mean_values = party_latent.mean(("chain", "draw")).values
+        
+        # Use arviz's HDI instead of percentiles
+        try:
+            # First approach: use arviz.hdi directly on the xarray
+            # Make sure we're calling hdi correctly
+            party_hdi = arviz.hdi(party_latent, hdi_prob=0.95)
+            
+            # Debug the return type
+            if i == 0:
+                print(f"HDI return type: {type(party_hdi)}")
+                if hasattr(party_hdi, 'dims'):
+                    print(f"HDI dims: {party_hdi.dims}")
+                if hasattr(party_hdi, 'shape'):
+                    print(f"HDI shape: {party_hdi.shape}")
+            
+            # Extract the lower and upper bounds correctly based on return type
+            if isinstance(party_hdi, xr.Dataset):
+                # For Dataset, we need to extract the variable first
+                var_name = list(party_hdi.data_vars)[0] if party_hdi.data_vars else 'latent_popularity'
+                if var_name in party_hdi:
+                    lower_ci = party_hdi[var_name].sel(hdi='lower').values
+                    upper_ci = party_hdi[var_name].sel(hdi='higher').values
+                else:
+                    raise ValueError(f"Could not find variable in HDI dataset: {list(party_hdi.data_vars)}")
+            elif isinstance(party_hdi, xr.DataArray):
+                # For DataArray, extract directly
+                lower_ci = party_hdi.sel(hdi='lower').values
+                upper_ci = party_hdi.sel(hdi='higher').values
+            else:
+                # Handle any other return type
+                raise ValueError(f"Unexpected return type from arviz.hdi: {type(party_hdi)}")
+                
+        except Exception as e:
+            # Fallback to the original percentile method if HDI fails
+            print(f"HDI calculation failed: {e}, falling back to percentiles")
+            lower_ci = np.percentile(party_latent.values, 2.5, axis=(0, 1))
+            upper_ci = np.percentile(party_latent.values, 97.5, axis=(0, 1))
+            
+        # Ensure dimensions match
+        if i == 0:  # Debug first party only
+            print(f"Dates shape: {dates.shape}")
+            print(f"Lower CI shape: {lower_ci.shape}")
+            print(f"Upper CI shape: {upper_ci.shape}")
+            print(f"Mean values shape: {mean_values.shape}")
+        
+        # Plot mean line
+        ax.plot(dates, mean_values, label=party, color=party_colors[party], linewidth=2)
+        
+        # Plot credible intervals
+        ax.fill_between(dates, lower_ci, upper_ci, alpha=0.3, color=party_colors[party])
+        
+        # Plot observed values from polls
+        if party in current_polls.columns:
+            # Poll values are scaled by sample size
+            poll_values = current_polls[party] / current_polls['sample_size']
+            # Debug
+            if i == 0:  # Only do this for the first party
+                print(f"\n=== DEBUG: PLOTTING POLLS ===")
+                print(f"First 3 poll values for {party}: {poll_values.iloc[:3].values}")
+                print(f"Sample sizes: {current_polls['sample_size'].iloc[:3].values}")
+                print(f"Scaled values: {poll_values.iloc[:3].values}")
+                
+            ax.scatter(current_polls['date'], poll_values, alpha=0.4, color=party_colors[party], s=30)
+    
+    # Add a vertical line for the election date if provided
+    if election_date:
+        ax.axvline(pd.to_datetime(election_date), color='black', linestyle='--', 
+                   alpha=0.7, label='Election')
+    
+    # Set up the axes and labels
+    ax.set_title(title)
+    ax.set_xlabel('Date')
+    ax.set_ylabel('Support (%)')
+    
+    # Format x-axis to show dates nicely
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+    plt.xticks(rotation=45)
+    
+    # Add a legend
+    ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+    
+    # Set y-axis to percentage format (0-100%)
+    ax.set_ylim(0, 1)
+    ax.set_yticks(np.arange(0, 1.1, 0.1))
+    ax.set_yticklabels([f'{int(x*100)}%' for x in np.arange(0, 1.1, 0.1)])
+    
+    # Add grid for better readability
+    ax.grid(True, alpha=0.3)
+    
+    # Tight layout to ensure everything fits
+    plt.tight_layout()
+    
+    # Save the figure if a filename is provided
+    if filename:
+        plt.savefig(filename, dpi=300, bbox_inches='tight')
+    
+    return fig 

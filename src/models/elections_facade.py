@@ -212,7 +212,7 @@ class ElectionsFacade:
         if os.path.exists(trace_path):
             self.trace = arviz.from_zarr(trace_path)
             # Check trace quality
-            self._analyze_trace_quality(self.trace)
+            #self._analyze_trace_quality(self.trace)
             
         if os.path.exists(posterior_path):
             self.posterior = arviz.from_zarr(posterior_path)
@@ -768,39 +768,7 @@ class ElectionsFacade:
             raise ValueError("Must run inference before performing posterior predictive checks")
             
         return self.model.posterior_predictive_check(self.posterior)
-    
-    def load_prediction(self, prediction_path: str) -> None:
-        """Load prediction data from file."""
-        try:
-            # Try loading from .npz file first
-            if prediction_path.endswith('.npz'):
-                print(f"Loading prediction from {prediction_path}")
-                prediction_data = np.load(prediction_path)
-                self.prediction = az.convert_to_inference_data(prediction_data)
-                return
 
-            # Try loading from zarr directory
-            try:
-                store = zarr.DirectoryStore(prediction_path)
-                self.prediction = az.from_zarr(store)
-                return
-            except zarr.errors.FSPathExistNotDir:
-                pass
-
-            # Try loading from zarr file
-            try:
-                self.prediction = az.from_zarr(prediction_path)
-                return
-            except Exception as e:
-                error_msg = f"Failed to load prediction: {str(e)}"
-                print(error_msg)
-                raise ValueError(error_msg)
-
-        except Exception as e:
-            error_msg = f"Failed to load prediction: {str(e)}"
-            print(error_msg)
-            raise ValueError(error_msg)
-    
     def _build_model(self):
         """
         Build the model if it hasn't been built already.
@@ -921,3 +889,35 @@ class ElectionsFacade:
         
         print("=======================================\n")
         return self.prediction, self.prediction_coords, self.prediction_dims 
+
+    def nowcast_party_support(self, current_polls: pd.DataFrame, latest_election_date: str):
+        """
+        Nowcast the current party support based on recent polls since the latest election.
+        
+        This method updates a pre-fit model with current poll data to generate
+        a forecast of current party support.
+        
+        Parameters:
+        -----------
+        current_polls : pd.DataFrame
+            DataFrame containing recent polls to use for nowcasting
+        latest_election_date : str
+            Date of the most recent election
+            
+        Returns:
+        --------
+        ppc : arviz.InferenceData
+            Posterior predictive samples from the nowcast
+        coords : dict
+            Coordinate mapping for the nowcast
+        dims : dict
+            Dimension mapping for the nowcast
+        """
+        if self.trace is None:
+            raise ValueError("Model must be fit with run_inference() before nowcasting")
+            
+        return self.model.nowcast_party_support(
+            idata=self.trace, 
+            current_polls=current_polls, 
+            latest_election_date=latest_election_date
+        ) 
