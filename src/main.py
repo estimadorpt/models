@@ -82,9 +82,14 @@ def fit_model(args):
                 shutil.rmtree(latest_dir)
         
         try:
-            os.symlink(output_dir, latest_dir, target_is_directory=True)
+            # Convert to absolute paths for better macOS compatibility
+            abs_output_dir = os.path.abspath(output_dir)
+            abs_latest_dir = os.path.abspath(latest_dir)
+            
+            # On macOS, os.symlink order is: link_target, link_name
+            os.symlink(abs_output_dir, abs_latest_dir, target_is_directory=True)
             if args.debug:
-                print(f"Created symbolic link from {latest_dir} to {output_dir}")
+                print(f"Created symbolic link from {abs_latest_dir} to {abs_output_dir}")
         except OSError as e:
             print(f"Warning: Could not create symbolic link: {e}")
         
@@ -160,6 +165,31 @@ def nowcast(args):
     # Load the pre-trained model
     output_dir = os.path.join(args.output_dir, "nowcast")
     os.makedirs(output_dir, exist_ok=True)
+    
+    # Create latest directory if it doesn't exist
+    latest_base_dir = os.path.join(args.output_dir, "latest")
+    os.makedirs(latest_base_dir, exist_ok=True)
+    
+    # Create a symbolic link to the latest nowcast run
+    latest_nowcast_dir = os.path.join(latest_base_dir, "nowcast")
+    if os.path.exists(latest_nowcast_dir):
+        if os.path.islink(latest_nowcast_dir):
+            os.unlink(latest_nowcast_dir)
+        else:
+            import shutil
+            shutil.rmtree(latest_nowcast_dir)
+    
+    try:
+        # Convert to absolute paths for better macOS compatibility
+        abs_output_dir = os.path.abspath(output_dir)
+        abs_latest_nowcast_dir = os.path.abspath(latest_nowcast_dir)
+        
+        # On macOS, os.symlink order is: link_target, link_name
+        os.symlink(abs_output_dir, abs_latest_nowcast_dir, target_is_directory=True)
+        if args.debug:
+            print(f"Created symbolic link from {abs_latest_nowcast_dir} to {abs_output_dir}")
+    except OSError as e:
+        print(f"Warning: Could not create symbolic link: {e}")
     
     try:
         elections_model = load_model(
