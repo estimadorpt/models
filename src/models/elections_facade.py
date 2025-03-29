@@ -12,15 +12,6 @@ import zarr
 
 from src.data.dataset import ElectionDataset
 from src.models.election_model import ElectionModel
-from src.visualization.plots import (
-    retrodictive_plot,
-    predictive_plot,
-    plot_house_effects,
-    plot_party_correlations,
-    plot_predictive_accuracy,
-    plot_latent_trajectories,
-    plot_party_trajectory
-)
 
 
 class ElectionsFacade:
@@ -379,93 +370,6 @@ class ElectionsFacade:
             parties_complete=self.dataset.political_families,
             polls_train=self.dataset.polls_train,
             group=group
-        )
-    
-    def plot_house_effects(self, pollster: str):
-        """
-        Plot house effects for a specific pollster.
-        
-        Parameters:
-        -----------
-        pollster : str
-            The pollster to plot
-            
-        Returns:
-        --------
-        fig : matplotlib.figure.Figure
-            House effects plot
-        """
-        if self.trace is None:
-            raise ValueError("Must run inference before plotting house effects")
-         
-        # Create a safer version that handles potential index errors
-        try:   
-            # Get the house effects data
-            import numpy as np
-            import matplotlib.pyplot as plt
-            
-            # Get all pollsters from the trace
-            pollsters = self.trace.posterior.coords["pollsters"].values
-            
-            # Check if the requested pollster is in the list
-            if pollster not in pollsters:
-                print(f"Warning: Pollster {pollster} not found in trace. Available pollsters: {pollsters}")
-                
-                # Create a placeholder figure
-                fig, ax = plt.subplots(figsize=(10, 6))
-                ax.text(0.5, 0.5, f"Pollster '{pollster}' not found in model data", 
-                       ha='center', va='center', fontsize=14, transform=ax.transAxes)
-                ax.set_title(f"House Effects - {pollster}")
-                plt.tight_layout()
-                return fig
-                
-            # Find the index of the pollster
-            pollster_idx = np.where(pollsters == pollster)[0][0]
-            
-            # Get house effects for this pollster
-            house_effects = self.trace.posterior.house_effects.sel(pollsters=pollster).mean(("chain", "draw"))
-            
-            # Create the plot
-            fig, ax = plt.subplots(figsize=(10, 6))
-            
-            # Convert to DataFrame for easier plotting
-            house_effects_df = house_effects.to_dataframe(name="value").reset_index()
-            ax.bar(house_effects_df["parties_complete"], house_effects_df["value"])
-            
-            ax.set_title(f"House Effects - {pollster}")
-            ax.set_xlabel("Party")
-            ax.set_ylabel("Effect")
-            ax.axhline(y=0, color='r', linestyle='-', alpha=0.3)
-            plt.xticks(rotation=45)
-            plt.tight_layout()
-            
-            return fig
-            
-        except Exception as e:
-            print(f"Error in plot_house_effects for {pollster}: {e}")
-            # Return a blank figure with error message
-            fig, ax = plt.subplots(figsize=(10, 6))
-            ax.text(0.5, 0.5, f"Error plotting house effects for '{pollster}':\n{str(e)}", 
-                   ha='center', va='center', fontsize=12, transform=ax.transAxes)
-            ax.set_title(f"House Effects - {pollster}")
-            plt.tight_layout()
-            return fig
-    
-    def plot_party_correlations(self):
-        """
-        Plot correlations between party vote shares.
-        
-        Returns:
-        --------
-        fig : matplotlib.figure.Figure
-            Party correlations plot
-        """
-        if self.posterior is None:
-            raise ValueError("Must run inference before plotting party correlations")
-            
-        return plot_party_correlations(
-            idata=self.posterior,
-            parties_complete=self.dataset.political_families
         )
     
     def plot_predictive_accuracy(self):
@@ -921,3 +825,89 @@ class ElectionsFacade:
             current_polls=current_polls, 
             latest_election_date=latest_election_date
         ) 
+
+    def predict(self, oos_data: pd.DataFrame):
+        """
+        Perform prediction on out-of-sample data.
+        
+        Parameters:
+        -----------
+        oos_data : pd.DataFrame
+            Out-of-sample data to predict
+        
+        Returns:
+        --------
+        ppc : arviz.InferenceData
+            Posterior predictive samples from the prediction
+        coords : dict
+            Coordinate mapping for the prediction
+        dims : dict
+            Dimension mapping for the prediction
+        """
+        if self.trace is None:
+            raise ValueError("Model must be fit with run_inference() before predicting")
+            
+        ppc, coords, dims = self.model.predict(oos_data)
+        
+        return ppc, coords, dims
+
+    def predict_history(self, elections_to_predict: List[str]):
+        """
+        Calculate predictive accuracy for historical elections.
+        
+        Parameters:
+        -----------
+        elections_to_predict : List[str]
+            List of election dates to predict
+        
+        Returns:
+        --------
+        historical_ppc : arviz.InferenceData
+            Posterior predictive samples from the prediction
+        historical_coords : dict
+            Coordinate mapping for the prediction
+        historical_dims : dict
+            Dimension mapping for the prediction
+        """
+        if self.trace is None:
+            raise ValueError("Model must be fit with run_inference() before predicting historical accuracy")
+            
+        historical_ppc, historical_coords, historical_dims = self.model.predict_history(elections_to_predict)
+        
+        # Calculate predictive accuracy
+        predictive_accuracy_df = self.model.calculate_predictive_accuracy(historical_trace)
+        
+        # Save predictive accuracy results
+        if self.output_dir is not None:
+            accuracy_path = os.path.join(self.output_dir, "predictive_accuracy.csv")
+            predictive_accuracy_df.to_csv(accuracy_path, index=False)
+            print(f"Predictive accuracy results saved to {accuracy_path}")
+        
+        # Now plot the accuracy
+        # Commenting out the plot call as the function is removed
+        # plot_predictive_accuracy(predictive_accuracy_df, self.output_dir)
+        
+        return historical_ppc, historical_coords, historical_dims
+
+    def retrodict(self):
+        """
+        Perform retrodictive analysis.
+        
+        Returns:
+        --------
+        posterior : arviz.InferenceData
+            Posterior predictive samples from the retrodictive analysis
+        coords : dict
+            Coordinate mapping for the retrodictive analysis
+        dims : dict
+            Dimension mapping for the retrodictive analysis
+        """
+        if self.trace is None:
+            raise ValueError("Model must be fit with run_inference() before retrodicting")
+            
+        posterior, coords, dims = self.model.retrodict()
+        
+        # Commenting out the plot call as the function is removed
+        # retrodictive_plot(posterior, self.dataset.observed_data, self.trace, self.output_dir)
+        
+        return posterior, coords, dims 

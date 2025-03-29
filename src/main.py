@@ -12,9 +12,9 @@ from datetime import datetime, timedelta
 import pymc as pm
 
 from src.models.elections_facade import ElectionsFacade
-from src.evaluation.retrodictive import evaluate_retrodictive_accuracy
-from src.visualization.plots import save_plots, plot_model_components, plot_nowcast_results
+from src.visualization.plots import plot_election_data
 from src.config import DEFAULT_BASELINE_TIMESCALE, DEFAULT_ELECTION_TIMESCALES
+from src.data.dataset import ElectionDataset
 
 def fit_model(args):
     """Fit a new model with the specified parameters"""
@@ -273,15 +273,15 @@ def nowcast(args):
         latest_election_date=latest_election_date
     )
     
-    # Plot the results
+    # Plot the results - Comment out the call
     print("Generating plots...")
-    plot_nowcast_results(
-        nowcast_ppc=nowcast_ppc, 
-        current_polls=current_polls, 
-        election_date=latest_election_date,
-        title=f"Nowcast of Party Support Since {latest_election_date}",
-        filename=os.path.join(output_dir, "nowcast_results.png")
-    )
+    # plot_nowcast_results(
+    #     nowcast_ppc=nowcast_ppc, 
+    #     current_polls=current_polls, 
+    #     election_date=latest_election_date,
+    #     title=f"Nowcast of Party Support Since {latest_election_date}",
+    #     filename=os.path.join(output_dir, "nowcast_results.png")
+    # )
     
     print(f"Nowcast completed in {(time.time() - start_time)/60:.2f} minutes")
     print(f"Results saved to {output_dir}")
@@ -313,11 +313,11 @@ def visualize(args):
         if elections_model is None:
             raise ValueError(f"Failed to load model from {model_dir}")
         
-        # Generate and save plots
+        # Generate and save plots - Comment out the call
         print("Generating model diagnostics and visualization plots...")
-        save_plots(elections_model, viz_dir)
+        # save_plots(elections_model, viz_dir)
         
-        print(f"Visualizations saved to {viz_dir}")
+        print(f"Visualizations generation step complete (plots commented out). Results saved to {viz_dir}")
         
     except Exception as e:
         print(f"Error generating visualizations: {e}")
@@ -336,7 +336,6 @@ def cross_validate(args):
         os.makedirs(cv_dir, exist_ok=True)
         
         # Get all historical elections from the dataset
-        from src.data.dataset import ElectionDataset
         all_elections = ElectionDataset.historical_election_dates
         if args.debug:
             print(f"Found {len(all_elections)} historical elections: {all_elections}")
@@ -371,31 +370,27 @@ def cross_validate(args):
                 # Save the inference results
                 elections_model.save_inference_results(election_dir)
                 
-                # Evaluate accuracy
-                accuracy_metrics = evaluate_retrodictive_accuracy(elections_model)
-                
                 # Store results
                 cv_results.append({
                     'election_date': election_date,
-                    **accuracy_metrics
+                    'status': 'completed'
                 })
             except Exception as e:
-                print(f"Error evaluating accuracy for election {election_date}: {e}")
+                print(f"Error processing election {election_date}: {e}")
                 import traceback
                 traceback.print_exc()
                 
-                # Add a placeholder result with NaN values
+                # Add a placeholder result
                 cv_results.append({
                     'election_date': election_date,
-                    'mae': np.nan,
-                    'rmse': np.nan,
-                    'mape': np.nan,
-                    'error': str(e)
+                    'error': str(e),
+                    'status': 'failed'
                 })
                 
-            # Save plots
+            # Save plots - Comment out the call
             if not args.fast:
-                save_plots(elections_model, election_dir)
+                # save_plots(elections_model, election_dir)
+                print(f"Plot generation skipped for {election_date} (plots commented out).")
         
         # Summarize cross-validation results
         if cv_results:
@@ -404,8 +399,6 @@ def cross_validate(args):
             print("="*50)
             print(cv_df)
             print("="*50)
-            print(f"Mean absolute error: {cv_df['mae'].mean():.3f}")
-            print(f"Root mean squared error: {cv_df['rmse'].mean():.3f}")
             
             # Save results to CSV
             cv_df.to_csv(os.path.join(cv_dir, "cross_validation_results.csv"), index=False)
@@ -422,11 +415,47 @@ def cross_validate(args):
                 data=f"Error in cross-validation: {e}".encode(encoding='utf-8'))
         return []
 
+def visualize_data(args):
+    """Visualize the raw input poll and election data."""
+    try:
+        print("Visualizing raw input data...")
+        if not args.election_date:
+            print("Warning: --election-date not specified. Using a default future date for dataset context.")
+            # Use a sensible default, e.g., start of next year if not provided
+            election_date = (datetime.now().replace(month=1, day=1) + pd.DateOffset(years=1)).strftime('%Y-%m-%d')
+            print(f"Using default date: {election_date}")
+        else:
+            election_date = args.election_date
+            print(f"Using specified election date context: {election_date}")
+
+        print(f"Using baseline timescales: {args.baseline_timescale}")
+        print(f"Using election timescales: {args.election_timescale}")
+
+        # Create the dataset instance
+        # Note: We might not need test_cutoff here, as we're visualizing all data
+        dataset = ElectionDataset(
+            election_date=election_date,
+            baseline_timescales=args.baseline_timescale,
+            election_timescales=args.election_timescale,
+            test_cutoff=None # Visualize all data by default
+        )
+
+        # Call the plotting function
+        plot_election_data(dataset)
+
+        print("Data visualization complete.")
+
+    except Exception as e:
+        print(f"Error generating data visualizations: {e}")
+        if args.debug:
+            traceback.print_exc()
+        return None
+
 def main(args=None):
     parser = argparse.ArgumentParser(description="Election Model CLI")
     parser.add_argument(
         "--mode",
-        choices=["train", "predict", "predict-history", "retrodictive", "nowcast", "cross-validate", "viz"],
+        choices=["train", "predict", "predict-history", "retrodictive", "nowcast", "cross-validate", "viz", "visualize-data"],
         required=True,
         help="Operation mode",
     )
@@ -524,6 +553,10 @@ def main(args=None):
         # if not args.dataset and args.mode == "train":
         #    parser.error("--dataset is required for train mode")
     
+    # Add validation for visualize-data if needed (e.g., require election date)
+    # if args.mode == "visualize-data" and not args.election_date:
+    #     parser.error("--election-date is recommended for visualize-data mode to set context")
+
     if args.mode == "predict" and not args.load_dir:
         parser.error("--load-dir is required for predict mode")
         
@@ -545,6 +578,9 @@ def main(args=None):
             if not args.load_dir:
                 parser.error("--load-dir is required for viz mode")
             visualize(args)
+        # Add the new mode execution
+        elif args.mode == "visualize-data":
+            visualize_data(args)
     except Exception as e:
         print(f"Error: {e}")
         if args.debug:
