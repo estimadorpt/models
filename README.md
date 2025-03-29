@@ -62,26 +62,39 @@ forecast_fig = model.plot_forecast(hdi=True)
 
 ### Command-line Interface
 
-You can run the model from the command line in different modes:
+You can run the model from the command line in different modes. **Make sure to run these commands from the project root directory (the one containing the `src` folder).**
 
 ```bash
 # Fit a new model for a future election (using all available data)
-python src/main.py --mode fit --election-date 2024-03-10 --draws 1000 --tune 1000
+python -m src.main --mode fit --election-date 2024-03-10 --draws 1000 --tune 1000
 
 # Load a previously saved model and generate forecasts
-python src/main.py --mode load --election-date 2024-03-10 --load-dir outputs/your-model-directory
+# Note: Ensure --load-dir points to the correct path relative to the project root
+python -m src.main --mode load --election-date 2024-03-10 --load-dir outputs/your-model-directory
 
 # Run retrodictive testing with data cutoff
-python src/main.py --mode fit --election-date 2024-03-10 --cutoff-date 2024-01-01
+python -m src.main --mode fit --election-date 2024-03-10 --cutoff-date 2024-01-01
 
 # Run cross-validation across past elections
-python src/main.py --mode cross-validate --election-date 2024-03-10
+python -m src.main --mode cross-validate --election-date 2024-03-10
+
+# Run nowcasting using a pre-trained model
+# Note: Ensure --load-dir points to the correct path (e.g., outputs/latest)
+python -m src.main --mode nowcast --load-dir outputs/latest
+
+# Generate visualizations for a saved model
+# Note: Ensure --load-dir points to the correct path
+python -m src.main --mode viz --load-dir outputs/latest
 ```
 
 Available modes:
 - `fit`: Train a new model
-- `load`: Load a previously saved model
+- `predict`: Generate predictions using a saved model (Note: Currently implies loading, might need refinement based on `main.py` logic)
+- `predict-history`: Generate historical predictions (Note: Might need refinement based on `main.py` logic)
+- `retrodictive`: Run retrodictive evaluation (Note: Might need refinement based on `main.py` logic)
+- `nowcast`: Estimate current support using the latest polls and a saved model
 - `cross-validate`: Perform cross-validation on past elections
+- `viz`: Generate visualizations for a saved model
 
 Key parameters:
 - `--election-date`: Target election date (YYYY-MM-DD)
