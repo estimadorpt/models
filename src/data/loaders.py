@@ -19,22 +19,199 @@ def standardize(series):
     return (series - series.mean()) / series.std()
 
 
+def _consolidate_tracking_polls(df, party_cols, rolling_window_days=3):
+    """
+    Consolidates consecutive tracking polls from the same pollster.
+
+    Args:
+        df (pd.DataFrame): DataFrame containing poll data. Must include 
+                           'Stratification', 'Fieldwork End', 'pollster', 
+                           'sample_size', 'date', and party columns.
+        party_cols (List[str]): List of column names representing party shares.
+        rolling_window_days (int): The maximum number of days between the end
+                                   of consecutive tracking polls to be grouped.
+
+    Returns:
+        pd.DataFrame: DataFrame with tracking polls consolidated.
+    """
+    # Ensure required columns are present
+    required_cols = ['Stratification', 'Fieldwork End', 'pollster', 'sample_size', 'date'] + party_cols
+    if not all(col in df.columns for col in required_cols):
+        missing = [col for col in required_cols if col not in df.columns]
+        print(f"Warning: Missing required columns for tracking poll consolidation: {missing}. Skipping.")
+        return df
+
+    # Convert Fieldwork End to datetime (handle potential errors)
+    df['Fieldwork End'] = pd.to_datetime(df['Fieldwork End'], errors='coerce')
+    # Also convert Fieldwork Start for later use
+    if 'Fieldwork Start' in df.columns:
+         df['Fieldwork Start'] = pd.to_datetime(df['Fieldwork Start'], errors='coerce')
+    else:
+        # If Fieldwork Start doesn't exist, use Fieldwork End as a fallback
+         df['Fieldwork Start'] = df['Fieldwork End']
+
+
+    # Identify tracking polls (case-insensitive)
+    # Make sure Stratification is string type before using .str accessor
+    is_tracking = df['Stratification'].astype(str).str.contains("Tracking poll", na=False, case=False)
+    tracking_polls = df[is_tracking].copy()
+    non_tracking_polls = df[~is_tracking].copy()
+
+    if tracking_polls.empty:
+        print("No tracking polls identified based on 'Stratification' column.")
+        return df # Return original df if no tracking polls
+
+    print(f"Identified {len(tracking_polls)} potential tracking poll entries.")
+
+    # Drop rows where Fieldwork End is NaT after conversion
+    tracking_polls.dropna(subset=['Fieldwork End'], inplace=True)
+    if tracking_polls.empty:
+        print("No valid tracking polls remaining after dropping NaT Fieldwork End dates.")
+        return non_tracking_polls # Return only non-tracking polls
+
+    # Sort for grouping
+    tracking_polls = tracking_polls.sort_values(by=['pollster', 'Fieldwork End'])
+
+    # Calculate time difference between consecutive polls by the same pollster
+    tracking_polls['time_diff'] = tracking_polls.groupby('pollster')['Fieldwork End'].diff()
+
+    # Create group IDs for consecutive tracking polls within the window
+    group_starts = (tracking_polls['pollster'] != tracking_polls['pollster'].shift(1)) | \
+                   (tracking_polls['time_diff'].isna()) | \
+                   (tracking_polls['time_diff'] > pd.Timedelta(days=rolling_window_days))
+    tracking_polls['group_id'] = group_starts.cumsum()
+
+    # --- Aggregation ---
+    consolidated_polls_list = []
+
+    for group_id, group in tracking_polls.groupby('group_id'):
+        if len(group) == 1:
+            # If only one poll in the group, keep it as is (remove helper columns)
+            consolidated_polls_list.append(group.drop(columns=['time_diff', 'group_id']))
+            continue
+
+        # Calculate average and total sample size for the group
+        # Ensure sample_size is numeric before summing/averaging
+        group['sample_size'] = pd.to_numeric(group['sample_size'], errors='coerce').fillna(0)
+        # Calculate the average sample size for the output N
+        consolidated_sample_size = group['sample_size'].mean()
+        # Calculate the sum of sample sizes (total weight) for weighted averaging party shares
+        total_weight = group['sample_size'].sum()
+
+        if consolidated_sample_size <= 0: # Avoid division by zero or nonsensical consolidation
+             print(f"Warning: Group {group_id} for pollster {group['pollster'].iloc[0]} has zero or negative average sample size ({consolidated_sample_size}). Skipping consolidation for this group.")
+             # Append original polls from the group instead of consolidating
+             consolidated_polls_list.append(group.drop(columns=['time_diff', 'group_id']))
+             continue
+
+        # Calculate weighted average for party columns
+        weighted_avg_parties = {}
+        if total_weight <= 0:
+            # Fallback: simple average if total weight is zero (e.g., all polls in group had 0 sample size)
+            print(f"Warning: Total weight (sum of sample sizes) is zero for group {group_id}. Using simple average for party shares.")
+            for party in party_cols:
+                 if party in group.columns:
+                     group[party] = pd.to_numeric(group[party], errors='coerce').fillna(0)
+                     weighted_avg_parties[party] = group[party].mean()
+                 else:
+                     weighted_avg_parties[party] = 0
+        else:
+             # Normal weighted average calculation using total_weight
+             for party in party_cols:
+                 if party in group.columns:
+                     # Ensure party shares are numeric
+                     group[party] = pd.to_numeric(group[party], errors='coerce').fillna(0)
+                     # Weight = sample_size * party_share
+                     weighted_sum = (group[party] * group['sample_size']).sum()
+                     # Use total_weight (sum of sample sizes) as denominator for weighted average
+                     weighted_avg_parties[party] = weighted_sum / total_weight
+                 else:
+                      weighted_avg_parties[party] = 0 # Or handle missing party appropriately
+
+        # Create consolidated row
+        last_poll = group.iloc[-1] # Use data from the last poll in the group as reference
+        consolidated_row_data = {
+            'date': [last_poll['date']], # Use the original 'date' (publication date) of the last poll
+            'pollster': [last_poll['pollster']],
+            'sample_size': [int(round(consolidated_sample_size))], # Use the average sample size (rounded)
+            'Fieldwork Start': [group['Fieldwork Start'].min()], # Use earliest start date in the group
+            'Fieldwork End': [last_poll['Fieldwork End']], # Use latest end date in the group
+            'Stratification': [f"Consolidated Tracking Poll ({len(group)} entries, avg N={int(round(consolidated_sample_size))})"], # Mark as consolidated, show avg N
+            **weighted_avg_parties # Add the weighted party shares
+        }
+        # Add any other non-party, non-grouping columns from the last poll if they exist
+        other_cols = [col for col in df.columns if col not in required_cols and col not in ['Fieldwork Start']]
+        for col in other_cols:
+            consolidated_row_data[col] = [last_poll[col]]
+
+        consolidated_row = pd.DataFrame(consolidated_row_data)
+        consolidated_polls_list.append(consolidated_row)
+
+    if not consolidated_polls_list:
+         print("No tracking polls were consolidated.")
+         final_df = non_tracking_polls # Should be df if tracking_polls was empty initially
+    else:
+        consolidated_df = pd.concat(consolidated_polls_list, ignore_index=True)
+        print(f"Consolidated {len(tracking_polls)} tracking polls into {len(consolidated_df)} entries (including {len(consolidated_df[consolidated_df['Stratification'].str.contains('Consolidated')])} consolidated groups).")
+
+        # Combine non-tracking and consolidated tracking polls
+        # Ensure columns match before concatenating - align columns based on the original df
+        consolidated_df = consolidated_df.reindex(columns=df.columns.drop(['time_diff', 'group_id'], errors='ignore'))
+        non_tracking_polls = non_tracking_polls.reindex(columns=df.columns.drop(['time_diff', 'group_id'], errors='ignore'))
+
+        final_df = pd.concat([non_tracking_polls, consolidated_df], ignore_index=True)
+
+
+    # Re-sort by date
+    final_df = final_df.sort_values('date').reset_index(drop=True)
+
+    # Drop the Stratification column now if it's no longer needed downstream
+    # final_df = final_df.drop(columns=['Stratification'])
+
+    return final_df
+
+
 def load_marktest_polls():
     """Load polls from marktest_polls.csv"""
-    # Read the CSV file
-    df = pd.read_csv(os.path.join(DATA_DIR, 'marktest_polls.csv'))
+    # Read the CSV file, keeping necessary columns for consolidation
+    cols_to_read = [
+        "Pollster", "Date", "Sample Size", "Stratification",
+        "Fieldwork Start", "Fieldwork End", "PS - Partido Socialista",
+        "AD - Aliança Democrática", "BE - Bloco de Esquerda",
+        "PCP-PEV - Coligação Democrática Unitária", "PAN - Pessoas-Animais-Natureza",
+        "A - Aliança", "L - Livre", "Liberal - Iniciativa Liberal",
+        "Chega - Chega", "Outros - Outros/Brancos/Nulos",
+        "PSD - Partido Social Democrata", "CDS-PP - Partido Popular",
+        "PAF - PSD/CDS - Portugal à Frente (2015)"
+    ]
+    try:
+        df = pd.read_csv(os.path.join(DATA_DIR, 'marktest_polls.csv'), usecols=cols_to_read)
+    except ValueError as e:
+         print(f"Error reading CSV, potentially missing columns: {e}")
+         print("Attempting to read without specifying columns...")
+         df = pd.read_csv(os.path.join(DATA_DIR, 'marktest_polls.csv'))
+         # Check if essential cols are present after reading all
+         if not all(c in df.columns for c in ["Pollster", "Date", "Sample Size"]):
+              raise ValueError("Essential columns missing even after reading the full CSV.") from e
 
-    # Convert 'Date' to datetime
+
+    # Convert 'Date' and fieldwork dates to datetime
     df['Date'] = pd.to_datetime(df['Date'], format='%d/%m/%Y')
+    # Handle fieldwork date conversion safely
+    df['Fieldwork Start'] = pd.to_datetime(df['Fieldwork Start'], errors='coerce', format='%d/%m/%Y')
+    df['Fieldwork End'] = pd.to_datetime(df['Fieldwork End'], errors='coerce', format='%d/%m/%Y')
 
     # Filter out the erroneous Eurosondagem poll from March 10, 2015
     df = df[~((df['Pollster'] == 'Eurosondagem') & (df['Date'] == pd.to_datetime('2015-03-10')))]
 
     # Rename columns to match the desired format
-    df = df.rename(columns={
+    rename_map = {
         'Date': 'date',
         'Pollster': 'pollster',
         'Sample Size': 'sample_size',
+        'Stratification': 'Stratification', # Keep Stratification
+        'Fieldwork Start': 'Fieldwork Start', # Keep Fieldwork Start
+        'Fieldwork End': 'Fieldwork End', # Keep Fieldwork End
         'PS - Partido Socialista': 'PS',
         'AD - Aliança Democrática': 'AD',
         'BE - Bloco de Esquerda': 'BE',
@@ -43,26 +220,61 @@ def load_marktest_polls():
         'L - Livre': 'L',
         'Liberal - Iniciativa Liberal': 'IL',
         'Chega - Chega': 'CH',
-        'Outros - Outros/Brancos/Nulos': 'Others',
+        'Outros - Outros/Brancos/Nulos': 'Others', # Keep for potential use later?
         'PSD - Partido Social Democrata': 'PSD',
         'CDS-PP - Partido Popular': 'CDS',
         "PAF - PSD/CDS - Portugal à Frente (2015)": 'PAF',
-    })
+    }
+    df = df.rename(columns=rename_map)
 
-    # Select and reorder columns
-    columns = ['date', 'pollster', 'sample_size', 'PS', 'PSD', 'CH', 'IL', 'BE', 'CDU', 'CDS', 'PAN', 'L', 'AD', 'PAF']
-    df = df[columns]
+    # Define party columns AFTER renaming
+    party_cols = ['PS', 'PSD', 'CH', 'IL', 'BE', 'CDU', 'CDS', 'PAN', 'L', 'AD', 'PAF']
+    # Only keep party cols that actually exist in the dataframe after reading/renaming
+    party_cols = [p for p in party_cols if p in df.columns]
 
-    # Handle AD coalition
-    df['AD'] = df['AD'].fillna(df['PSD'].fillna(0) + df['CDS'].fillna(0) + df['PAF'].fillna(0))
-    df.drop(columns=['PAF', 'PSD', 'CDS'], inplace=True)
+    # Handle AD coalition (using existing party_cols)
+    ad_components = [p for p in ['PSD', 'CDS', 'PAF'] if p in df.columns]
+    if 'AD' not in df.columns:
+         df['AD'] = 0 # Initialize AD if it doesn't exist
+    # Ensure components are numeric before summing, fillna with 0
+    df['AD'] = df['AD'].fillna(df[ad_components].apply(pd.to_numeric, errors='coerce').fillna(0).sum(axis=1))
+    # Drop components only if they exist
+    df.drop(columns=[col for col in ['PAF', 'PSD', 'CDS'] if col in df.columns], inplace=True)
     
-    # Convert percentage values to floats
-    for col in ['PS', 'CH', 'IL', 'BE', 'CDU', 'PAN', 'L', 'AD']:
-        df[col] = df[col].astype(float) / 100
+    # Update party_cols list after AD consolidation
+    final_party_cols = ['PS', 'CH', 'IL', 'BE', 'CDU', 'PAN', 'L', 'AD']
+    final_party_cols = [p for p in final_party_cols if p in df.columns] # Ensure they exist
 
-    # Sort by date
-    df = df.sort_values('date')
+
+    # Convert percentage values to floats (0-1 range) for relevant parties
+    for col in final_party_cols:
+        df[col] = pd.to_numeric(df[col], errors='coerce') / 100
+        # Fill NaNs resulting from conversion or originally present with 0
+        df[col] = df[col].fillna(0)
+
+    # Ensure sample_size is numeric and handle NaNs before consolidation
+    df['sample_size'] = pd.to_numeric(df['sample_size'], errors='coerce')
+    mean_sample = df['sample_size'].mean()
+    if pd.isna(mean_sample) or mean_sample == 0:
+        mean_sample = 1000  # Fallback if mean is NaN or zero
+    df['sample_size'] = df['sample_size'].fillna(mean_sample).astype(int)
+
+
+    # --- Consolidate Tracking Polls ---
+    # Pass the final list of party columns present in the DataFrame
+    df = _consolidate_tracking_polls(df, final_party_cols)
+    # --- End Consolidation ---
+
+
+    # Select and reorder columns for final output (excluding Stratification if desired)
+    # Keep 'Fieldwork End' if needed downstream, otherwise drop
+    final_columns = ['date', 'pollster', 'sample_size'] + final_party_cols # Add 'Fieldwork End' if needed
+    # Ensure only existing columns are selected
+    final_columns = [col for col in final_columns if col in df.columns]
+    df = df[final_columns]
+
+    # Sort by date (this might have been done in consolidation, but do it again for safety)
+    df = df.sort_values('date').reset_index(drop=True)
 
     return df
 
