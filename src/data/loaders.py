@@ -27,6 +27,9 @@ def load_marktest_polls():
     # Convert 'Date' to datetime
     df['Date'] = pd.to_datetime(df['Date'], format='%d/%m/%Y')
 
+    # Filter out the erroneous Eurosondagem poll from March 10, 2015
+    df = df[~((df['Pollster'] == 'Eurosondagem') & (df['Date'] == pd.to_datetime('2015-03-10')))]
+
     # Rename columns to match the desired format
     df = df.rename(columns={
         'Date': 'date',
