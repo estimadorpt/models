@@ -6,7 +6,7 @@ import requests
 import seaborn as sns
 from joblib import Parallel, delayed
 from scipy.special import softmax
-from election_model import ElectionsModel
+from src.models.election_model import ElectionModel
 import time
 import os
 
@@ -570,7 +570,7 @@ def main():
     prior = az.from_zarr("prior.zarr")
     trace = az.from_zarr("trace.zarr")
 
-    model = ElectionsModel('2024-03-10')
+    model = ElectionModel('2024-03-10')
     # Extract necessary data from idata
     polls_train = model.polls_train
     polls_test = model.polls_test

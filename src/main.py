@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 import pymc as pm
 
 from src.models.elections_facade import ElectionsFacade
-from src.visualization.plots import plot_election_data
+from src.visualization.plots import plot_election_data, plot_latent_popularity_vs_polls, plot_latent_component_contributions, plot_recent_polls
 from src.config import DEFAULT_BASELINE_TIMESCALE, DEFAULT_ELECTION_TIMESCALES
 from src.data.dataset import ElectionDataset
 
@@ -69,6 +69,13 @@ def fit_model(args):
             requests.post("https://ntfy.sh/bc-estimador",
                 data=f"Model fit completed in {elapsed_time:.2f} seconds".encode(encoding='utf-8'))
         
+        # Generate diagnostic plots
+        if elections_model.trace is not None:
+            diag_plot_dir = os.path.join(output_dir, "diagnostics")
+            elections_model.generate_diagnostic_plots(diag_plot_dir)
+        else:
+            print("Skipping diagnostic plot generation as trace is not available.")
+        
         # Save the trace and model
         elections_model.save_inference_results(output_dir)
         
@@ -104,7 +111,7 @@ def fit_model(args):
                 data=f"Error fitting model: {e}".encode(encoding='utf-8'))
         return None
 
-def load_model(directory, **kwargs):
+def load_model(directory, election_date=None, baseline_timescales=None, election_timescales=None, debug=False):
     """
     Load a saved model
     
@@ -112,42 +119,50 @@ def load_model(directory, **kwargs):
     -----------
     directory : str
         Directory where the model is saved
-    **kwargs : 
-        Additional arguments to pass to ElectionsFacade
+    election_date : str, optional
+        Election date context for loading dataset.
+    baseline_timescales : list, optional
+        Baseline timescales used for the model.
+    election_timescales : list, optional
+        Election timescales used for the model.
+    debug : bool, optional
+        Enable debug output.
     """
     try:
-        debug = kwargs.get('debug', False)
         if debug:
             print(f"Loading model from {directory}")
         
-        # Initialize the elections model with the same parameters
-        # Default values for timescales if not provided
-        baseline_timescales = kwargs.get('baseline_timescales', [365])
-        election_timescales = kwargs.get('election_timescales', [30, 15])
-        election_date = kwargs.get('election_date', '2026-01-01')  # Default date
-        
+        # Use provided args or defaults
+        final_election_date = election_date if election_date else '2026-01-01'
+        final_baseline_timescales = baseline_timescales if baseline_timescales is not None else DEFAULT_BASELINE_TIMESCALE
+        final_election_timescales = election_timescales if election_timescales is not None else DEFAULT_ELECTION_TIMESCALES
+
         # Ensure timescales are lists
-        if not isinstance(baseline_timescales, list):
-            baseline_timescales = [baseline_timescales]
-        if not isinstance(election_timescales, list):
-            election_timescales = [election_timescales]
+        if not isinstance(final_baseline_timescales, list):
+            final_baseline_timescales = [final_baseline_timescales]
+        if not isinstance(final_election_timescales, list):
+            final_election_timescales = [final_election_timescales]
             
         if debug:
-            print(f"Using baseline_timescales: {baseline_timescales}")
-            print(f"Using election_timescales: {election_timescales}")
+            print(f"Using election_date: {final_election_date}")
+            print(f"Using baseline_timescales: {final_baseline_timescales}")
+            print(f"Using election_timescales: {final_election_timescales}")
         
         elections_model = ElectionsFacade(
-            election_date=election_date,
-            baseline_timescales=baseline_timescales,
-            election_timescales=election_timescales,
+            election_date=final_election_date,
+            baseline_timescales=final_baseline_timescales,
+            election_timescales=final_election_timescales,
             debug=debug
         )
         
         # Load the saved trace
         elections_model.load_inference_results(directory)
         
-        # Build the model
+        # Rebuild the model structure (necessary for posterior predictive checks etc.)
+        # This uses the parameters passed to ElectionsFacade, ensuring consistency
+        print("Rebuilding model structure...")
         elections_model.model.model = elections_model.model.build_model()
+        print("Model structure rebuilt.")
         
         return elections_model
         
@@ -195,8 +210,10 @@ def nowcast(args):
         elections_model = load_model(
             directory=args.load_dir, 
             debug=args.debug,
-            baseline_timescales=args.baseline_timescale if hasattr(args, 'baseline_timescale') else [365],
-            election_timescales=args.election_timescale if hasattr(args, 'election_timescale') else [30, 15]
+            # Pass arguments explicitly
+            election_date=elections_model.election_date if hasattr(elections_model, 'election_date') else args.election_date,
+            baseline_timescales=args.baseline_timescale, # Pass command-line args
+            election_timescales=args.election_timescale  # Pass command-line args
         )
         
         if elections_model is None:
@@ -306,18 +323,22 @@ def visualize(args):
         elections_model = load_model(
             directory=model_dir,
             debug=args.debug,
-            baseline_timescales=args.baseline_timescale if hasattr(args, 'baseline_timescale') else [365],
-            election_timescales=args.election_timescale if hasattr(args, 'election_timescale') else [30, 15]
+            # Pass arguments explicitly
+            election_date=args.election_date, # Use command-line args
+            baseline_timescales=args.baseline_timescale, 
+            election_timescales=args.election_timescale 
         )
         
         if elections_model is None:
             raise ValueError(f"Failed to load model from {model_dir}")
         
-        # Generate and save plots - Comment out the call
+        # Generate and save plots
         print("Generating model diagnostics and visualization plots...")
-        # save_plots(elections_model, viz_dir)
-        
-        print(f"Visualizations generation step complete (plots commented out). Results saved to {viz_dir}")
+        plot_latent_popularity_vs_polls(elections_model, viz_dir)
+        plot_latent_component_contributions(elections_model, viz_dir)
+        plot_recent_polls(elections_model, viz_dir)
+
+        print(f"Visualizations generation step complete. Results saved to {viz_dir}") # Adjusted print statement
         
     except Exception as e:
         print(f"Error generating visualizations: {e}")
@@ -451,11 +472,54 @@ def visualize_data(args):
             traceback.print_exc()
         return None
 
+def diagnose_model(args):
+    """Load a saved model and generate diagnostic plots."""
+    try:
+        if not args.load_dir or not os.path.exists(args.load_dir):
+            raise ValueError(f"--load-dir must be provided and exist for diagnose mode. Path: {args.load_dir}")
+            
+        model_dir = os.path.abspath(args.load_dir)
+        if args.debug:
+            print(f"Diagnosing model from directory: {model_dir}")
+
+        # Load the model and its trace
+        elections_model = load_model(
+            directory=model_dir,
+            debug=args.debug,
+            # Pass arguments explicitly
+            election_date=args.election_date, # Pass command-line args or default handled inside load_model
+            baseline_timescales=args.baseline_timescale, 
+            election_timescales=args.election_timescale
+        )
+
+        if elections_model is None:
+            print(f"Failed to load model from {model_dir}")
+            return
+            
+        if elections_model.trace is None:
+            print(f"No trace found in {model_dir}. Cannot generate diagnostics.")
+            return
+
+        # Define output directory for plots within the loaded model's directory
+        diag_plot_dir = os.path.join(model_dir, "diagnostics")
+        os.makedirs(diag_plot_dir, exist_ok=True)
+        
+        print(f"Generating diagnostic plots for trace loaded from {model_dir}")
+        elections_model.generate_diagnostic_plots(diag_plot_dir)
+
+        print(f"Diagnostic plots saved to {diag_plot_dir}")
+
+    except Exception as e:
+        print(f"Error during model diagnosis: {e}")
+        if args.debug:
+            traceback.print_exc()
+        return None
+
 def main(args=None):
     parser = argparse.ArgumentParser(description="Election Model CLI")
     parser.add_argument(
         "--mode",
-        choices=["train", "predict", "predict-history", "retrodictive", "nowcast", "cross-validate", "viz", "visualize-data"],
+        choices=["train", "predict", "predict-history", "retrodictive", "nowcast", "cross-validate", "viz", "visualize-data", "diagnose"],
         required=True,
         help="Operation mode",
     )
@@ -560,6 +624,12 @@ def main(args=None):
     if args.mode == "predict" and not args.load_dir:
         parser.error("--load-dir is required for predict mode")
         
+    if args.mode == "viz" and not args.load_dir:
+        parser.error("--load-dir is required for viz mode")
+        
+    if args.mode == "diagnose" and not args.load_dir:
+        parser.error("--load-dir is required for diagnose mode")
+    
     # Run the selected mode
     try:
         if args.mode == "train":
@@ -575,12 +645,11 @@ def main(args=None):
         elif args.mode == "cross-validate":
             cross_validate(args)
         elif args.mode == "viz":
-            if not args.load_dir:
-                parser.error("--load-dir is required for viz mode")
             visualize(args)
-        # Add the new mode execution
         elif args.mode == "visualize-data":
             visualize_data(args)
+        elif args.mode == "diagnose":
+            diagnose_model(args)
     except Exception as e:
         print(f"Error: {e}")
         if args.debug:

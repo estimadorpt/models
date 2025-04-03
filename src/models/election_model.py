@@ -190,208 +190,81 @@ class ElectionModel:
             # --------------------------------------------------------
             #                   BASELINE COMPONENTS
             # --------------------------------------------------------
-            party_baseline_raw = pm.Normal(
-                "party_baseline_raw",
-                0.0,
-                1.0,
-                dims="parties_complete",
-            )
-
-            # More flexibility for party baseline standard deviation - further increased
-            party_baseline_sd = pm.HalfNormal("party_baseline_sd", sigma=0.5)  # Increased from 0.4
             party_baseline = pm.ZeroSumNormal(
-                "party_baseline", sigma=party_baseline_sd, dims="parties_complete"
+                "party_baseline", sigma=0.5, dims="parties_complete" # Simpler prior for now
             )
 
             # Count actual number of elections in the dataset for proper dimensioning
             num_elections = len(self.dataset.historical_election_dates)
             print(f"Setting election dimensions to match historical elections: {num_elections}")
-            
-            # Election-specific party baseline.
-            # Represents election-specific deviation from party baseline
-            election_party_baseline_raw = pm.Normal(
-                "election_party_baseline_raw",
-                0.0,
-                1.0,
-                dims=("elections", "parties_complete"),
-            )
 
-            # Increased flexibility for election-party effects
-            election_party_baseline_sd = pm.HalfNormal("election_party_baseline_sd", sigma=0.3)  # Increased from 0.2
+            # Election-specific party baseline. TIGHTER fixed prior.
+            # election_party_baseline_sd = pm.HalfNormal("election_party_baseline_sd", sigma=0.3) # Removed hierarchical SD
             election_party_baseline = pm.ZeroSumNormal(
                 "election_party_baseline",
-                sigma=election_party_baseline_sd,
+                # sigma=election_party_baseline_sd, # Old
+                sigma=0.15, # New: Fixed, smaller sigma
                 dims=("elections", "parties_complete"),
-                shape=(num_elections, len(self.dataset.political_families))  # Explicitly set shape
+                shape=(num_elections, len(self.dataset.political_families))
             )
 
             # --------------------------------------------------------
-            #               TIME-VARYING COMPONENTS
+            #               TIME-VARYING COMPONENTS (Election Specific GP)
             # --------------------------------------------------------
 
-            # Loop over baseline timescales and sum their contributions
-            baseline_gp_contributions = []
-            for i, baseline_lengthscale in enumerate(self.gp_config["baseline_lengthscale"]):
-                cov_func_baseline = pm.gp.cov.Matern52(input_dim=1, ls=baseline_lengthscale)
-                gp_baseline = pm.gp.HSGP(cov_func=cov_func_baseline, m=[20], c=2.0)
-                phi_baseline, sqrt_psd_baseline = gp_baseline.prior_linearized(X=self.coords["countdown"][:, None])
+            # Use only the FIRST baseline timescale
+            baseline_lengthscale = self.gp_config["baseline_lengthscale"][0]
+            print(f"Using single baseline timescale: {baseline_lengthscale}")
 
-                coord_name = f"gp_basis_baseline_{i}"
-                if coord_name not in model.coords:
-                    model.add_coords({coord_name: np.arange(gp_baseline.n_basis_vectors)})
+            cov_func_baseline = pm.gp.cov.Matern52(input_dim=1, ls=baseline_lengthscale)
+            gp_baseline = pm.gp.HSGP(cov_func=cov_func_baseline, m=[20], c=2.0)
+            phi_baseline, sqrt_psd_baseline = gp_baseline.prior_linearized(X=self.coords["countdown"][:, None])
 
-                gp_coef_baseline = pm.Normal(
-                    f"gp_coef_baseline_{baseline_lengthscale}",
-                    mu=0,
-                    sigma=1,
-                    dims=(coord_name, "parties_complete")
-                )
+            coord_name = f"gp_basis_baseline" # Simplified name
+            if coord_name not in model.coords:
+                model.add_coords({coord_name: np.arange(gp_baseline.n_basis_vectors)})
 
-                baseline_contrib = pm.Deterministic(
-                    f"party_time_effect_baseline_{baseline_lengthscale}",
-                    pt.dot(phi_baseline, gp_coef_baseline * sqrt_psd_baseline[:, None]),
-                    dims=("countdown", "parties_complete")
-                )
-                baseline_gp_contributions.append(baseline_contrib)
+            gp_coef_baseline = pm.Normal(
+                f"gp_coef_baseline", # Simplified name
+                mu=0,
+                sigma=1,
+                # dims=(coord_name, "parties_complete") # Old dims
+                dims=("elections", coord_name, "parties_complete") # New dims with elections
+            )
 
-            # Sum the contributions from different baseline timescales
             party_time_effect = pm.Deterministic(
-                "party_time_effect",
-                sum(baseline_gp_contributions),
-                dims=("countdown", "parties_complete")
+                f"party_time_effect", # Simplified name
+                # pt.dot(phi_baseline, gp_coef_baseline * sqrt_psd_baseline[:, None]), # Old calc
+                pt.einsum('cb,ebp->ecp',
+                          phi_baseline, # shape (countdown, gp_basis)
+                          gp_coef_baseline * sqrt_psd_baseline[:, None] # shape (elections, gp_basis, parties_complete)
+                         ),
+                # dims=("countdown", "parties_complete") # Old dims
+                dims=("elections", "countdown", "parties_complete") # New dims
             )
 
-            # Weights for baseline component
-            lsd_baseline = pm.Normal("lsd_baseline", mu=-1.8, sigma=0.4)  # Increased from 0.3
-            lsd_party_effect = pm.ZeroSumNormal(
-                "lsd_party_effect_party_amplitude",
-                sigma=0.15,  # Increased from 0.1
-                dims="parties_complete",
-            )
-            party_time_weight = pm.Deterministic(
-                "party_time_weight",
-                pt.exp(lsd_baseline + lsd_party_effect),
-                dims="parties_complete"
-            )
-            party_time_effect_weighted = pm.Deterministic(
-                "party_time_effect_weighted",
-                party_time_effect * party_time_weight[None, :],
-                dims=("countdown", "parties_complete")
-            )
-
-            # Loop over election timescales and sum their contributions
-            election_gp_contributions = []
-            for i, election_lengthscale in enumerate(self.gp_config["election_lengthscale"]):
-                cov_func_election = pm.gp.cov.Matern52(input_dim=1, ls=election_lengthscale)
-                gp_election = pm.gp.HSGP(cov_func=cov_func_election, m=[20], c=2.0)
-                phi_election, sqrt_psd_election = gp_election.prior_linearized(X=self.coords["countdown"][:, None])
-
-                coord_name = f"gp_basis_election_{i}"
-                if coord_name not in model.coords:
-                    model.add_coords({coord_name: np.arange(gp_election.n_basis_vectors)})
-
-                gp_coef_election = pm.Normal(
-                    f"gp_coef_election_{election_lengthscale}",
-                    mu=0,
-                    sigma=1,
-                    dims=(coord_name, "parties_complete", "elections")
-                )
-
-                election_contrib = pm.Deterministic(
-                    f"election_party_time_effect_{election_lengthscale}",
-                    pt.tensordot(phi_election, gp_coef_election * sqrt_psd_election[:, None, None], axes=(1, 0)),
-                    dims=("countdown", "parties_complete", "elections")
-                )
-                election_gp_contributions.append(election_contrib)
-
-            # Sum the contributions from different election timescales
-            election_party_time_effect = pm.Deterministic(
-                "election_party_time_effect",
-                sum(election_gp_contributions),
-                dims=("countdown", "parties_complete", "elections")
-            )
-
-            # Weights for election-specific component
-            lsd_party_effect_election = pm.ZeroSumNormal(
-                "lsd_party_effect_election_party_amplitude",
-                sigma=0.15,  # Increased from 0.1
-                dims="parties_complete",
-            )
-            lsd_election_effect = pm.ZeroSumNormal(
-                "lsd_election_effect",
-                sigma=0.15,  # Increased from 0.1
-                dims="elections"
-            )
-            lsd_election_party_sd = pm.HalfNormal(
-                "lsd_election_party_sd", sigma=0.3  # Increased from 0.2
-            )
-            lsd_election_party_effect = pm.ZeroSumNormal(
-                "lsd_election_party_effect",
-                sigma=lsd_election_party_sd,
-                dims=("parties_complete", "elections"),
-                n_zerosum_axes=2
-            )
-
-            election_party_time_weight = pm.Deterministic(
-                "election_party_time_weight",
-                pt.exp(
-                    lsd_party_effect_election[:, None]
-                    + lsd_election_effect[None, :]
-                    + lsd_election_party_effect
-                ),
-                dims=("parties_complete", "elections")
-            )
-            election_party_time_effect_weighted = pm.Deterministic(
-                "election_party_time_effect_weighted",
-                election_party_time_effect * election_party_time_weight[None, :, :],
-                dims=("countdown", "parties_complete", "elections")
-            )
+            # Removed party_time_weight for simplicity
+            party_time_effect_weighted = party_time_effect # Directly use the effect
 
             # --------------------------------------------------------
-            #                        HOUSE EFFECTS & POLL BIAS
+            #          HOUSE EFFECTS & POLL BIAS (Removed)
             # --------------------------------------------------------
-
-            poll_bias = pm.ZeroSumNormal(
-                "poll_bias",
-                sigma=0.20,
-                dims="parties_complete",
-            )
-
-            house_effects = pm.ZeroSumNormal(
-                "house_effects",
-                sigma=0.15,
-                dims=("pollsters", "parties_complete"),
-            )
-
-            house_election_effects_sd = pm.HalfNormal(
-                "house_election_effects_sd",
-                sigma=0.1,  # Increased from 0.1
-                dims=("pollsters", "parties_complete"),
-            )
-            house_election_effects_raw = pm.ZeroSumNormal(
-                "house_election_effects_raw",
-                dims=("pollsters", "parties_complete", "elections"),
-            )
-            house_election_effects = pm.Deterministic(
-                "house_election_effects",
-                house_election_effects_sd[..., None] * house_election_effects_raw,
-                dims=("pollsters", "parties_complete", "elections"),
-            )
+            # Removed poll_bias
+            # Removed house_effects
+            # Removed house_election_effects
 
             # --------------------------------------------------------
             #                      POLL RESULTS
             # --------------------------------------------------------
 
-            # Compute latent_mu
+            # Compute latent_mu (Using election-specific GP)
             latent_mu = pm.Deterministic(
                 "latent_mu",
                 (
                     party_baseline[None, :]
-                    + election_party_baseline[data_containers["election_idx"]]
-                    + party_time_effect_weighted[data_containers["countdown_idx"]]
-                    + election_party_time_effect_weighted[
-                        data_containers["countdown_idx"], :, data_containers["election_idx"]
-                    ]
+                    + election_party_baseline[data_containers["election_idx"]] # Re-added baseline
+                    # Index election-specific GP effect
+                    + party_time_effect_weighted[data_containers["election_idx"], data_containers["countdown_idx"]]
                     + data_containers['non_competing_polls_additive']
                 ),
                 dims=("observations", "parties_complete")
@@ -404,16 +277,16 @@ class ElectionModel:
                 dims=("observations", "parties_complete"),
             )
 
+            # noisy_mu is now simpler without house effects/bias
             noisy_mu = pm.Deterministic(
                 "noisy_mu",
                 (
                     latent_mu
-                    + poll_bias[None, :]
-                    + house_effects[data_containers["pollster_idx"]]
-                    + house_election_effects[
-                        data_containers["pollster_idx"], :, data_containers["election_idx"]
-                    ]
+                    # Removed poll_bias
+                    # Removed house_effects
+                    # Removed house_election_effects
                 ) * data_containers['non_competing_polls_multiplicative'],
+                 # Note: non_competing_polls_multiplicative handles zeroing out non-competing parties
                 dims=("observations", "parties_complete")
             )
 
@@ -424,23 +297,9 @@ class ElectionModel:
                 dims=("observations", "parties_complete"),
             )
 
-            # The concentration parameter of a Dirichlet-Multinomial distribution
-            # Parameterize log-normal to match desired mean and standard deviation
-            desired_mean_polls = 1000  # Your intuitive "sample size" interpretation
-            desired_sd_polls = 100     # Uncertainty around this mean
-            
-            # Parameterize log-normal to match desired mean and standard deviation
-            log_mean_polls = np.log(desired_mean_polls) - 0.5 * np.log(1 + (desired_sd_polls/desired_mean_polls)**2)
-            log_sd_polls = np.sqrt(np.log(1 + (desired_sd_polls/desired_mean_polls)**2))
-            
-            # Define the log-normal prior
-            log_concentration_polls = pm.Normal("log_concentration_polls", 
-                                                mu=log_mean_polls, 
-                                                sigma=log_sd_polls)
-                                                
-            # Transform back to natural scale
-            concentration_polls = pm.Deterministic("concentration_polls", 
-                                                   pt.exp(log_concentration_polls))
+            # Use Gamma priors for concentration parameters based on ESS intuition
+            # For polls: Mean=1000, SD=100 -> alpha=100, beta=0.1
+            concentration_polls = pm.Gamma("concentration_polls", alpha=100, beta=0.1)
 
             # Generate counts from Dirichlet-Multinomial
             N_approve = pm.DirichletMultinomial(
@@ -455,18 +314,37 @@ class ElectionModel:
             #                    ELECTION RESULTS
             # --------------------------------------------------------
 
-            # Compute latent_mu_t0
+            # Compute latent_mu_t0 (Using election-specific GP)
             latent_mu_t0 = pm.Deterministic(
                 "latent_mu_t0",
                 (
                     party_baseline[None, :]
-                    + election_party_baseline
-                    + party_time_effect_weighted[0]
-                    + election_party_time_effect_weighted[0].transpose((1, 0))
+                    + election_party_baseline # Re-added baseline
+                    + party_time_effect_weighted[:, 0] # Effect at election day (t=0) for all elections
                     + data_containers['non_competing_parties_results']
                 ),
                 dims=("elections", "parties_complete")
             )
+
+            # --- Define the FULL latent popularity trajectory over elections and countdown ---
+            latent_popularity_full_trajectory_mu = pm.Deterministic(
+                "latent_popularity_full_trajectory_mu",
+                (
+                     party_baseline[None, None, :]
+                     + election_party_baseline[:, None, :] # Broadcast elections
+                     + party_time_effect_weighted # Already has (elections, countdown, parties_complete)
+                ),
+                 # Ensure non_competing_parties_additive handled if needed
+                 # Currently non_competing handled later or assumed 0 for full trajectory
+                dims=("elections", "countdown", "parties_complete")
+            )
+
+            latent_popularity_trajectory = pm.Deterministic(
+                "latent_popularity_trajectory",
+                pt.special.softmax(latent_popularity_full_trajectory_mu, axis=2), # Softmax over parties_complete
+                dims=("elections", "countdown", "parties_complete")
+            )
+            # --- End full trajectory definition ---
 
             # Apply softmax over parties for each observation
             latent_pop_t0 = pm.Deterministic(
@@ -475,22 +353,9 @@ class ElectionModel:
                 dims=("elections", "parties_complete"),
             )
 
-            # Parameterize log-normal to match desired mean and standard deviation
-            desired_mean_results = 2000  # Your intuitive "sample size" interpretation
-            desired_sd_results = 200     # Uncertainty around this mean
-            
-            # Parameterize log-normal to match desired mean and standard deviation
-            log_mean_results = np.log(desired_mean_results) - 0.5 * np.log(1 + (desired_sd_results/desired_mean_results)**2)
-            log_sd_results = np.sqrt(np.log(1 + (desired_sd_results/desired_mean_results)**2))
-            
-            # Define the log-normal prior
-            log_concentration_results = pm.Normal("log_concentration_results", 
-                                                mu=log_mean_results, 
-                                                sigma=log_sd_results)
-                                                
-            # Transform back to natural scale
-            concentration_results = pm.Deterministic("concentration_results", 
-                                                   pt.exp(log_concentration_results))
+            # Use Gamma priors for concentration parameters based on ESS intuition
+            # For results: Mean=2000, SD=200 -> alpha=100, beta=0.05
+            concentration_results = pm.Gamma("concentration_results", alpha=100, beta=0.05)
 
             # DirichletMultinomial for the observed results
             R = pm.DirichletMultinomial(
@@ -556,12 +421,6 @@ class ElectionModel:
                 n_divergent = trace.sample_stats.diverging.sum().item()
                 if n_divergent > 0:
                     print(f"WARNING: {n_divergent} divergent transitions detected")
-                
-                # Check energy fraction - should be close to 0.5 for good mixing
-                energy = trace.sample_stats.energy
-                energy_frac = np.mean(np.abs(energy - np.mean(energy)) / np.std(energy) > 0.2)
-                if energy_frac > 0.1:
-                    print(f"WARNING: Energy fraction {energy_frac:.2f} indicates potential issues with energy conservation")
                 
                 # Check if any parameters hit max tree depth frequently
                 if 'tree_depth' in trace.sample_stats:
@@ -873,23 +732,8 @@ class ElectionModel:
             party_baseline = pm.Flat("party_baseline", dims="parties_complete")
             party_baseline_sd = pm.Flat("party_baseline_sd")
             
-            election_party_baseline = pm.Flat("election_party_baseline", dims=("elections", "parties_complete"))
-            election_party_baseline_sd = pm.Flat("election_party_baseline_sd")
-            
             # Time components
             party_time_effect_weighted = pm.Flat("party_time_effect_weighted", dims=("countdown", "parties_complete"))
-            election_party_time_effect_weighted = pm.Flat(
-                "election_party_time_effect_weighted", 
-                dims=("countdown", "parties_complete", "elections")
-            )
-            
-            # Poll bias and house effects
-            poll_bias = pm.Flat("poll_bias", dims="parties_complete")
-            house_effects = pm.Flat("house_effects", dims=("pollsters", "parties_complete"))
-            house_election_effects = pm.Flat(
-                "house_election_effects", 
-                dims=("pollsters", "parties_complete", "elections")
-            )
             
             # Concentration parameter
             concentration_polls = pm.Flat("concentration_polls")
@@ -915,9 +759,7 @@ class ElectionModel:
                 "latent_mu",
                 (
                     party_baseline[None, :]
-                    + election_party_baseline[election_idx]
                     + party_time_effect_weighted[countdown_idx]
-                    + election_party_time_effect_weighted[countdown_idx, :, election_idx]
                     + non_competing_add
                 ),
                 dims=("observations", "parties_complete")
@@ -935,9 +777,6 @@ class ElectionModel:
                 "noisy_mu",
                 (
                     latent_mu
-                    + poll_bias[None, :]
-                    + house_effects[pollster_idx]
-                    + house_election_effects[pollster_idx, :, election_idx]
                 ) * non_competing_mult,
                 dims=("observations", "parties_complete")
             )
@@ -982,9 +821,9 @@ class ElectionModel:
                 
             # Debug: Check which variables could be found in posterior
             needed_vars = [
-                "party_baseline", "election_party_baseline", "party_time_effect_weighted",
-                "election_party_time_effect_weighted", "poll_bias", "house_effects",
-                "house_election_effects", "concentration_polls"
+                "party_baseline",
+                "party_time_effect_weighted",
+                "concentration_polls"
             ]
             for var in needed_vars:
                 if var in idata.posterior:

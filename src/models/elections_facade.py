@@ -2,6 +2,8 @@ import os
 from typing import Dict, List, Tuple, Optional
 
 import arviz
+import arviz as az
+import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import xarray as xr
@@ -115,13 +117,9 @@ class ElectionsFacade:
         var_names = [
             "party_baseline",
             "election_party_baseline",
-            "poll_bias",
-            "house_effects",
-            "house_election_effects",
-            "party_time_effect_weighted",
-            "latent_popularity",
+            "party_time_effect",
+            "latent_popularity_trajectory",
             "noisy_popularity",
-            "election_party_time_effect_weighted",
             "N_approve",
             "R"
         ]
@@ -130,6 +128,7 @@ class ElectionsFacade:
         sampler_kwargs['draws'] = draws
         sampler_kwargs['tune'] = tune
         sampler_kwargs['target_accept'] = target_accept
+        sampler_kwargs['max_treedepth'] = 15 # Increase max tree depth
         
         self.prior, self.trace, self.posterior = self.model.sample_all(
             var_names=var_names,
@@ -232,15 +231,6 @@ class ElectionsFacade:
                             print("Parameters with high R-hat that might be related to divergences:")
                             print(high_rhat[['mean', 'sd', 'hdi_3%', 'hdi_97%', 'r_hat']])
                 
-                # Check energy statistics
-                if 'energy' in trace.sample_stats:
-                    energy = trace.sample_stats.energy
-                    energy_diff = np.abs(energy - np.mean(energy)) / np.std(energy)
-                    energy_frac = np.mean(energy_diff > 0.2)
-                    print(f"Energy fraction: {energy_frac:.3f} (should be close to 0.1 for good mixing)")
-                    if energy_frac > 0.3:
-                        print("WARNING: Energy fraction is high, indicating potential sampling issues")
-
                 # Check for tree depth issues
                 if 'tree_depth' in trace.sample_stats:
                     max_treedepth = trace.sample_stats.attrs.get('max_treedepth', 10)
@@ -252,7 +242,7 @@ class ElectionsFacade:
                             print("Consider increasing max_treedepth in sampler parameters")
                 
                 # Compute ESS and R-hat for key parameters
-                key_params = ['party_baseline', 'election_party_baseline', 'party_time_effect_weighted',
+                key_params = ['party_baseline', 'election_party_baseline', 'party_time_effect',
                             'concentration_polls', 'concentration_results', 'lsd_baseline',
                             'party_time_weight', 'house_effects_sd', 'log_concentration_polls',
                             'log_concentration_results']
@@ -331,7 +321,7 @@ class ElectionsFacade:
                 return True
         
         # The most basic check - do we have non-NaN values for key parameters?
-        key_params = ['party_baseline', 'election_party_baseline', 'party_time_effect_weighted']
+        key_params = ['party_baseline', 'election_party_baseline', 'party_time_effect']
         
         for param in key_params:
             if param in self.trace.posterior:
@@ -911,3 +901,98 @@ class ElectionsFacade:
         # retrodictive_plot(posterior, self.dataset.observed_data, self.trace, self.output_dir)
         
         return posterior, coords, dims 
+
+    def generate_diagnostic_plots(self, directory: str = "."):
+        """
+        Generate and save arviz diagnostic plots for the trace.
+        
+        Parameters:
+        -----------
+        directory : str
+            Directory where to save the plots.
+        """
+        if self.trace is None:
+            print("Trace object not found. Cannot generate diagnostic plots.")
+            return
+            
+        os.makedirs(directory, exist_ok=True)
+        print(f"Generating diagnostic plots in: {directory}")
+        
+        # Key parameters to focus on (avoid plotting too many)
+        key_params = [
+            'party_baseline', 
+            'election_party_baseline_sd',
+            'election_party_baseline',
+            'gp_coef_baseline', 
+            'concentration_polls', 
+            'concentration_results'
+        ]
+        plot_vars = [p for p in key_params if p in self.trace.posterior]
+
+        # 1. Trace Plot (for key parameters)
+        try:
+            trace_plot_path = os.path.join(directory, "diagnostic_trace_plot.png")
+            print(f"- Generating trace plot for key parameters...")
+            az.plot_trace(self.trace, var_names=plot_vars)
+            plt.savefig(trace_plot_path)
+            plt.close()
+            print(f"  Saved trace plot to {trace_plot_path}")
+        except Exception as e:
+            print(f"  Error generating trace plot: {e}")
+
+        # 2. Energy Plot
+        try:
+            energy_plot_path = os.path.join(directory, "diagnostic_energy_plot.png")
+            print(f"- Generating energy plot...")
+            az.plot_energy(self.trace)
+            plt.savefig(energy_plot_path)
+            plt.close()
+            print(f"  Saved energy plot to {energy_plot_path}")
+        except Exception as e:
+            print(f"  Error generating energy plot: {e}")
+
+        # 3. Pair Plot (for a smaller subset, e.g., baseline parameters)
+        try:
+            pair_plot_vars = [p for p in ['party_baseline', 'election_party_baseline_sd', 'concentration_polls', 'concentration_results'] if p in self.trace.posterior]
+            if pair_plot_vars:
+                pair_plot_path = os.path.join(directory, "diagnostic_pair_plot.png")
+                print(f"- Generating pair plot for {pair_plot_vars}...")
+                az.plot_pair(self.trace, var_names=pair_plot_vars, divergences=True)
+                plt.savefig(pair_plot_path)
+                plt.close()
+                print(f"  Saved pair plot to {pair_plot_path}")
+        except Exception as e:
+            print(f"  Error generating pair plot: {e}")
+            
+        # 4. ESS Plot
+        try:
+            ess_plot_path = os.path.join(directory, "diagnostic_ess_plot.png")
+            print(f"- Generating ESS plot...")
+            az.plot_ess(self.trace, var_names=plot_vars, kind="evolution")
+            plt.savefig(ess_plot_path)
+            plt.close()
+            az.plot_ess(self.trace, var_names=plot_vars, kind="local")
+            plt.savefig(ess_plot_path.replace(".png", "_local.png"))
+            plt.close()
+            print(f"  Saved ESS plots to {directory}")
+        except Exception as e:
+            print(f"  Error generating ESS plot: {e}")
+            
+        # 5. R-hat Plot
+        try:
+            rhat_plot_path = os.path.join(directory, "diagnostic_rhat_plot.png")
+            print(f"- Generating R-hat plot...")
+            az.plot_rank(self.trace, var_names=plot_vars)
+            plt.savefig(rhat_plot_path)
+            plt.close()
+            print(f"  Saved R-hat plot to {rhat_plot_path}")
+        except Exception as e:
+            print(f"  Error generating R-hat plot: {e}")
+            
+        print("Diagnostic plot generation complete.")
+
+    # TODO: Implement post-hoc adjustment for Blank/Null votes 
+    #       when generating final forecasts (e.g., for seat projections). 
+    #       The current model output represents shares among modeled parties.
+    #       This adjustment step would estimate the Blank/Null share and 
+    #       renormalize the modeled party shares to represent shares of valid votes. 

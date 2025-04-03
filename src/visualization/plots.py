@@ -2,6 +2,13 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 from src.data.dataset import ElectionDataset
+import os
+import numpy as np
+import xarray as xr
+import arviz as az
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from src.models.elections_facade import ElectionsFacade
 
 def plot_election_data(dataset: ElectionDataset):
     """
@@ -158,22 +165,387 @@ def plot_election_data(dataset: ElectionDataset):
         plt.tight_layout()
         plt.show()
 
-# Example Usage (requires creating a dataset object first)
-# if __name__ == '__main__':
-#     # Create a dummy dataset object for testing - replace with actual dataset creation
-#     # This requires your ElectionDataset class and data loading functions to be accessible
-#     try:
-#         # Assuming your dataset script is runnable and can create an object
-#         # You might need to adjust paths or parameters
-#         from src.config import ELECTION_DATE, BASELINE_TIMESCALE, ELECTION_TIMESCALE, TEST_CUTOFF
-#         dataset = ElectionDataset(
-#             election_date=ELECTION_DATE, 
-#             baseline_timescales=BASELINE_TIMESCALE, 
-#             election_timescales=ELECTION_TIMESCALE,
-#             test_cutoff=TEST_CUTOFF
-#         )
-#         plot_election_data(dataset)
-#     except ImportError as e:
-#         print(f"Could not import ElectionDataset or config. Make sure paths are correct. Error: {e}")
-#     except Exception as e:
-#         print(f"An error occurred during dataset creation or plotting: {e}") 
+def plot_latent_popularity_vs_polls(elections_model: 'ElectionsFacade', output_dir: str):
+    """
+    Generates and saves plots comparing estimated latent popularity (mean + HDI) 
+    against raw poll data for each historical election cycle.
+
+    Parameters:
+    ----------
+    elections_model : ElectionsFacade
+        The facade object containing the dataset and inference trace.
+    output_dir : str
+        The directory where the plots will be saved.
+    """
+    print(f"Generating latent popularity vs polls plots in: {output_dir}")
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Use the new variable name
+    target_var = "latent_popularity_trajectory"
+
+    if elections_model.trace is None or target_var not in elections_model.trace.posterior:
+        print(f"Error: Trace data or '{target_var}' not found in the model.")
+        # Optionally, print available variables for debugging
+        if elections_model.trace is not None:
+            print(f"Available variables in trace.posterior: {list(elections_model.trace.posterior.keys())}")
+        return
+
+    dataset = elections_model.dataset
+    trace_posterior = elections_model.trace.posterior
+    latent_pop_data = trace_posterior[target_var] # Use the target variable
+    political_families = dataset.political_families
+    historical_election_dates = dataset.historical_election_dates
+
+    # Ensure trace coordinates match dataset elections
+    if not set(historical_election_dates).issubset(set(latent_pop_data['elections'].values)):
+         print("Warning: Mismatch between historical election dates in dataset and trace coordinates.")
+         # Use elections available in both
+         common_elections = sorted(list(set(historical_election_dates) & set(latent_pop_data['elections'].values)))
+         if not common_elections:
+             print("Error: No common election dates found between dataset and trace.")
+             return
+         print(f"Plotting for common elections: {common_elections}")
+         elections_to_plot = common_elections
+    else:
+         elections_to_plot = sorted(historical_election_dates)
+
+
+    for idx, election_date_str in enumerate(elections_to_plot):
+        election_date_dt = pd.to_datetime(election_date_str)
+        print(f"  - Plotting for election: {election_date_str}")
+
+        # Determine the start date for the plot
+        if idx == 0: # First election in the list
+            # Default to 2 years before election day
+            plot_start_date = election_date_dt - pd.Timedelta(days=365*2) 
+        else:
+            # Use the date of the previous election
+            previous_election_str = elections_to_plot[idx-1]
+            plot_start_date = pd.to_datetime(previous_election_str)
+        print(f"    Plotting data from: {plot_start_date.date()}")
+
+        # --- Debug: Print structure before access ---
+        # Use the correct variable for debugging
+        print(f"    Structure of trace_posterior[{target_var}]:") 
+        print(f"      Coords: {latent_pop_data.coords}")
+        print(f"      Dims: {latent_pop_data.dims}")
+        # --- End Debug ---
+
+        try:
+            # Select latent popularity for the specific election using the correct variable
+            latent_pop_election = latent_pop_data.sel(elections=election_date_str)
+            
+            # Calculate mean and HDI across chains and draws
+            mean_latent_pop = latent_pop_election.mean(dim=["chain", "draw"])
+            hdi_latent_pop = az.hdi(latent_pop_election, hdi_prob=0.94) # Results in xarray with 'hdi' coord
+
+            # Get countdown values and convert to full date range
+            countdown_values = latent_pop_election.coords["countdown"].values
+            # Reverse countdown to get dates relative to election_date
+            dates = election_date_dt - pd.to_timedelta(countdown_values, unit='D') 
+            
+            # --- Filter dates and corresponding data based on plot_start_date ---
+            date_mask = dates >= plot_start_date
+            filtered_dates = dates[date_mask]
+            if len(filtered_dates) == 0:
+                print(f"    Skipping {election_date_str}: No trajectory data after {plot_start_date.date()}")
+                continue
+            # --- End Filter --- 
+
+            # Filter polls for this specific election cycle AND date range
+            cycle_polls = dataset.polls[dataset.polls['election_date'] == election_date_dt].copy()
+            filtered_cycle_polls = cycle_polls[cycle_polls['date'] >= plot_start_date]
+            # Note: No need to print skip message here, as we might still plot the trajectory even if no polls in the window
+            
+            # Convert poll percentages (using filtered polls) to 0-1 if needed
+            if not filtered_cycle_polls.empty and filtered_cycle_polls[political_families].max().max() > 1.1: 
+                 print(f"    Converting poll percentages from 0-100 to 0-1 for {election_date_str}")
+                 for party in political_families:
+                     # Apply conversion only to the filtered df to avoid modifying original data elsewhere
+                     filtered_cycle_polls[party] = filtered_cycle_polls[party] / 100.0
+            
+            # --- Create the plot for this election ---
+            fig, ax = plt.subplots(figsize=(15, 8))
+            
+            colors = plt.cm.tab10(np.linspace(0, 1, len(political_families)))
+
+            # --- Renormalize poll data for plotting --- 
+            renormalized_polls = filtered_cycle_polls.copy()
+            modeled_parties_sum = renormalized_polls[political_families].sum(axis=1)
+            # Avoid division by zero if sum is zero (e.g., very old polls with no modeled parties)
+            modeled_parties_sum = modeled_parties_sum.replace(0, np.nan)
+            for party in political_families:
+                renormalized_polls[party] = renormalized_polls[party] / modeled_parties_sum
+            # --- End Renormalization ---
+
+            for i, party in enumerate(political_families):
+                color = colors[i]
+                
+                # Extract party data from calculated mean and HDI
+                mean_party = mean_latent_pop.sel(parties_complete=party)
+                # Access the DataArray within the HDI Dataset first
+                hdi_da = hdi_latent_pop['latent_popularity_trajectory']
+                # Now select the party and HDI bounds from the DataArray
+                hdi_party_lower = hdi_da.sel(parties_complete=party, hdi='lower')
+                hdi_party_higher = hdi_da.sel(parties_complete=party, hdi='higher')
+
+                # Apply date mask to the numpy arrays for this party
+                filtered_mean_party = mean_party.values[date_mask]
+                filtered_hdi_lower = hdi_party_lower.values[date_mask]
+                filtered_hdi_higher = hdi_party_higher.values[date_mask]
+
+                # Plot mean latent popularity (filtered)
+                ax.plot(filtered_dates, filtered_mean_party, label=party, color=color, lw=2)
+                
+                # Plot HDI region (filtered)
+                ax.fill_between(filtered_dates, filtered_hdi_lower, filtered_hdi_higher, color=color, alpha=0.2)
+
+                # Plot raw polls for this party (filtered and RENORMALIZED)
+                # Use the renormalized_polls DataFrame
+                polls_party = renormalized_polls[['date', party]].dropna()
+                if not polls_party.empty:
+                    ax.scatter(polls_party['date'], polls_party[party], color=color, alpha=0.6, s=15, label=f'_nolegend_')
+
+            # Add election day vertical line
+            ax.axvline(election_date_dt, color='black', linestyle='--', linewidth=1.5, label='Election Day')
+
+            ax.set_title(f'Latent Popularity vs Polls - Election {election_date_str}')
+            ax.set_xlabel('Date')
+            ax.set_ylabel('Vote Percentage')
+            ax.legend(title='Party', bbox_to_anchor=(1.05, 1), loc='upper left')
+            ax.grid(True, which='major', linestyle='--', linewidth=0.5)
+            ax.set_ylim(0, None) # Start y-axis at 0
+            
+            # Set x-axis limits based on filtered dates
+            ax.set_xlim(left=plot_start_date, right=election_date_dt + pd.Timedelta(days=10))
+            
+            # Improve date formatting on x-axis
+            fig.autofmt_xdate() 
+
+            plt.tight_layout(rect=[0, 0, 0.85, 1]) # Adjust layout for legend
+            
+            # Save the figure
+            plot_filename = os.path.join(output_dir, f"latent_vs_polls_{election_date_str}.png")
+            plt.savefig(plot_filename, dpi=150)
+            plt.close(fig) # Close the figure to free memory
+            print(f"    Saved plot: {plot_filename}")
+
+        except KeyError as e:
+             # Improved error message
+             print(f"    Skipping {election_date_str}: KeyError encountered. Variable/Coord causing error: {e}.")
+             print(f"    Check if '{e}' exists in latent_pop_election or hdi_latent_pop structure shown above.")
+        except Exception as e:
+             print(f"    Failed to plot {election_date_str}: {e}")
+             import traceback
+             traceback.print_exc() # Print full traceback for debugging
+
+    print("Finished generating latent popularity plots.")
+
+def plot_latent_component_contributions(elections_model: 'ElectionsFacade', output_dir: str):
+    """
+    Generates and saves plots showing the pre-softmax component contributions 
+    (baseline, election baseline, time effect) to the latent popularity trajectory 
+    for each party and historical election cycle.
+
+    Parameters:
+    ----------
+    elections_model : ElectionsFacade
+        The facade object containing the dataset and inference trace.
+    output_dir : str
+        The directory where the plots will be saved.
+    """
+    print(f"Generating latent component contribution plots in: {output_dir}")
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Check required variables
+    required_vars = ["party_baseline", "election_party_baseline", "party_time_effect"]
+    if elections_model.trace is None:
+        print("Error: Trace data not found.")
+        return
+    trace_posterior = elections_model.trace.posterior
+    for var in required_vars:
+        if var not in trace_posterior:
+            print(f"Error: Required variable '{var}' not found in trace posterior.")
+            print(f"Available variables: {list(trace_posterior.keys())}")
+            return
+
+    dataset = elections_model.dataset
+    political_families = dataset.political_families
+    historical_election_dates = dataset.historical_election_dates
+
+    # Get coordinate data once
+    party_baseline_mean = trace_posterior.party_baseline.mean(dim=["chain", "draw"])
+    election_party_baseline_mean = trace_posterior.election_party_baseline.mean(dim=["chain", "draw"])
+    party_time_effect_mean = trace_posterior.party_time_effect.mean(dim=["chain", "draw"])
+    countdown_coord = trace_posterior.party_time_effect.coords["countdown"].values
+
+    # Ensure trace coordinates match dataset elections
+    trace_elections = trace_posterior.elections.values
+    if not set(historical_election_dates).issubset(set(trace_elections)):
+         print("Warning: Mismatch between historical election dates in dataset and trace coordinates.")
+         common_elections = sorted(list(set(historical_election_dates) & set(trace_elections)))
+         if not common_elections:
+             print("Error: No common election dates found between dataset and trace.")
+             return
+         print(f"Plotting for common elections: {common_elections}")
+         elections_to_plot = common_elections
+    else:
+         elections_to_plot = sorted(historical_election_dates)
+
+    for idx, election_date_str in enumerate(elections_to_plot):
+        election_date_dt = pd.to_datetime(election_date_str)
+        print(f"  - Processing components for election: {election_date_str}")
+
+        # Determine the start date for the plot
+        if idx == 0: 
+            plot_start_date = election_date_dt - pd.Timedelta(days=365*2) 
+        else:
+            previous_election_str = elections_to_plot[idx-1]
+            plot_start_date = pd.to_datetime(previous_election_str)
+        
+        # Calculate date range for this election
+        dates = election_date_dt - pd.to_timedelta(countdown_coord, unit='D')
+        date_mask = dates >= plot_start_date
+        filtered_dates = dates[date_mask]
+        if len(filtered_dates) == 0:
+            print(f"    Skipping {election_date_str}: No time points after {plot_start_date.date()}")
+            continue
+
+        for party in political_families:
+            print(f"    - Plotting components for party: {party}")
+            try:
+                # Extract mean component values for this party/election
+                pb_party = party_baseline_mean.sel(parties_complete=party).item() # Scalar
+                epb_party = election_party_baseline_mean.sel(elections=election_date_str, parties_complete=party).item() # Scalar
+                pte_party_full = party_time_effect_mean.sel(elections=election_date_str, parties_complete=party) # DataArray (countdown,)
+                
+                # Calculate total baseline and pre-softmax sum
+                total_baseline_party = pb_party + epb_party
+                mu_sum_party_full = total_baseline_party + pte_party_full
+                
+                # Filter time-varying components using the date mask
+                pte_party_filtered = pte_party_full.values[date_mask]
+                mu_sum_party_filtered = mu_sum_party_full.values[date_mask]
+
+                # Create plot
+                fig, ax = plt.subplots(figsize=(15, 7))
+
+                # Plot constant baselines
+                ax.axhline(pb_party, color='grey', linestyle=':', lw=1.5, label=f'Party Baseline ({pb_party:.2f})')
+                ax.axhline(total_baseline_party, color='purple', linestyle='--', lw=1.5, label=f'Total Baseline ({total_baseline_party:.2f})')
+
+                # Plot time-varying GP effect
+                ax.plot(filtered_dates, pte_party_filtered, color='green', linestyle='-.', lw=2, label='Time Effect (GP)')
+
+                # Plot the sum (input to softmax)
+                ax.plot(filtered_dates, mu_sum_party_filtered, color='black', linestyle='-', lw=2.5, label='Sum (Pre-Softmax Mu)')
+
+                # Add election day vertical line
+                ax.axvline(election_date_dt, color='red', linestyle=':', linewidth=1.5, label='Election Day')
+
+                ax.set_title(f'Latent Popularity Components (Pre-Softmax) - Election {election_date_str} - Party {party}')
+                ax.set_xlabel('Date')
+                ax.set_ylabel('Component Value (Logit Scale)')
+                ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+                ax.grid(True, which='major', linestyle='--', linewidth=0.5)
+                
+                # Set x-axis limits
+                ax.set_xlim(left=plot_start_date, right=election_date_dt + pd.Timedelta(days=10))
+                fig.autofmt_xdate() 
+                plt.tight_layout(rect=[0, 0, 0.85, 1])
+
+                # Save the figure
+                plot_filename = os.path.join(output_dir, f"latent_components_{election_date_str}_{party}.png")
+                plt.savefig(plot_filename, dpi=150)
+                plt.close(fig)
+
+            except Exception as e:
+                 print(f"    Failed to plot components for {party} in {election_date_str}: {e}")
+                 import traceback
+                 traceback.print_exc()
+
+    print("Finished generating latent component contribution plots.")
+
+def plot_recent_polls(elections_model: 'ElectionsFacade', output_dir: str):
+    """
+    Generates and saves a plot showing raw poll data collected since the 
+    most recent historical election.
+
+    Parameters:
+    ----------
+    elections_model : ElectionsFacade
+        The facade object containing the dataset.
+    output_dir : str
+        The directory where the plots will be saved.
+    """
+    print(f"Generating recent polls plot in: {output_dir}")
+    os.makedirs(output_dir, exist_ok=True)
+
+    dataset = elections_model.dataset
+    all_polls = dataset.polls # Use the original polls dataframe with raw percentages
+    political_families = dataset.political_families
+    
+    # Find the date of the most recent historical election
+    if not dataset.historical_election_dates:
+        print("Error: No historical election dates found in dataset.")
+        return
+    last_election_date_str = max(dataset.historical_election_dates) # Find the actual latest date
+    last_election_date_dt = pd.to_datetime(last_election_date_str)
+    print(f"Plotting polls since the last historical election: {last_election_date_str}")
+
+    # Filter polls to include only those after the last election
+    recent_polls = all_polls[all_polls['date'] > last_election_date_dt].copy()
+
+    if recent_polls.empty:
+        print(f"No polls found after {last_election_date_str}. Skipping recent polls plot.")
+        return
+
+    # Check if poll percentages need conversion (e.g., from 0-100 to 0-1)
+    if recent_polls[political_families].max().max() > 1.1: 
+        print(f"    Converting recent poll percentages from 0-100 to 0-1.")
+        for party in political_families:
+            recent_polls[party] = recent_polls[party] / 100.0
+
+    # --- Create the plot ---
+    fig, ax = plt.subplots(figsize=(15, 8))
+    colors = plt.cm.tab10(np.linspace(0, 1, len(political_families)))
+
+    # Melt the recent polls data for plotting
+    recent_polls_melt = recent_polls.melt(
+        id_vars=['date', 'pollster'], 
+        value_vars=political_families, 
+        var_name='party', 
+        value_name='percentage'
+    )
+
+    # Plot raw poll results as scatter points
+    sns.scatterplot(data=recent_polls_melt, x='date', y='percentage', hue='party', style='pollster', 
+                    alpha=0.7, s=50, ax=ax, palette=colors[:len(political_families)]) # Use seaborn for consistency
+
+    # Add vertical line for the last election date
+    ax.axvline(last_election_date_dt, color='black', linestyle='--', linewidth=1.5, 
+               label=f'Last Election ({last_election_date_str})')
+
+    ax.set_title(f'Recent Polls Since Last Election ({last_election_date_str})')
+    ax.set_xlabel('Poll Date')
+    ax.set_ylabel('Raw Vote Percentage')
+    ax.legend(title='Party / Pollster', bbox_to_anchor=(1.05, 1), loc='upper left')
+    ax.grid(True, which='major', linestyle='--', linewidth=0.5)
+    ax.set_ylim(0, None) # Start y-axis at 0
+    
+    # Set sensible x-axis limits starting from the last election
+    plot_start_date = last_election_date_dt
+    # Extend slightly beyond the last poll date, or use today if no polls
+    plot_end_date = recent_polls['date'].max() if not recent_polls.empty else pd.Timestamp.now()
+    ax.set_xlim(left=plot_start_date - pd.Timedelta(days=5), right=plot_end_date + pd.Timedelta(days=10)) 
+    
+    fig.autofmt_xdate()
+    plt.tight_layout(rect=[0, 0, 0.85, 1])
+
+    # Save the figure
+    plot_filename = os.path.join(output_dir, f"recent_polls_since_{last_election_date_str}.png")
+    plt.savefig(plot_filename, dpi=150)
+    plt.close(fig)
+    print(f"Saved plot: {plot_filename}")
+
+    print("Finished generating recent polls plot.") 
