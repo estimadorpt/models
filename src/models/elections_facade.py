@@ -1,5 +1,5 @@
 import os
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Union
 
 import arviz
 import arviz as az
@@ -49,12 +49,33 @@ class ElectionsFacade:
         debug : bool
             Whether to print detailed diagnostic information
         """
-        # Load the dataset
+        self.debug = debug
+        self.election_date = election_date
+        self.model: Optional[ElectionModel] = None
+        self.trace: Optional[az.InferenceData] = None
+        self.test_cutoff = test_cutoff
+
+        # Ensure timescales are lists
+        self.baseline_timescales = baseline_timescales if isinstance(baseline_timescales, list) else [baseline_timescales]
+        self.election_timescales = election_timescales if isinstance(election_timescales, list) else [election_timescales]
+        self.config = {
+            "election_date": self.election_date,
+            "baseline_timescales": self.baseline_timescales,
+            "election_timescales": self.election_timescales,
+            "cutoff_date": self.test_cutoff
+        }
+
+        if self.debug:
+            print(f"Initializing Facade with -> election_date: {self.election_date}")
+            print(f"Initializing Facade with -> baseline_timescales: {self.baseline_timescales}")
+            print(f"Initializing Facade with -> election_timescales: {self.election_timescales}")
+            print(f"Initializing Facade with -> cutoff_date: {self.test_cutoff}")
+
         self.dataset = ElectionDataset(
-            election_date=election_date,
-            baseline_timescales=baseline_timescales,
-            election_timescales=election_timescales,
-            test_cutoff=test_cutoff,
+            election_date=self.election_date,
+            baseline_timescales=self.baseline_timescales,
+            election_timescales=self.election_timescales,
+            test_cutoff=self.test_cutoff,
         )
         
         # Create the model
@@ -62,7 +83,6 @@ class ElectionsFacade:
         
         # Initialize trace containers
         self.prior = None
-        self.trace = None
         self.posterior = None
         self.prediction = None
         self.prediction_coords = None
@@ -139,43 +159,94 @@ class ElectionsFacade:
     
     def save_inference_results(self, directory: str = ".", force: bool = False):
         """
-        Save inference results to disk.
-        
+        Save inference results to disk using Zarr format.
+
+        Removes the directory if no actual data (prior, trace, posterior) is saved.
+
         Parameters:
         -----------
         directory : str
             Directory where to save files
         force : bool
             If True, save even if results were already saved
+
+        Returns:
+        --------
+        bool
+            True if at least one inference result file was successfully saved, False otherwise.
         """
+        # print("\nDEBUG: ENTERING save_inference_results", flush=True) # Removed debug print
+        
         # Skip if already saved and not forcing
         if hasattr(self, "_inference_results_saved") and self._inference_results_saved and not force:
-            print(f"Inference results already saved to {directory}, skipping")
+            print(f"Inference results previously saved to {directory}, skipping re-save.") # Removed flush
+            # print("DEBUG: EXITING save_inference_results (already saved)", flush=True) # Removed debug print
             return True
-            
-        # Create output directory if it doesn't exist
+
+        # Create output directory; exist_ok=True prevents error if it exists
+        # We will remove it later if nothing is saved.
         os.makedirs(directory, exist_ok=True)
-        print(f"Saving inference results to: {directory}")
-        
-        if hasattr(self, "prior") and self.prior is not None:
-            prior_path = os.path.join(directory, "prior_check.zarr")
-            print(f"Saving prior to: {prior_path}")
-            arviz.to_zarr(self.prior, prior_path)
-        
-        if hasattr(self, "trace") and self.trace is not None:
-            trace_path = os.path.join(directory, "trace.zarr")
-            print(f"Saving trace to: {trace_path}")
-            arviz.to_zarr(self.trace, trace_path)
-        
-        if hasattr(self, "posterior") and self.posterior is not None:
-            posterior_path = os.path.join(directory, "posterior_check.zarr")
-            print(f"Saving posterior to: {posterior_path}")
-            arviz.to_zarr(self.posterior, posterior_path)
-            
-        # Print confirmation of save
-        print(f"Successfully saved inference results to {directory}")
-        self._inference_results_saved = True
-        return True
+        print(f"Attempting to save inference results to: {directory}") # Removed flush
+
+        results_saved = False # Flag to track if anything was actually saved
+
+        # Define paths using the corrected naming scheme
+        prior_path = os.path.join(directory, "prior_checks.zarr")
+        trace_path = os.path.join(directory, "trace.zarr")
+        posterior_path = os.path.join(directory, "posterior_checks.zarr")
+
+        try:
+            if hasattr(self, "prior") and self.prior is not None:
+                print(f"Saving prior checks to: {prior_path}") # Removed flush
+                arviz.to_zarr(self.prior, prior_path, mode='w') # Use mode='w' to overwrite if exists
+                results_saved = True
+            else:
+                print("Prior object not found or is None, skipping save.") # Removed flush
+
+            if hasattr(self, "trace") and self.trace is not None:
+                print(f"Saving trace (posterior) to: {trace_path}") # Removed flush
+                arviz.to_zarr(self.trace, trace_path, mode='w')
+                results_saved = True
+            else:
+                print("Trace object not found or is None, skipping save.") # Removed flush
+
+            if hasattr(self, "posterior") and self.posterior is not None:
+                print(f"Saving posterior checks to: {posterior_path}") # Removed flush
+                arviz.to_zarr(self.posterior, posterior_path, mode='w')
+                results_saved = True
+            else:
+                print("Posterior object not found or is None, skipping save.") # Removed flush
+
+            if results_saved:
+                print(f"Successfully saved inference results to {directory}") # Removed flush
+                self._inference_results_saved = True
+                # print("DEBUG: EXITING save_inference_results (success)", flush=True) # Removed debug print
+                return True
+            else:
+                print(f"No inference results (prior, trace, posterior) were available to save.") # Removed flush
+                # Attempt to remove the directory as nothing was saved into it
+                try:
+                    # Check if directory is empty before removing (safer)
+                    # Only check/remove if directory actually exists
+                    if os.path.exists(directory) and not os.listdir(directory):
+                        print(f"Removing empty directory: {directory}") # Removed flush
+                        os.rmdir(directory)
+                    elif os.path.exists(directory):
+                         print(f"Warning: Directory {directory} was not empty despite no results being saved. Not removing.") # Removed flush
+                    # else: directory doesn't exist, nothing to remove
+                except OSError as e:
+                    print(f"Warning: Could not remove directory {directory}: {e}") # Removed flush
+                self._inference_results_saved = False # Ensure flag reflects reality
+                # print("DEBUG: EXITING save_inference_results (nothing saved)", flush=True) # Removed debug print
+                return False
+                
+        except Exception as e:
+            print(f"ERROR: Failed to save one or more inference results to {directory}: {e}") # Removed flush
+            # Should we still attempt removal if an error occurred mid-save?
+            # For now, let's leave the directory if an error happened during writing.
+            self._inference_results_saved = False # Mark as not successfully saved
+            # print("DEBUG: EXITING save_inference_results (exception)", flush=True) # Removed debug print
+            return False
     
     def load_inference_results(self, directory: str = "."):
         """
@@ -186,28 +257,75 @@ class ElectionsFacade:
         directory : str
             Directory where files are saved
         """
-        prior_path = os.path.join(directory, "prior_check.zarr")
+        # Use new filenames first, fall back to old names
+        prior_path = os.path.join(directory, "prior_checks.zarr")
         trace_path = os.path.join(directory, "trace.zarr")
-        posterior_path = os.path.join(directory, "posterior_check.zarr")
+        posterior_path = os.path.join(directory, "posterior_checks.zarr")
         
-        # Check for older file names for backward compatibility
-        old_prior_path = os.path.join(directory, "prior.zarr")
-        old_posterior_path = os.path.join(directory, "posterior.zarr")
+        # Old filenames for backward compatibility
+        old_prior_path = os.path.join(directory, "prior_check.zarr")
+        old_posterior_path = os.path.join(directory, "posterior_check.zarr")
+        # Old names used in a previous refactor
+        legacy_prior_path = os.path.join(directory, "prior.zarr")
+        legacy_posterior_path = os.path.join(directory, "posterior.zarr")
         
+        # Load prior checks
+        loaded_prior = False
         if os.path.exists(prior_path):
+            print(f"Loading prior checks from {prior_path}")
             self.prior = arviz.from_zarr(prior_path)
+            loaded_prior = True
         elif os.path.exists(old_prior_path):
+            print(f"Loading prior checks from old path {old_prior_path}")
             self.prior = arviz.from_zarr(old_prior_path)
+            loaded_prior = True
+        elif os.path.exists(legacy_prior_path):
+            print(f"Loading prior checks from legacy path {legacy_prior_path}")
+            self.prior = arviz.from_zarr(legacy_prior_path)
+            loaded_prior = True
             
+        if not loaded_prior:
+             print(f"Warning: Prior predictive checks file not found at expected paths in {directory}")
+
+        # Load trace (main posterior)
+        loaded_trace = False
         if os.path.exists(trace_path):
+            print(f"Loading trace (posterior) from {trace_path}")
             self.trace = arviz.from_zarr(trace_path)
-            # Check trace quality
-            self._analyze_trace_quality(self.trace)
+            self._analyze_trace_quality(self.trace) # Analyze after loading
+            loaded_trace = True
             
+        if not loaded_trace:
+             print(f"ERROR: Main trace file (trace.zarr) not found in {directory}. Cannot proceed without posterior samples.")
+             # Decide on behavior: raise error or allow continuation? Raising is safer.
+             raise FileNotFoundError(f"Trace file not found: {trace_path}")
+             
+        # Load posterior checks
+        loaded_posterior = False
         if os.path.exists(posterior_path):
+            print(f"Loading posterior checks from {posterior_path}")
             self.posterior = arviz.from_zarr(posterior_path)
+            loaded_posterior = True
         elif os.path.exists(old_posterior_path):
+            print(f"Loading posterior checks from old path {old_posterior_path}")
             self.posterior = arviz.from_zarr(old_posterior_path)
+            loaded_posterior = True
+        elif os.path.exists(legacy_posterior_path):
+            print(f"Loading posterior checks from legacy path {legacy_posterior_path}")
+            self.posterior = arviz.from_zarr(legacy_posterior_path)
+            loaded_posterior = True
+            
+        if not loaded_posterior:
+             print(f"Warning: Posterior predictive checks file not found at expected paths in {directory}")
+
+        # Perform and print diagnostics using self.trace
+        # self.print_diagnostics() # This method does not exist - Removed call
+
+        print("Finished loading inference results.")
+        # print("DEBUG: Attempting to return True from load_inference_results") # DEBUG
+        result_to_return = True
+        # print(f"DEBUG: Value to return: {result_to_return}, Type: {type(result_to_return)}") # DEBUG
+        return result_to_return
     
     def _analyze_trace_quality(self, trace):
         """Analyze trace quality and print diagnostics."""
@@ -225,11 +343,14 @@ class ElectionsFacade:
                         
                         # If there are divergences, try to identify which parameters might be problematic
                         # Look at parameters with high R-hat that might be related to divergences
-                        summary = arviz.summary(trace, var_names=['~house_effects', '~house_election_effects'])
-                        high_rhat = summary[summary.r_hat > 1.05]
-                        if not high_rhat.empty:
-                            print("Parameters with high R-hat that might be related to divergences:")
-                            print(high_rhat[['mean', 'sd', 'hdi_3%', 'hdi_97%', 'r_hat']])
+                        try:
+                            summary = arviz.summary(trace, var_names=['~house_effects', '~house_election_effects'])
+                            high_rhat = summary[summary.r_hat > 1.05]
+                            if not high_rhat.empty:
+                                print("Parameters with high R-hat that might be related to divergences:")
+                                print(high_rhat[['mean', 'sd', 'hdi_3%', 'hdi_97%', 'r_hat']])
+                        except Exception as e:
+                            print(f"Warning: Failed to compute summary statistics: {e}")
                 
                 # Check for tree depth issues
                 if 'tree_depth' in trace.sample_stats:
@@ -673,7 +794,7 @@ class ElectionsFacade:
             The built PyMC model
         """
         if self.debug:
-            print("\n=== MODEL BUILD DIAGNOSTICS ===")
+            print("\n=== MODEL BUILD DIAGNOSTICS ===", flush=True)
             print("Model not built yet - building now...")
         
         try:
@@ -687,26 +808,26 @@ class ElectionsFacade:
             
             # Set historical elections as coordinates
             if self.debug:
-                print(f"Setting elections coord to historical elections: {self.dataset.historical_election_dates}")
-                print(f"Setting elections_observed to all historical elections: {self.dataset.historical_election_dates}")
+                print(f"Setting elections coord to historical elections: {self.dataset.historical_election_dates}", flush=True)
+                print(f"Setting elections_observed to all historical elections: {self.dataset.historical_election_dates}", flush=True)
             
             # Build the model
             self.model = self.model.build_model()
             
             if self.debug:
                 # Print model dimensions
-                print("\n=== MODEL DIMENSIONS ===")
+                print("\n=== MODEL DIMENSIONS ===", flush=True)
                 for dim_name, dim_values in self.model.coords.items():
-                    print(f"{dim_name}: shape={len(dim_values)}")
+                    print(f"{dim_name}: shape={len(dim_values)}", flush=True)
                 
                 # Print information about results data
                 if hasattr(self.dataset, "results_oos"):
-                    print(f"results_oos shape: {self.dataset.results_oos.shape}")
-                    print(f"results_oos election dates: {self.dataset.results_oos['election_date']}")
+                    print(f"results_oos shape: {self.dataset.results_oos.shape}", flush=True)
+                    print(f"results_oos election dates: {self.dataset.results_oos['election_date']}", flush=True)
                 
                 # Print more detailed model information
-                print(f"For inference: Using historical elections data with shape: {self.dataset.historical_elections.shape}")
-                print(f"Setting election dimensions to match historical elections: {len(self.dataset.historical_election_dates)}")
+                print(f"For inference: Using historical elections data with shape: {self.dataset.historical_elections.shape}", flush=True)
+                print(f"Setting election dimensions to match historical elections: {len(self.dataset.historical_election_dates)}", flush=True)
             
             print("Model successfully built!")
             
@@ -717,18 +838,18 @@ class ElectionsFacade:
                 free_vars = len(self.model.free_RVs)
                 deterministics = len(self.model.deterministics)
                 
-                print("\nModel variables:")
-                print(f"Total variable count: {var_count}")
-                print(f"Observed variables: {observed_vars}")
-                print(f"Free variables: {free_vars}")
-                print(f"Deterministic variables: {deterministics}")
-                print("=====================================\n")
+                print("\nModel variables:", flush=True)
+                print(f"Total variable count: {var_count}", flush=True)
+                print(f"Observed variables: {observed_vars}", flush=True)
+                print(f"Free variables: {free_vars}", flush=True)
+                print(f"Deterministic variables: {deterministics}", flush=True)
+                print("=====================================", flush=True)
             
             return self.model
             
         except Exception as e:
             error_msg = f"Failed to build model: {e}"
-            print(error_msg)
+            print(error_msg, flush=True)
             if self.debug:
                 import traceback
                 traceback.print_exc()
@@ -745,43 +866,43 @@ class ElectionsFacade:
         
         import numpy as np
         
-        print("\n=== PREDICTION STRUCTURE DEBUG INFO ===")
-        print(f"Type of prediction: {type(self.prediction)}")
-        print(f"Keys in prediction: {list(self.prediction.keys())}")
+        print("\n=== PREDICTION STRUCTURE DEBUG INFO ===", flush=True)
+        print(f"Type of prediction: {type(self.prediction)}", flush=True)
+        print(f"Keys in prediction: {list(self.prediction.keys())}", flush=True)
         
         # Print information about each prediction array
         for key, value in self.prediction.items():
-            print(f"\n{key}:")
-            print(f"  Shape: {value.shape}")
-            print(f"  Dtype: {value.dtype}")
-            print(f"  Contains NaNs: {np.isnan(value).any()}")
+            print(f"\n{key}:", flush=True)
+            print(f"  Shape: {value.shape}", flush=True)
+            print(f"  Dtype: {value.dtype}", flush=True)
+            print(f"  Contains NaNs: {np.isnan(value).any()}", flush=True)
             if np.isnan(value).any():
-                print(f"  NaN percentage: {np.isnan(value).mean() * 100:.2f}%")
+                print(f"  NaN percentage: {np.isnan(value).mean() * 100:.2f}%", flush=True)
         
         # Print information about coordinates
         if hasattr(self, "prediction_coords") and self.prediction_coords is not None:
-            print("\nCoordinates:")
+            print("\nCoordinates:", flush=True)
             for key, value in self.prediction_coords.items():
-                print(f"\n{key}:")
-                print(f"  Type: {type(value)}")
-                print(f"  Length: {len(value)}")
-                print(f"  Content: {value}")
-                print(f"  Is scalar: {np.isscalar(value)}")
+                print(f"\n{key}:", flush=True)
+                print(f"  Type: {type(value)}", flush=True)
+                print(f"  Length: {len(value)}", flush=True)
+                print(f"  Content: {value}", flush=True)
+                print(f"  Is scalar: {np.isscalar(value)}", flush=True)
                 
                 # Special handling for parties_complete
                 if key == 'parties_complete':
-                    print(f"  Content type: {type(value[0]) if len(value) > 0 else 'empty'}")
+                    print(f"  Content type: {type(value[0]) if len(value) > 0 else 'empty'}", flush=True)
                     # Convert to list for safety
                     self.prediction_coords[key] = list(value)
-                    print(f"  Converted to list: {self.prediction_coords[key]}")
+                    print(f"  Converted to list: {self.prediction_coords[key]}", flush=True)
         
         # Print information about dimensions
         if hasattr(self, "prediction_dims") and self.prediction_dims is not None:
-            print("\nDimensions:")
+            print("\nDimensions:", flush=True)
             for key, value in self.prediction_dims.items():
-                print(f"  {key}: {value}")
+                print(f"  {key}: {value}", flush=True)
         
-        print("=======================================\n")
+        print("=======================================", flush=True)
         return self.prediction, self.prediction_coords, self.prediction_dims 
 
     def nowcast_party_support(self, current_polls: pd.DataFrame, latest_election_date: str):
@@ -811,9 +932,10 @@ class ElectionsFacade:
             raise ValueError("Model must be fit with run_inference() before nowcasting")
             
         return self.model.nowcast_party_support(
-            idata=self.trace, 
-            current_polls=current_polls, 
-            latest_election_date=latest_election_date
+            idata=self.trace,
+            current_polls=current_polls,
+            latest_election_date=latest_election_date,
+            model_output_dir=self.output_dir
         ) 
 
     def predict(self, oos_data: pd.DataFrame):
@@ -925,7 +1047,8 @@ class ElectionsFacade:
             'election_party_baseline',
             'gp_coef_baseline', 
             'concentration_polls', 
-            'concentration_results'
+            'concentration_results',
+            'house_effects'
         ]
         plot_vars = [p for p in key_params if p in self.trace.posterior]
 
@@ -988,8 +1111,96 @@ class ElectionsFacade:
             print(f"  Saved R-hat plot to {rhat_plot_path}")
         except Exception as e:
             print(f"  Error generating R-hat plot: {e}")
+
+        # 6. Generate Summary Text File
+        summary_path = os.path.join(directory, "diagnostic_summary.txt")
+        print(f"- Generating diagnostic summary text file...")
+        try:
+            summary = az.summary(self.trace)
+            rhat_threshold = 1.05
+            ess_threshold = 400 # Assuming 4 chains, 100 per chain
+
+            bad_rhat = summary[summary['r_hat'] > rhat_threshold]
+            bad_ess_bulk = summary[summary['ess_bulk'] < ess_threshold]
+            bad_ess_tail = summary[summary['ess_tail'] < ess_threshold]
+
+            with open(summary_path, 'w') as f:
+                f.write("Convergence Diagnostics Summary\n")
+                f.write("=============================\n")
+                f.write(f"R-hat Threshold: > {rhat_threshold}\n")
+                f.write(f"ESS Threshold (Bulk & Tail): < {ess_threshold}\n\n")
+
+                if bad_rhat.empty and bad_ess_bulk.empty and bad_ess_tail.empty:
+                    f.write("No major convergence issues detected based on R-hat and ESS thresholds.\n")
+                else:
+                    f.write("Potential convergence issues detected:\n")
+                    if not bad_rhat.empty:
+                        f.write("\n--- Parameters with R-hat > {}: ---\n".format(rhat_threshold))
+                        f.write(bad_rhat[['r_hat']].to_string())
+                        f.write("\n")
+                    if not bad_ess_bulk.empty:
+                        f.write("\n--- Parameters with Bulk ESS < {}: ---\n".format(ess_threshold))
+                        f.write(bad_ess_bulk[['ess_bulk']].to_string())
+                        f.write("\n")
+                    if not bad_ess_tail.empty:
+                        f.write("\n--- Parameters with Tail ESS < {}: ---\n".format(ess_threshold))
+                        f.write(bad_ess_tail[['ess_tail']].to_string())
+                        f.write("\n")
+            print(f"  Saved diagnostic summary to {summary_path}")
+        except Exception as e:
+            print(f"  Error generating diagnostic summary: {e}")
+
+        print("Diagnostic plot and summary generation complete.")
+
+    def get_election_day_latent_popularity(self):
+        """
+        Extracts the posterior distribution of the latent popularity 
+        specifically at the target election day (countdown=0).
+
+        Returns:
+        --------
+        xr.DataArray or None:
+            An xarray DataArray containing the posterior samples of latent popularity
+            at countdown=0 for the target election. 
+            Dimensions: (chain, draw, parties_complete).
+            Returns None if the necessary data is not available in the trace.
+        """
+        if self.trace is None:
+            print("Error: Trace object not found. Cannot extract latent popularity.")
+            return None
+        
+        latent_var = "latent_popularity_trajectory"
+        target_election = self.election_date
+
+        if latent_var not in self.trace.posterior:
+            print(f"Error: Latent popularity ('{latent_var}') not found in posterior trace.")
+            return None
+       
+        try:
+            # Select latent popularity at election day (countdown=0) for the target election
+            latent_pop_at_election = self.trace.posterior[latent_var].sel(
+                elections=target_election, 
+                countdown=0
+            )
             
-        print("Diagnostic plot generation complete.")
+            # Ensure dimensions are correct
+            if tuple(latent_pop_at_election.dims) != ('chain', 'draw', 'parties_complete'):
+                if set(latent_pop_at_election.dims) == {'chain', 'draw', 'parties_complete'}:
+                    latent_pop_at_election = latent_pop_at_election.transpose('chain', 'draw', 'parties_complete')
+                else:
+                    raise ValueError(f"Unexpected dimensions for latent popularity: {latent_pop_at_election.dims}")
+
+            print(f"Successfully extracted latent popularity for {target_election} at countdown=0.")
+            return latent_pop_at_election
+
+        except KeyError:
+             print(f"Error: Election date '{target_election}' or countdown=0 not found in coordinates for '{latent_var}'.")
+             return None
+        except Exception as e:
+            print(f"Error extracting election day latent popularity: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
 
     # TODO: Implement post-hoc adjustment for Blank/Null votes 
     #       when generating final forecasts (e.g., for seat projections). 

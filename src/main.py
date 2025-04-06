@@ -10,9 +10,18 @@ import seaborn as sns
 import numpy as np
 from datetime import datetime, timedelta
 import pymc as pm
+import json
 
 from src.models.elections_facade import ElectionsFacade
-from src.visualization.plots import plot_election_data, plot_latent_popularity_vs_polls, plot_latent_component_contributions, plot_recent_polls
+from src.visualization.plots import (
+    plot_election_data, 
+    plot_latent_popularity_vs_polls, 
+    plot_latent_component_contributions, 
+    plot_recent_polls,
+    plot_house_effects_heatmap,
+    # plot_forecasted_election_distribution # Moved to predict function
+    # plot_nowcast_latent_vs_polls_combined # Removed import
+)
 from src.config import DEFAULT_BASELINE_TIMESCALE, DEFAULT_ELECTION_TIMESCALES
 from src.data.dataset import ElectionDataset
 
@@ -53,21 +62,22 @@ def fit_model(args):
         start_time = time.time()
         
         # Run inference
-        elections_model.run_inference(
-            draws=args.draws,
-            tune=args.tune,
-            target_accept=0.9
+        prior, trace, posterior = elections_model.run_inference(
+            draws=args.draws, 
+            tune=args.tune, 
+            target_accept=args.target_accept, 
+            max_treedepth=10 # Keeping lower tree depth for faster run if needed
         )
         
         # Calculate elapsed time
         end_time = time.time()
-        elapsed_time = end_time - start_time
-        print(f"Model fitting completed in {elapsed_time:.2f} seconds")
+        fitting_duration = end_time - start_time
+        print(f"Model fitting completed in {fitting_duration:.2f} seconds")
         
         # Send notification if requested
         if args.notify:
             requests.post("https://ntfy.sh/bc-estimador",
-                data=f"Model fit completed in {elapsed_time:.2f} seconds".encode(encoding='utf-8'))
+                data=f"Model fit completed in {fitting_duration:.2f} seconds".encode(encoding='utf-8'))
         
         # Generate diagnostic plots
         if elections_model.trace is not None:
@@ -76,30 +86,59 @@ def fit_model(args):
         else:
             print("Skipping diagnostic plot generation as trace is not available.")
         
-        # Save the trace and model
-        elections_model.save_inference_results(output_dir)
-        
-        # Create a symbolic link to the latest run
-        latest_dir = os.path.join(base_output_dir, "latest")
-        if os.path.exists(latest_dir):
-            if os.path.islink(latest_dir):
-                os.unlink(latest_dir)
-            else:
-                import shutil
-                shutil.rmtree(latest_dir)
-        
+        # Save model configuration
+        print(f"Saving model configuration to {output_dir}/model_config.json")
+        config_to_save = {
+            "election_date": args.election_date,
+            "baseline_timescales": args.baseline_timescale,
+            "election_timescales": args.election_timescale,
+            "cutoff_date": args.cutoff_date,
+        }
+        config_path = os.path.join(output_dir, "model_config.json")
         try:
-            # Convert to absolute paths for better macOS compatibility
-            abs_output_dir = os.path.abspath(output_dir)
-            abs_latest_dir = os.path.abspath(latest_dir)
-            
-            # On macOS, os.symlink order is: link_target, link_name
-            os.symlink(abs_output_dir, abs_latest_dir, target_is_directory=True)
-            if args.debug:
-                print(f"Created symbolic link from {abs_latest_dir} to {abs_output_dir}")
-        except OSError as e:
-            print(f"Warning: Could not create symbolic link: {e}")
+            with open(config_path, 'w') as f:
+                json.dump(config_to_save, f, indent=4)
+            print("Model configuration saved successfully.")
+        except Exception as config_err:
+            print(f"Warning: Failed to save model configuration: {config_err}")
         
+        # Debug: Check trace before saving
+        # print(f"DEBUG: Before saving - elections_model.trace is None? {elections_model.trace is None}")
+        # if elections_model.trace is not None:
+        #      print(f"DEBUG: Before saving - elections_model.trace type: {type(elections_model.trace)}")
+        # else:
+        #      print(f"DEBUG: Before saving - trace object does not exist or is None.")
+              
+        # Save the trace and model - this now returns True/False
+        # print(f"DEBUG: Type of elections_model just before save call: {type(elections_model)}")
+        # try:
+        #     print(f"DEBUG: elections_model.save_inference_results method: {elections_model.save_inference_results}")
+        # except AttributeError:
+        #     print("DEBUG: elections_model does NOT have attribute save_inference_results")
+              
+        save_successful = elections_model.save_inference_results(output_dir)
+        
+        # Create/update the 'latest' symlink only if saving was successful
+        if save_successful:
+            latest_link_path = os.path.join(base_output_dir, "latest")
+            target_path_absolute = os.path.abspath(output_dir)
+            
+            print(f"Updating symbolic link '{latest_link_path}' to point to '{target_path_absolute}'")
+            
+            try:
+                # Remove existing link/file if it exists
+                if os.path.islink(latest_link_path) or os.path.exists(latest_link_path):
+                    os.remove(latest_link_path)
+                
+                # Create the new symlink
+                os.symlink(target_path_absolute, latest_link_path, target_is_directory=True)
+                print(f"Symbolic link 'latest' updated successfully.")
+            except Exception as symlink_err:
+                print(f"Warning: Failed to create/update symbolic link: {symlink_err}")
+        else:
+            print("Skipping 'latest' symlink creation as no inference results were saved.")
+        
+        print(f"Training process complete for {args.election_date}.")
         return elections_model
         
     except Exception as e:
@@ -132,26 +171,47 @@ def load_model(directory, election_date=None, baseline_timescales=None, election
         if debug:
             print(f"Loading model from {directory}")
         
-        # Use provided args or defaults
-        final_election_date = election_date if election_date else '2026-01-01'
-        final_baseline_timescales = baseline_timescales if baseline_timescales is not None else DEFAULT_BASELINE_TIMESCALE
-        final_election_timescales = election_timescales if election_timescales is not None else DEFAULT_ELECTION_TIMESCALES
+        # --- Load Configuration --- 
+        loaded_config = {}
+        config_path = os.path.join(directory, "model_config.json")
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, 'r') as f:
+                    loaded_config = json.load(f)
+                print(f"Loaded configuration from {config_path}")
+                if debug:
+                    print(f"Loaded config: {loaded_config}")
+            except Exception as config_err:
+                print(f"Warning: Failed to load model configuration from {config_path}: {config_err}")
+        else:
+            print(f"Warning: model_config.json not found in {directory}. Using defaults or command-line args.")
+        # --- End Load Configuration ---
 
-        # Ensure timescales are lists
+        # Use loaded config values if available, otherwise use provided args or defaults
+        final_election_date = loaded_config.get('election_date', election_date if election_date else '2026-01-01')
+        # Ensure loaded values override function args if config exists
+        final_baseline_timescales = loaded_config.get('baseline_timescales', baseline_timescales if baseline_timescales is not None else DEFAULT_BASELINE_TIMESCALE)
+        final_election_timescales = loaded_config.get('election_timescales', election_timescales if election_timescales is not None else DEFAULT_ELECTION_TIMESCALES)
+        # Add other parameters like cutoff_date if needed by Facade init
+        final_cutoff_date = loaded_config.get('cutoff_date', None) # Assuming Facade handles None
+
+        # Ensure timescales are lists (might be redundant if config saves them correctly, but safe)
         if not isinstance(final_baseline_timescales, list):
             final_baseline_timescales = [final_baseline_timescales]
         if not isinstance(final_election_timescales, list):
             final_election_timescales = [final_election_timescales]
             
         if debug:
-            print(f"Using election_date: {final_election_date}")
-            print(f"Using baseline_timescales: {final_baseline_timescales}")
-            print(f"Using election_timescales: {final_election_timescales}")
-        
+            print(f"Initializing Facade with -> election_date: {final_election_date}")
+            print(f"Initializing Facade with -> baseline_timescales: {final_baseline_timescales}")
+            print(f"Initializing Facade with -> election_timescales: {final_election_timescales}")
+            print(f"Initializing Facade with -> cutoff_date: {final_cutoff_date}")
+
         elections_model = ElectionsFacade(
             election_date=final_election_date,
             baseline_timescales=final_baseline_timescales,
             election_timescales=final_election_timescales,
+            test_cutoff=pd.Timedelta(final_cutoff_date) if final_cutoff_date else None, # Pass loaded/default cutoff
             debug=debug
         )
         
@@ -161,7 +221,7 @@ def load_model(directory, election_date=None, baseline_timescales=None, election
         # Rebuild the model structure (necessary for posterior predictive checks etc.)
         # This uses the parameters passed to ElectionsFacade, ensuring consistency
         print("Rebuilding model structure...")
-        elections_model.model.model = elections_model.model.build_model()
+        elections_model.model.build_model()
         print("Model structure rebuilt.")
         
         return elections_model
@@ -173,134 +233,139 @@ def load_model(directory, election_date=None, baseline_timescales=None, election
         return None
 
 def nowcast(args):
-    """Run nowcasting to estimate current party support."""
-    print("Running nowcast based on pre-trained model...")
+    """Run nowcasting by refitting the model with all available data up to the present."""
+    print("Running nowcast by refitting model with all available data...")
     start_time = time.time()
-    
-    # Load the pre-trained model
-    output_dir = os.path.join(args.output_dir, "nowcast")
+
+    # --- 1. Prepare Output Directory --- 
+    output_dir = os.path.join(args.output_dir, "nowcast_refit") # New subdir name
     os.makedirs(output_dir, exist_ok=True)
-    
-    # Create latest directory if it doesn't exist
     latest_base_dir = os.path.join(args.output_dir, "latest")
     os.makedirs(latest_base_dir, exist_ok=True)
-    
-    # Create a symbolic link to the latest nowcast run
-    latest_nowcast_dir = os.path.join(latest_base_dir, "nowcast")
+    latest_nowcast_dir = os.path.join(latest_base_dir, "nowcast_refit") # Link name
     if os.path.exists(latest_nowcast_dir):
         if os.path.islink(latest_nowcast_dir):
             os.unlink(latest_nowcast_dir)
         else:
             import shutil
             shutil.rmtree(latest_nowcast_dir)
-    
     try:
-        # Convert to absolute paths for better macOS compatibility
         abs_output_dir = os.path.abspath(output_dir)
         abs_latest_nowcast_dir = os.path.abspath(latest_nowcast_dir)
-        
-        # On macOS, os.symlink order is: link_target, link_name
         os.symlink(abs_output_dir, abs_latest_nowcast_dir, target_is_directory=True)
         if args.debug:
             print(f"Created symbolic link from {abs_latest_nowcast_dir} to {abs_output_dir}")
     except OSError as e:
         print(f"Warning: Could not create symbolic link: {e}")
-    
-    try:
-        elections_model = load_model(
-            directory=args.load_dir, 
-            debug=args.debug,
-            # Pass arguments explicitly
-            election_date=elections_model.election_date if hasattr(elections_model, 'election_date') else args.election_date,
-            baseline_timescales=args.baseline_timescale, # Pass command-line args
-            election_timescales=args.election_timescale  # Pass command-line args
-        )
-        
-        if elections_model is None:
-            raise ValueError(f"Failed to load model from {args.load_dir}")
-            
-    except Exception as e:
-        print(f"Failed to load model: {e}")
-        # Fallback: use tomorrow as election date
-        tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
-        if args.debug:
-            print(f"Using fallback election date: {tomorrow}")
-        return
 
-    # Get access to all polls regardless of how the dataset was split
-    try:
-        # Use the original polls data that hasn't been filtered for historical elections
-        current_polls = elections_model.dataset.polls.copy()
-        
-        # Convert percentages to counts for DirichletMultinomial model
-        current_polls = elections_model.dataset.cast_as_multinomial(current_polls)
-        
-        if args.debug:
-            print(f"Successfully loaded all polls (including future election polls)")
-    except AttributeError as e:
-        print(f"Error accessing polls: {e}")
-        # If 'polls' doesn't exist, combine train and test
+    # --- 2. Load Configuration from Training Run --- 
+    loaded_config = {}
+    config_path = os.path.join(args.load_dir, "model_config.json") # Load from the specified training run
+    if os.path.exists(config_path):
         try:
-            current_polls = pd.concat([
-                elections_model.dataset.polls_train.copy(), 
-                elections_model.dataset.polls_test.copy()
-            ]).drop_duplicates()
-        except (AttributeError, ValueError):
-            # If train/test are not available, just use train
-            current_polls = elections_model.dataset.polls_train.copy()
-
-    # Get the latest election date from historical elections
-    historical_dates = sorted([pd.to_datetime(date) for date in elections_model.dataset.historical_election_dates])
-    latest_election_date = historical_dates[-1].strftime('%Y-%m-%d')  # Get the last (most recent) date
-    
-    if args.debug:
-        print(f"Using latest historical election date: {latest_election_date}")
-        print(f"Total polls in dataset: {len(current_polls)}")
-        print(f"Poll date range: {pd.to_datetime(current_polls['date']).min().strftime('%Y-%m-%d')} to {pd.to_datetime(current_polls['date']).max().strftime('%Y-%m-%d')}")
-        print("First 5 poll dates:")
-        for date in pd.to_datetime(current_polls['date']).sort_values().head().tolist():
-            print(f"  - {date.strftime('%Y-%m-%d')}")
-    
-    # Filter polls to only include those after the latest election
-    polls_after_election = current_polls[pd.to_datetime(current_polls['date']) > pd.to_datetime(latest_election_date)]
-    
-    if len(polls_after_election) == 0:
-        print(f"Error: No polls found after the latest election date ({latest_election_date})")
-        print("Check that your poll dates are correctly formatted and newer than the latest election.")
-        print("You may also need to update the historical_election_dates in the dataset class.")
-        return
+            with open(config_path, 'r') as f:
+                loaded_config = json.load(f)
+            print(f"Loaded configuration from {config_path}: {loaded_config}")
+        except Exception as config_err:
+            print(f"ERROR: Failed to load model configuration from {config_path}: {config_err}")
+            return # Cannot proceed without config
     else:
-        # Use the polls after the election
-        current_polls = polls_after_election
-    
-    if args.debug:
-        print(f"Using {len(current_polls)} polls for nowcasting")
-        print(f"Poll dates range: {pd.to_datetime(current_polls['date']).min().strftime('%Y-%m-%d')} to {pd.to_datetime(current_polls['date']).max().strftime('%Y-%m-%d')}")
-    
-    # Set election date to one day after the most recent poll
-    latest_poll_date = pd.to_datetime(current_polls['date']).max()
-    election_date = (latest_poll_date + pd.Timedelta(days=1)).strftime('%Y-%m-%d')
-    
-    if args.debug:
-        print(f"Setting election date to one day after latest poll: {election_date}")
-    
-    # Run the nowcast using the updated data
-    nowcast_ppc, coords, dims = elections_model.nowcast_party_support(
-        current_polls=current_polls,
-        latest_election_date=latest_election_date
-    )
-    
-    # Plot the results - Comment out the call
-    print("Generating plots...")
-    # plot_nowcast_results(
-    #     nowcast_ppc=nowcast_ppc, 
-    #     current_polls=current_polls, 
-    #     election_date=latest_election_date,
-    #     title=f"Nowcast of Party Support Since {latest_election_date}",
-    #     filename=os.path.join(output_dir, "nowcast_results.png")
-    # )
-    
-    print(f"Nowcast completed in {(time.time() - start_time)/60:.2f} minutes")
+        print(f"ERROR: model_config.json not found in {args.load_dir}. Cannot proceed.")
+        return
+
+    # Use loaded config or defaults for Facade initialization
+    baseline_timescales = loaded_config.get('baseline_timescales', args.baseline_timescale)
+    election_timescales = loaded_config.get('election_timescales', args.election_timescale)
+    # Ensure they are lists
+    if not isinstance(baseline_timescales, list): baseline_timescales = [baseline_timescales]
+    if not isinstance(election_timescales, list): election_timescales = [election_timescales]
+
+    # --- 3. Initialize Facade & Determine Nowcast Date --- 
+    try:
+        # Temporarily instantiate dataset just to get the latest poll date
+        temp_dataset = ElectionDataset(election_date="2099-01-01", test_cutoff=None) # Use future date context
+        latest_poll_date = pd.to_datetime(temp_dataset.polls['date']).max()
+        nowcast_election_date = (latest_poll_date + pd.Timedelta(days=1)).strftime('%Y-%m-%d')
+        print(f"Latest poll date: {latest_poll_date.strftime('%Y-%m-%d')}. Setting nowcast context date to: {nowcast_election_date}")
+
+        # Now instantiate the actual Facade for the refit
+        # CRUCIALLY set test_cutoff=None to use ALL polls for training
+        elections_model = ElectionsFacade(
+            election_date=nowcast_election_date, # Use date for context endpoint
+            baseline_timescales=baseline_timescales,
+            election_timescales=election_timescales,
+            test_cutoff=None, 
+            debug=args.debug
+        )
+        print(f"Facade initialized. Dataset contains {len(elections_model.dataset.polls)} total polls.")
+        # Verify polls_train contains all polls
+        if len(elections_model.dataset.polls_train) != len(elections_model.dataset.polls):
+             print(f"WARNING: polls_train ({len(elections_model.dataset.polls_train)}) != total polls ({len(elections_model.dataset.polls)}). Check dataset init logic.")
+        else:
+             print("Confirmed: polls_train contains all loaded polls.")
+             
+    except Exception as e:
+        print(f"Error initializing ElectionsFacade: {e}")
+        if args.debug:
+            traceback.print_exc()
+        return
+
+    # --- 4. Run Inference (Refit) --- 
+    try:
+        print("\nStarting model refit using all data...")
+        # Use potentially fewer draws/tune for speed in nowcast setting
+        # TODO: Make draws/tune configurable via args for nowcast mode?
+        nowcast_draws = args.draws // 2 if args.draws > 500 else 500 # Example: half draws, min 500
+        nowcast_tune = args.tune // 2 if args.tune > 500 else 500   # Example: half tune, min 500
+        print(f"Using draws={nowcast_draws}, tune={nowcast_tune}")
+        
+        elections_model.run_inference(
+            draws=nowcast_draws,
+            tune=nowcast_tune,
+            target_accept=args.target_accept # Use target_accept from args
+        )
+    except Exception as e:
+        print(f"Error during model refitting: {e}")
+        if args.debug:
+            traceback.print_exc()
+        return
+        
+    # --- 5. Save Results --- 
+    try:
+        # Save the new trace and the config used for THIS run
+        current_config = {
+            "election_date": nowcast_election_date,
+            "baseline_timescales": baseline_timescales,
+            "election_timescales": election_timescales,
+            "cutoff_date": None, # Explicitly None for refit
+            "refit_draws": nowcast_draws,
+            "refit_tune": nowcast_tune
+        }
+        config_path = os.path.join(output_dir, "nowcast_config.json")
+        with open(config_path, 'w') as f:
+            json.dump(current_config, f, indent=4)
+            
+        elections_model.save_inference_results(output_dir) # Saves trace etc.
+        print(f"Refit results (trace, config) saved to {output_dir}")
+    except Exception as e:
+        print(f"Error saving refit results: {e}")
+        # Continue to plotting if possible
+
+    # --- 6. Plot Results --- 
+    try:
+        print("\nGenerating plots from refit results...")
+        # Use the existing plot function designed for a fitted model
+        plot_latent_popularity_vs_polls(elections_model, output_dir)
+        # Add other relevant plots if desired, e.g.:
+        # plot_latent_component_contributions(elections_model, output_dir)
+        plot_house_effects_heatmap(elections_model, output_dir)
+        print(f"Plots saved to {output_dir}")
+    except Exception as plot_err:
+        print(f"Warning: Failed to generate plots from refit results: {plot_err}")
+        if args.debug:
+            traceback.print_exc()
+
+    print(f"\nNowcast refit completed in {(time.time() - start_time)/60:.2f} minutes")
     print(f"Results saved to {output_dir}")
     print("==========================================\n")
 
@@ -310,8 +375,6 @@ def visualize(args):
         if args.debug:
             print(f"Generating visualizations for model in {args.load_dir}")
         
-        # Create visualization output directory
-        # Make sure the parent directory exists
         model_dir = os.path.abspath(args.load_dir)
         if not os.path.exists(model_dir):
             raise ValueError(f"Model directory not found: {model_dir}")
@@ -319,12 +382,12 @@ def visualize(args):
         viz_dir = os.path.join(model_dir, "visualizations")
         os.makedirs(viz_dir, exist_ok=True)
         
-        # Load the model
+        # Load the model (which now includes the full refit trace)
         elections_model = load_model(
             directory=model_dir,
             debug=args.debug,
-            # Pass arguments explicitly
-            election_date=args.election_date, # Use command-line args
+            # Pass arguments explicitly or let load_model use config
+            election_date=args.election_date, 
             baseline_timescales=args.baseline_timescale, 
             election_timescales=args.election_timescale 
         )
@@ -332,13 +395,32 @@ def visualize(args):
         if elections_model is None:
             raise ValueError(f"Failed to load model from {model_dir}")
         
-        # Generate and save plots
-        print("Generating model diagnostics and visualization plots...")
-        plot_latent_popularity_vs_polls(elections_model, viz_dir)
-        plot_latent_component_contributions(elections_model, viz_dir)
-        plot_recent_polls(elections_model, viz_dir)
+        # Rebuild the underlying PyMC model structure after loading trace/config
+        print("\nRebuilding model structure...")
+        try:
+            elections_model.build_model()
+            print("Model structure rebuilt successfully.")
+        except Exception as build_err:
+            print(f"ERROR: Failed to rebuild model structure after loading: {build_err}")
+            # Decide if we can proceed without the full structure for some plots
+            # For now, let's exit if build fails as prediction needs it.
+            return
 
-        print(f"Visualizations generation step complete. Results saved to {viz_dir}") # Adjusted print statement
+        # --- Generate Standard Historical Plots --- 
+        print("\nGenerating historical model diagnostics and visualization plots...")
+        # These use the posterior trace directly
+        plot_latent_popularity_vs_polls(elections_model, viz_dir, include_target_date=True)
+        plot_latent_component_contributions(elections_model, viz_dir)
+        plot_recent_polls(elections_model, viz_dir) # Might need adjustment if it expects specific test set
+        plot_house_effects_heatmap(elections_model, viz_dir)
+        print(f"Historical visualizations saved to {viz_dir}")
+        
+        # --- Generate Forecast Distribution Plot ---
+        # print("\nGenerating election outcome forecast distribution...")
+        # plot_forecasted_election_distribution(elections_model, viz_dir)
+        # --- End Forecast Plot Generation ---
+        
+        print(f"\nVisualizations generation step complete.") # Adjusted print statement
         
     except Exception as e:
         print(f"Error generating visualizations: {e}")
@@ -515,11 +597,62 @@ def diagnose_model(args):
             traceback.print_exc()
         return None
 
+def predict(args):
+    """Loads a trained model and generates the election outcome forecast distribution."""
+    print(f"Generating election outcome forecast for model in {args.load_dir}")
+    
+    try:
+        # 1. Read election_date from config first
+        config_path = os.path.join(args.load_dir, "model_config.json")
+        if not os.path.exists(config_path):
+            print(f"Error: model_config.json not found in {args.load_dir}")
+            return
+            
+        try:
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+            loaded_election_date = config.get('election_date')
+            if not loaded_election_date:
+                 raise ValueError("election_date not found or is empty in model_config.json")
+        except (json.JSONDecodeError, ValueError, Exception) as e:
+             print(f"Error reading or parsing election_date from {config_path}: {e}")
+             return
+
+        # 2. Instantiate Facade with the loaded date
+        print(f"Instantiating model for election date: {loaded_election_date}")
+        elections_model = ElectionsFacade(election_date=loaded_election_date, debug=args.debug)
+        
+        # 3. Load the inference results (trace, etc.)
+        load_status = elections_model.load_inference_results(args.load_dir) # DEBUG
+        if not load_status:
+             print(f"Error: Failed to load model results from {args.load_dir}")
+             return
+
+        # Rebuild model structure if needed (though prediction might not need full rebuild)
+        # predict_election_outcome primarily needs trace data.
+        # Let's keep it simple for now and assume predict_election_outcome handles needed data.
+        
+        # Define output directory for predictions
+        pred_dir = os.path.join(args.load_dir, "predictions") # Changed from visualizations
+        os.makedirs(pred_dir, exist_ok=True)
+        
+        # Generate and plot the forecast distribution
+        # Import the specific plot function here or ensure it's imported globally
+        from src.visualization.plots import plot_forecasted_election_distribution
+        plot_forecasted_election_distribution(elections_model, pred_dir)
+        
+        print(f"\nPrediction generation step complete. Results saved to {pred_dir}")
+        
+    except Exception as e:
+        print(f"Error during prediction: {e}")
+        import traceback
+        traceback.print_exc()
+
 def main(args=None):
     parser = argparse.ArgumentParser(description="Election Model CLI")
     parser.add_argument(
         "--mode",
-        choices=["train", "predict", "predict-history", "retrodictive", "nowcast", "cross-validate", "viz", "visualize-data", "diagnose"],
+        choices=["train", "viz", "visualize-data", "diagnose", "cross-validate", "predict"],
         required=True,
         help="Operation mode",
     )
@@ -609,39 +742,24 @@ def main(args=None):
     # Set random seed
     np.random.seed(args.seed)
 
-    # Validate arguments
-    if args.mode in ["train", "predict"]:
-        if not args.election_date:
-            parser.error("--election-date is required for train/predict modes")
-        # Remove dataset requirement for train mode since data is loaded internally
-        # if not args.dataset and args.mode == "train":
-        #    parser.error("--dataset is required for train mode")
-    
-    # Add validation for visualize-data if needed (e.g., require election date)
-    # if args.mode == "visualize-data" and not args.election_date:
-    #     parser.error("--election-date is recommended for visualize-data mode to set context")
-
+    # Add specific argument requirements based on mode
+    if args.mode == "train" and not args.election_date:
+        parser.error("--election-date is required for train mode")
+        
+    # Prediction mode needs a load directory
     if args.mode == "predict" and not args.load_dir:
         parser.error("--load-dir is required for predict mode")
         
-    if args.mode == "viz" and not args.load_dir:
-        parser.error("--load-dir is required for viz mode")
-        
-    if args.mode == "diagnose" and not args.load_dir:
-        parser.error("--load-dir is required for diagnose mode")
-    
+    # Visualization modes need a load directory
+    if args.mode in ["viz", "diagnose"] and not args.load_dir:
+        parser.error("--load-dir is required for viz/diagnose modes")
+
     # Run the selected mode
     try:
         if args.mode == "train":
             fit_model(args)
         elif args.mode == "predict":
             predict(args)
-        elif args.mode == "predict-history":
-            predict_history(args)
-        elif args.mode == "retrodictive":
-            retrodictive(args)
-        elif args.mode == "nowcast":
-            nowcast(args)
         elif args.mode == "cross-validate":
             cross_validate(args)
         elif args.mode == "viz":

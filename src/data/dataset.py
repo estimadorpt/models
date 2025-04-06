@@ -56,8 +56,11 @@ class ElectionDataset:
         self.election_timescales = election_timescales
         self.test_cutoff = test_cutoff
         
-        # Use only historical elections for training, not future elections
-        self.election_dates = self.historical_election_dates.copy()
+        # Create a combined list of all election cycle end dates (historical + target)
+        self.all_election_dates = sorted(list(set(self.historical_election_dates + [self.election_date]))) 
+        # self.election_dates is kept as historical only for compatibility in some places, clarify usage.
+        # Primarily, coordinates should use all_election_dates or historical_election_dates explicitly.
+        self.election_dates = self.historical_election_dates.copy() # Retain for existing logic if needed, but prefer specific lists.
         
         # Check if our target election is in the future (not in historical dates)
         is_future_election = election_date not in self.historical_election_dates
@@ -69,43 +72,68 @@ class ElectionDataset:
         
         # Load data
         self.polls = self._load_polls()
-        
-        # Filter polls to only include those for historical elections with known results
-        historical_polls = self.polls[self.polls["election_date"].isin(self.historical_election_dates)]
-        print(f"\nFiltered polls: {len(self.polls)} total polls -> {len(historical_polls)} historical polls")
-        
-        # For training we use only historical polls
-        self.polls_mult = self.cast_as_multinomial(historical_polls)
         self.results_mult = self._load_results()
-
-        # For future elections, use all historical polls for training
-        if is_future_election:
-            print(f"\nUsing ALL historical polls for training (future election forecasting mode)")
-            self.polls_train = self.polls_mult.copy()
-            self.polls_test = pd.DataFrame(columns=self.polls_mult.columns)  # Empty test set
-        else:
-            # For historical elections, split data into train/test for validation
-            print(f"\nSplitting polls into train/test sets (historical election validation mode)")
-            (
-                self.polls_train,
-                self.polls_test,
-            ) = train_test_split(self.polls_mult, test_cutoff)
-
-        # Process data
-        _, self.unique_elections = self.polls_train["election_date"].factorize()
-        _, self.unique_pollsters = self.polls_train["pollster"].factorize()
         
-        # For inference, use all historical elections
+        # Ensure results_mult has a unique DatetimeIndex based on election_date
+        if not self.results_mult.empty:
+            try:
+                self.results_mult['election_date'] = pd.to_datetime(self.results_mult['election_date'])
+                # Keep the first occurrence if duplicates exist based on date
+                self.results_mult = self.results_mult.drop_duplicates(subset=['election_date'], keep='first')
+                self.results_mult = self.results_mult.set_index('election_date', drop=False) # Keep column too
+                # Sort index just in case
+                self.results_mult = self.results_mult.sort_index()
+                print(f"Processed results_mult index: Is unique? {self.results_mult.index.is_unique}")
+            except KeyError:
+                print("Error: 'election_date' column not found in results_mult. Cannot set index.")
+            except Exception as e:
+                print(f"Error processing results_mult index: {e}")
+        else:
+            print("Warning: results_mult is empty.")
+        
+        # Convert ALL polls to multinomial format first
+        all_polls_mult = self.cast_as_multinomial(self.polls)
+
+        # --- Conditional Train/Test Split based on mode (future forecast vs historical validation) ---
+        if test_cutoff is None:
+            # Training mode for future election: Use ALL polls for training
+            print(f"\nUsing ALL {len(all_polls_mult)} polls for training (test_cutoff is None).")
+            self.polls_train = all_polls_mult.copy()
+            self.polls_test = pd.DataFrame(columns=all_polls_mult.columns)  # Empty test set
+        else:
+            # Validation mode for historical election: Split based on test_cutoff
+            print(f"\nSplitting polls into train/test sets using test_cutoff: {test_cutoff}")
+            # Assuming train_test_split works correctly based on the last historical election
+            # It needs to operate on all_polls_mult now
+            self.polls_train, self.polls_test = train_test_split(all_polls_mult, test_cutoff)
+            print(f"  - polls_train shape: {self.polls_train.shape}")
+            print(f"  - polls_test shape: {self.polls_test.shape}")
+
+        # --- Continue with processing based on polls_train ---
+        # Process data - Ensure factorize uses polls_train
+        if not self.polls_train.empty:
+            _, self.unique_elections = self.polls_train["election_date"].factorize()
+            _, self.unique_pollsters = self.polls_train["pollster"].factorize()
+        else:
+            print("Warning: polls_train is empty after split. Unique elections/pollsters will be empty.")
+            self.unique_elections = pd.Index([])
+            self.unique_pollsters = pd.Index([])
+            
+        # For inference, results_oos should contain only HISTORICAL results
         self.results_oos = self.results_mult.copy()
+        
+        # Ensure results_oos dates align with historical dates
+        self.results_oos = self.results_oos[self.results_oos['election_date'].isin(pd.to_datetime(self.historical_election_dates))]
         
         # Debug info about results
         print(f"\n=== RESULTS DATA ===")
         print(f"All results shape: {self.results_mult.shape}, dates: {self.results_mult['election_date'].unique()}")
         print(f"Historical elections: {self.historical_election_dates}")
+        print(f"All election cycles (for model coords): {self.all_election_dates}")
         print(f"Results_oos shape: {self.results_oos.shape}, dates: {self.results_oos['election_date'].unique()}")
         
         self.government_status = create_government_status(
-            self.election_dates, 
+            self.all_election_dates, # Use all dates for gov status matrix
             self.government_parties, 
             self.political_families
         )
@@ -120,7 +148,7 @@ class ElectionDataset:
         print("\n=== FINAL NaN DIAGNOSTICS ===")
         for name, df in [
             ("polls", self.polls), 
-            ("polls_mult", self.polls_mult),
+            ("polls_mult", all_polls_mult),
             ("results_mult", self.results_mult),
             ("polls_train", self.polls_train),
             ("polls_test", self.polls_test),
@@ -179,11 +207,8 @@ class ElectionDataset:
     def find_closest_election_date(self, row):
         """Find the closest upcoming election date for a given poll date"""
         # Include both historical elections and the target election
-        all_elections = self.historical_election_dates.copy()
-        if self.election_date not in all_elections:
-            all_elections.append(self.election_date)
-            
-        election_datetime = [pd.to_datetime(date) for date in all_elections]
+        # Use the combined list of all election dates
+        election_datetime = [pd.to_datetime(date) for date in self.all_election_dates]
         row_date = row['date']
         
         # Get the last historical election date (most recent, which is at index 0)
@@ -226,7 +251,7 @@ class ElectionDataset:
         # Add empty gdp column to avoid errors
         for df in [self.polls_train, self.polls_test, self.results_mult]:
             if 'gdp' not in df.columns:
-                df['gdp'] = 0  # Use constant value instead of NaN
+                df['gdp'] = 0.0  # Use float constant value instead of NaN
         return
 
     def _standardize_continuous_predictors(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
@@ -239,13 +264,17 @@ class ElectionDataset:
         
         self.continuous_predictors = (
             pd.concat([polls_data, results_data])
-            .set_index(["date", "type"])
-            .sort_index()
+             .set_index(["date", "type"])
+             .sort_index() # Removed standardization
         )
         
-        # Simplified to avoid standardization issues with constant values
+        # Extract predictors, aligning results_preds with all_election_dates
         results_preds = self.continuous_predictors.xs('result', level='type')
         campaign_preds = self.continuous_predictors.xs('poll', level='type')
+ 
+        # Reindex results_preds to include all election dates, forward-filling missing values
+        all_election_dates_dt = pd.to_datetime(self.all_election_dates)
+        results_preds = results_preds.reindex(all_election_dates_dt, method='ffill').fillna(0.0) # Pad with 0 if no prior data
 
         return results_preds, campaign_preds
     

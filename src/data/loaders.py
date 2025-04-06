@@ -422,6 +422,8 @@ def load_election_results(election_dates, political_families):
         print(f"Expected political families: {political_families}")
         print(f"Available political families in this file: {available_parties}")
         
+        # Debug: Print election date being added
+        print(f"---> Adding results for date: {temp_results_df['election_date'].iloc[0]}")
         dfs.append(temp_results_df)
     
     # Check if all election dates have corresponding result files
@@ -451,6 +453,13 @@ def load_election_results(election_dates, political_families):
         print("ERROR: No election results could be loaded!")
         return pd.DataFrame()
         
+    # Debug: Print dates just before concatenation
+    print("\n--- Election dates in list before concat ---")
+    for temp_df in dfs:
+        if not temp_df.empty:
+            print(f"  - {temp_df['election_date'].iloc[0]}")
+    print("---------------------------------------------")
+    
     df = pd.concat(dfs)
     print(f"\nFinal combined dataframe shape: {df.shape}")
     print(f"Final combined dataframe columns: {df.columns.tolist()}")
