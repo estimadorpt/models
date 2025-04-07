@@ -11,21 +11,27 @@ import xarray as xr
 from scipy.special import softmax
 
 from src.data.dataset import ElectionDataset
+from src.models.base_model import BaseElectionModel
 
 
-class ElectionModel:
+class ElectionModel(BaseElectionModel):
     """A Bayesian election model"""
 
-    def __init__(self, dataset: ElectionDataset):
-        self.dataset = dataset
+    def __init__(self, dataset: ElectionDataset, **kwargs):
+        super().__init__(dataset, **kwargs)
         
         self.gp_config = {
-            "baseline_lengthscale": dataset.baseline_timescales,
-            "election_lengthscale": dataset.election_timescales,            
-            "kernel": "matern52",
-            "zerosum": True,
-            "variance_limit": 0.8,
+            "baseline_lengthscale": kwargs.get("baseline_lengthscale", dataset.baseline_timescales),
+            "election_lengthscale": kwargs.get("election_lengthscale", dataset.election_timescales),            
+            "kernel": kwargs.get("kernel", "matern52"),
+            "zerosum": kwargs.get("zerosum", True),
+            "variance_limit": kwargs.get("variance_limit", 0.8),
         }
+        self.pollster_id = None
+        self.countdown_id = None
+        self.election_id = None
+        self.observed_election_indices = None
+        self.gp_baseline = None
 
     def _build_coords(self, polls: pd.DataFrame = None):
         """Build the coordinates for the PyMC model"""
@@ -383,74 +389,10 @@ class ElectionModel:
                 dims=("elections_observed", "parties_complete") # Explicitly use observed dim
             )
 
+            # Store gp_baseline instance for later use in prediction
+            self.gp_baseline = gp_baseline 
+
         return model
-
-    def sample_all(
-        self, *, model: pm.Model = None, var_names: List[str], **sampler_kwargs
-    ):
-        """
-        Sample the model and return the trace.
-
-        Parameters
-        ----------
-        model : optional
-            A model previously created using `self.build_model()`.
-            Build a new model if None (default)
-        var_names: List[str]
-            Variables names passed to `pm.fast_sample_posterior_predictive`
-        **sampler_kwargs : dict
-            Additional arguments to `pm.sample`
-        """
-        if model is None:
-            model = self.build_model()
-
-        # Set defaults for common parameters if not already specified
-        sampler_kwargs.setdefault('nuts_sampler', 'numpyro')
-        sampler_kwargs.setdefault('return_inferencedata', True)
-        
-        # Increase defaults for draws and tune if not specified
-        sampler_kwargs.setdefault('draws', 3000)  # Increased from 2000
-        sampler_kwargs.setdefault('tune', 3000)   # Increased from 2000
-        
-        # Add chain initialization strategy if not specified
-        if 'init' not in sampler_kwargs:
-            # Use jitter+adapt_diag for better initialization that's more robust
-            sampler_kwargs['init'] = 'jitter+adapt_diag'
-        
-        # Set number of chains if not specified
-        sampler_kwargs.setdefault('chains', 4)
-        
-        # Set max tree depth
-        sampler_kwargs.setdefault('max_treedepth', 15)  # Increased from default 10
-        
-        # Recommend sampling parameters for better performance
-        sampler_kwargs.setdefault('target_accept', 0.95)  # Maintains the already good target
-        
-        with model:
-            prior_checks = pm.sample_prior_predictive()
-            
-            # Sample with improved diagnostics
-            trace = pm.sample(**sampler_kwargs)
-            
-            # Store additional convergence diagnostics
-            if trace is not None and isinstance(trace, arviz.InferenceData):
-                # Check for divergences
-                n_divergent = trace.sample_stats.diverging.sum().item()
-                if n_divergent > 0:
-                    print(f"WARNING: {n_divergent} divergent transitions detected")
-                
-                # Check if any parameters hit max tree depth frequently
-                if 'tree_depth' in trace.sample_stats:
-                    max_depths = (trace.sample_stats.tree_depth >= sampler_kwargs.get('max_treedepth', 10)).sum().item()
-                    if max_depths > 0:
-                        pct_max_depth = max_depths / (trace.posterior.dims['chain'] * trace.posterior.dims['draw'])
-                        print(f"WARNING: {max_depths} samples ({pct_max_depth:.1%}) reached maximum tree depth")
-            
-            post_checks = pm.sample_posterior_predictive(
-                trace, var_names=var_names
-            )
-
-        return prior_checks, trace, post_checks
 
     def posterior_predictive_check(self, posterior):
         """
@@ -515,7 +457,8 @@ class ElectionModel:
         self, 
         idata: arviz.InferenceData, 
         current_polls: pd.DataFrame, 
-        latest_election_date: str
+        latest_election_date: str,
+        model_output_dir: str = "."
     ) -> Tuple[arviz.InferenceData, Dict, Dict]:
         """
         Nowcast the current party support based on most recent polls.
@@ -552,9 +495,27 @@ class ElectionModel:
         if missing_parties:
             raise ValueError(f"Missing required parties in current polls: {missing_parties}")
         
+        if not hasattr(self, 'model') or self.model is None:
+             raise ValueError("Original model structure (`self.model`) not found or not built.")
+
         # Get reference to original model
-        original_model = self.model
+        # original_model = self.model # Use the instance's model attribute
         
+        # Check if model has coords, if not, try building it simply
+        if not hasattr(self.model, 'coords') or not self.model.coords:
+             print("Warning: Original model coordinates not found. Attempting a simple build.")
+             try:
+                 # Use the stored dataset reference
+                 self._build_coords(self.dataset.polls_train) 
+                 # A minimal build might be needed, or rely on coords stored in self.coords
+             except Exception as e:
+                 raise RuntimeError(f"Failed to establish model coordinates for nowcasting: {e}")
+        
+        # If self.model.coords is still not populated, use self.coords
+        original_model_coords = self.model.coords if hasattr(self.model, 'coords') and self.model.coords else self.coords
+        if not original_model_coords:
+             raise RuntimeError("Failed to obtain model coordinates.")
+
         # Map current polls to model indices
         pollster_indices = np.zeros(len(current_polls), dtype=int)
         
@@ -563,7 +524,7 @@ class ElectionModel:
             pollsters_list = idata.posterior.coords['pollsters'].values
             print(f"\n=== Using pollster list DIRECTLY FROM POSTERIOR ===")
         else:
-            pollsters_list = np.atleast_1d(original_model.coords["pollsters"])
+            pollsters_list = np.atleast_1d(original_model_coords["pollsters"])
             print(f"\n=== Using pollster list from original model ===")
         
         # Check for new pollsters and print diagnostic info
@@ -589,8 +550,8 @@ class ElectionModel:
             "observations": pd.to_datetime(current_polls['date']).values,  # Use actual datetime objects
             "parties_complete": self.dataset.political_families,
             "pollsters": pollsters_list,  # Use exactly the same pollster list from posterior
-            "elections": original_model.coords["elections"],
-            "countdown": original_model.coords["countdown"],
+            "elections": original_model_coords["elections"],
+            "countdown": original_model_coords["countdown"],
         }
         
         # Debug: print house effects for current pollsters
@@ -600,7 +561,7 @@ class ElectionModel:
             import os
             
             # Set the output directory
-            self.model_output_dir = "outputs/latest/nowcast"
+            self.model_output_dir = model_output_dir
             
             # Create debug plots directory
             debug_dir = f"{self.model_output_dir}/debug_plots"
@@ -636,7 +597,7 @@ class ElectionModel:
             # 2. Plot party_time_effect_weighted
             if 'party_time_effect_weighted' in idata.posterior:
                 pte = idata.posterior['party_time_effect_weighted'].mean(dim=["chain", "draw"])
-                countdown_vals = original_model.coords["countdown"]
+                countdown_vals = original_model_coords["countdown"]
                 for party_idx, party in enumerate(self.dataset.political_families):
                     plt.figure(figsize=(12, 6))
                     plt.plot(countdown_vals, pte.sel(parties_complete=party).values)
@@ -688,7 +649,7 @@ class ElectionModel:
         
         # Clip countdown values to valid range
         countdown_indices = current_polls["countdown"].astype(int).values.clip(
-            0, len(original_model.coords["countdown"]) - 1
+            0, len(original_model_coords["countdown"]) - 1
         )
         
         # Match election dates to indices
@@ -697,7 +658,7 @@ class ElectionModel:
         latest_historical_date_str = latest_historical_date.strftime("%Y-%m-%d")
         
         election_indices = np.zeros(len(current_polls), dtype=int)
-        elections_list = np.atleast_1d(original_model.coords["elections"])
+        elections_list = np.atleast_1d(original_model_coords["elections"])
         
         for i, date in enumerate(current_polls["election_date"]):
             match_found = False
@@ -815,8 +776,10 @@ class ElectionModel:
                  # Fallback: This requires complex reconstruction not shown here.
                  # Need gp_baseline parameters from idata.
                  print("WARNING: 'party_time_effect' not found in posterior. Prediction might be inaccurate.")
+                 # Ensure gp_basis_coord_name is defined
+                 gp_basis_coord_name = "gp_basis_baseline" # Assuming this is the name
                  # Create a placeholder Flat variable to avoid errors, but it won't use posterior info
-                 party_time_effect_pred = pm.Flat("party_time_effect_placeholder", dims=("elections", "countdown", "parties_complete"))
+                 party_time_effect_pred = pm.Flat("party_time_effect_placeholder", dims=("elections", "countdown", gp_basis_coord_name, "parties_complete")) # Adjust dims if needed
 
 
             latent_mu = pm.Deterministic(
@@ -1093,10 +1056,26 @@ class ElectionModel:
         print(f"\n--- Predicting Latent Trajectory from {start_date.date()} to {end_date.date()} ---")
         
         # Check for necessary attributes
-        if not hasattr(self, 'gp_baseline'):
-             raise RuntimeError("Original GP object (`self.gp_baseline`) not found.")
-        if not hasattr(self, 'coords'):
-             raise RuntimeError("Original model coordinates (`self.coords`) not found.")
+        if not hasattr(self, 'gp_baseline') or self.gp_baseline is None:
+             # Try to rebuild the model to potentially set gp_baseline if not already set
+             print("Warning: gp_baseline not found. Attempting to rebuild model...")
+             try:
+                 _ = self.build_model() # Rebuild to ensure gp_baseline is set
+                 if not hasattr(self, 'gp_baseline') or self.gp_baseline is None:
+                      raise RuntimeError("Failed to set gp_baseline even after rebuild.")
+             except Exception as e:
+                 raise RuntimeError(f"Original GP object (`self.gp_baseline`) not found and couldn't be rebuilt: {e}")
+                 
+        if not hasattr(self, 'coords') or not self.coords:
+             # Try rebuilding coords if missing
+             print("Warning: coords not found. Attempting to rebuild coords...")
+             try:
+                 _, _, _, self.coords, _ = self._build_coords(self.dataset.polls_train)
+                 if not hasattr(self, 'coords') or not self.coords:
+                     raise RuntimeError("Failed to set coords even after rebuild.")
+             except Exception as e:
+                 raise RuntimeError(f"Original model coordinates (`self.coords`) not found and couldn't be rebuilt: {e}")
+
         # Use a known date from coords if election_date attribute isn't reliably set
         if 'elections' not in self.coords or len(self.coords['elections']) == 0:
              raise RuntimeError("Model 'elections' coordinate not found or empty.")
@@ -1273,9 +1252,9 @@ class ElectionModel:
         """Generate predictions for out-of-sample poll data."""
         if self.trace is None:
             raise ValueError("Model must be fit with run_inference() before predicting")
-        if not hasattr(self, 'coords'):
+        if not hasattr(self, 'coords') or not self.coords:
             raise ValueError("Model coordinates not found. Fit the model first.")
-        if not hasattr(self, 'model'): # Need the original model object
+        if not hasattr(self, 'model') or self.model is None:
              raise ValueError("Original model object (`self.model`) not found.")
 
         # Use the *original* model context for setting data
@@ -1371,9 +1350,9 @@ class ElectionModel:
         """Calculate predictive accuracy for historical elections."""
         if self.trace is None:
              raise ValueError("Model must be fit with run_inference() before predicting historical accuracy")
-        if not hasattr(self, 'coords'): # Added check
+        if not hasattr(self, 'coords') or not self.coords:
              raise ValueError("Model coordinates not found. Fit the model first.")
-        if not hasattr(self, 'model'): # Added check
+        if not hasattr(self, 'model') or self.model is None:
              raise ValueError("Original model object (`self.model`) not found.")
 
         # Convert string dates to datetime objects for comparison

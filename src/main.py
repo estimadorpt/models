@@ -13,6 +13,7 @@ import pymc as pm
 import json
 
 from src.models.elections_facade import ElectionsFacade
+from src.models.election_model import ElectionModel
 from src.visualization.plots import (
     plot_election_data, 
     plot_latent_popularity_vs_polls, 
@@ -52,11 +53,15 @@ def fit_model(args):
         # Initialize the elections model
         elections_model = ElectionsFacade(
             election_date=args.election_date,
+            model_class=ElectionModel,
             baseline_timescales=args.baseline_timescale,
             election_timescales=args.election_timescale,
             test_cutoff=pd.Timedelta(args.cutoff_date) if args.cutoff_date else None,
             debug=args.debug
         )
+        
+        # Access the specific model instance for model-specific details if needed
+        model_instance = elections_model.model_instance
         
         # Start time measurement
         start_time = time.time()
@@ -83,6 +88,9 @@ def fit_model(args):
         if elections_model.trace is not None:
             diag_plot_dir = os.path.join(output_dir, "diagnostics")
             elections_model.generate_diagnostic_plots(diag_plot_dir)
+            # If there are model-specific diagnostic plots, call them here:
+            # if hasattr(model_instance, 'generate_specific_diagnostics'):
+            #    model_instance.generate_specific_diagnostics(diag_plot_dir)
         else:
             print("Skipping diagnostic plot generation as trace is not available.")
         
@@ -187,20 +195,29 @@ def load_model(directory, election_date=None, baseline_timescales=None, election
             print(f"Warning: model_config.json not found in {directory}. Using defaults or command-line args.")
         # --- End Load Configuration ---
 
-        # Use loaded config values if available, otherwise use provided args or defaults
-        final_election_date = loaded_config.get('election_date', election_date if election_date else '2026-01-01')
-        # Ensure loaded values override function args if config exists
-        final_baseline_timescales = loaded_config.get('baseline_timescales', baseline_timescales if baseline_timescales is not None else DEFAULT_BASELINE_TIMESCALE)
-        final_election_timescales = loaded_config.get('election_timescales', election_timescales if election_timescales is not None else DEFAULT_ELECTION_TIMESCALES)
-        # Add other parameters like cutoff_date if needed by Facade init
-        final_cutoff_date = loaded_config.get('cutoff_date', None) # Assuming Facade handles None
+        # --- Determine Configuration Priority --- 
+        # Priority: Command-line args > Loaded config > Defaults
+        final_election_date = args.election_date if args.election_date else loaded_config.get('election_date', '2026-01-01')
+        # Handle timescale args (which might be defaults from argparse)
+        # If the command-line arg is different from the argparse default, use it. Otherwise, check loaded config.
+        bs_timescale_arg = args.baseline_timescale if args.baseline_timescale != DEFAULT_BASELINE_TIMESCALE else None
+        el_timescale_arg = args.election_timescale if args.election_timescale != DEFAULT_ELECTION_TIMESCALES else None
 
-        # Ensure timescales are lists (might be redundant if config saves them correctly, but safe)
+        final_baseline_timescales = bs_timescale_arg if bs_timescale_arg is not None else loaded_config.get('baseline_timescales', DEFAULT_BASELINE_TIMESCALE)
+        final_election_timescales = el_timescale_arg if el_timescale_arg is not None else loaded_config.get('election_timescales', DEFAULT_ELECTION_TIMESCALES)
+
+        final_cutoff_date = args.cutoff_date if args.cutoff_date else loaded_config.get('cutoff_date', None)
+
+        # Ensure timescales are lists
         if not isinstance(final_baseline_timescales, list):
             final_baseline_timescales = [final_baseline_timescales]
         if not isinstance(final_election_timescales, list):
             final_election_timescales = [final_election_timescales]
-            
+
+        # TODO: Handle model selection based on config/args if multiple models exist
+        # For now, assume ElectionModel
+        model_class_to_load = ElectionModel
+
         if debug:
             print(f"Initializing Facade with -> election_date: {final_election_date}")
             print(f"Initializing Facade with -> baseline_timescales: {final_baseline_timescales}")
@@ -209,6 +226,7 @@ def load_model(directory, election_date=None, baseline_timescales=None, election
 
         elections_model = ElectionsFacade(
             election_date=final_election_date,
+            model_class=model_class_to_load,
             baseline_timescales=final_baseline_timescales,
             election_timescales=final_election_timescales,
             test_cutoff=pd.Timedelta(final_cutoff_date) if final_cutoff_date else None, # Pass loaded/default cutoff
@@ -221,7 +239,7 @@ def load_model(directory, election_date=None, baseline_timescales=None, election
         # Rebuild the model structure (necessary for posterior predictive checks etc.)
         # This uses the parameters passed to ElectionsFacade, ensuring consistency
         print("Rebuilding model structure...")
-        elections_model.model.build_model()
+        elections_model.build_model()
         print("Model structure rebuilt.")
         
         return elections_model
@@ -231,143 +249,6 @@ def load_model(directory, election_date=None, baseline_timescales=None, election
         if debug:
             traceback.print_exc()
         return None
-
-def nowcast(args):
-    """Run nowcasting by refitting the model with all available data up to the present."""
-    print("Running nowcast by refitting model with all available data...")
-    start_time = time.time()
-
-    # --- 1. Prepare Output Directory --- 
-    output_dir = os.path.join(args.output_dir, "nowcast_refit") # New subdir name
-    os.makedirs(output_dir, exist_ok=True)
-    latest_base_dir = os.path.join(args.output_dir, "latest")
-    os.makedirs(latest_base_dir, exist_ok=True)
-    latest_nowcast_dir = os.path.join(latest_base_dir, "nowcast_refit") # Link name
-    if os.path.exists(latest_nowcast_dir):
-        if os.path.islink(latest_nowcast_dir):
-            os.unlink(latest_nowcast_dir)
-        else:
-            import shutil
-            shutil.rmtree(latest_nowcast_dir)
-    try:
-        abs_output_dir = os.path.abspath(output_dir)
-        abs_latest_nowcast_dir = os.path.abspath(latest_nowcast_dir)
-        os.symlink(abs_output_dir, abs_latest_nowcast_dir, target_is_directory=True)
-        if args.debug:
-            print(f"Created symbolic link from {abs_latest_nowcast_dir} to {abs_output_dir}")
-    except OSError as e:
-        print(f"Warning: Could not create symbolic link: {e}")
-
-    # --- 2. Load Configuration from Training Run --- 
-    loaded_config = {}
-    config_path = os.path.join(args.load_dir, "model_config.json") # Load from the specified training run
-    if os.path.exists(config_path):
-        try:
-            with open(config_path, 'r') as f:
-                loaded_config = json.load(f)
-            print(f"Loaded configuration from {config_path}: {loaded_config}")
-        except Exception as config_err:
-            print(f"ERROR: Failed to load model configuration from {config_path}: {config_err}")
-            return # Cannot proceed without config
-    else:
-        print(f"ERROR: model_config.json not found in {args.load_dir}. Cannot proceed.")
-        return
-
-    # Use loaded config or defaults for Facade initialization
-    baseline_timescales = loaded_config.get('baseline_timescales', args.baseline_timescale)
-    election_timescales = loaded_config.get('election_timescales', args.election_timescale)
-    # Ensure they are lists
-    if not isinstance(baseline_timescales, list): baseline_timescales = [baseline_timescales]
-    if not isinstance(election_timescales, list): election_timescales = [election_timescales]
-
-    # --- 3. Initialize Facade & Determine Nowcast Date --- 
-    try:
-        # Temporarily instantiate dataset just to get the latest poll date
-        temp_dataset = ElectionDataset(election_date="2099-01-01", test_cutoff=None) # Use future date context
-        latest_poll_date = pd.to_datetime(temp_dataset.polls['date']).max()
-        nowcast_election_date = (latest_poll_date + pd.Timedelta(days=1)).strftime('%Y-%m-%d')
-        print(f"Latest poll date: {latest_poll_date.strftime('%Y-%m-%d')}. Setting nowcast context date to: {nowcast_election_date}")
-
-        # Now instantiate the actual Facade for the refit
-        # CRUCIALLY set test_cutoff=None to use ALL polls for training
-        elections_model = ElectionsFacade(
-            election_date=nowcast_election_date, # Use date for context endpoint
-            baseline_timescales=baseline_timescales,
-            election_timescales=election_timescales,
-            test_cutoff=None, 
-            debug=args.debug
-        )
-        print(f"Facade initialized. Dataset contains {len(elections_model.dataset.polls)} total polls.")
-        # Verify polls_train contains all polls
-        if len(elections_model.dataset.polls_train) != len(elections_model.dataset.polls):
-             print(f"WARNING: polls_train ({len(elections_model.dataset.polls_train)}) != total polls ({len(elections_model.dataset.polls)}). Check dataset init logic.")
-        else:
-             print("Confirmed: polls_train contains all loaded polls.")
-             
-    except Exception as e:
-        print(f"Error initializing ElectionsFacade: {e}")
-        if args.debug:
-            traceback.print_exc()
-        return
-
-    # --- 4. Run Inference (Refit) --- 
-    try:
-        print("\nStarting model refit using all data...")
-        # Use potentially fewer draws/tune for speed in nowcast setting
-        # TODO: Make draws/tune configurable via args for nowcast mode?
-        nowcast_draws = args.draws // 2 if args.draws > 500 else 500 # Example: half draws, min 500
-        nowcast_tune = args.tune // 2 if args.tune > 500 else 500   # Example: half tune, min 500
-        print(f"Using draws={nowcast_draws}, tune={nowcast_tune}")
-        
-        elections_model.run_inference(
-            draws=nowcast_draws,
-            tune=nowcast_tune,
-            target_accept=args.target_accept # Use target_accept from args
-        )
-    except Exception as e:
-        print(f"Error during model refitting: {e}")
-        if args.debug:
-            traceback.print_exc()
-        return
-        
-    # --- 5. Save Results --- 
-    try:
-        # Save the new trace and the config used for THIS run
-        current_config = {
-            "election_date": nowcast_election_date,
-            "baseline_timescales": baseline_timescales,
-            "election_timescales": election_timescales,
-            "cutoff_date": None, # Explicitly None for refit
-            "refit_draws": nowcast_draws,
-            "refit_tune": nowcast_tune
-        }
-        config_path = os.path.join(output_dir, "nowcast_config.json")
-        with open(config_path, 'w') as f:
-            json.dump(current_config, f, indent=4)
-            
-        elections_model.save_inference_results(output_dir) # Saves trace etc.
-        print(f"Refit results (trace, config) saved to {output_dir}")
-    except Exception as e:
-        print(f"Error saving refit results: {e}")
-        # Continue to plotting if possible
-
-    # --- 6. Plot Results --- 
-    try:
-        print("\nGenerating plots from refit results...")
-        # Use the existing plot function designed for a fitted model
-        plot_latent_popularity_vs_polls(elections_model, output_dir)
-        # Add other relevant plots if desired, e.g.:
-        # plot_latent_component_contributions(elections_model, output_dir)
-        plot_house_effects_heatmap(elections_model, output_dir)
-        print(f"Plots saved to {output_dir}")
-    except Exception as plot_err:
-        print(f"Warning: Failed to generate plots from refit results: {plot_err}")
-        if args.debug:
-            traceback.print_exc()
-
-    print(f"\nNowcast refit completed in {(time.time() - start_time)/60:.2f} minutes")
-    print(f"Results saved to {output_dir}")
-    print("==========================================\n")
 
 def visualize(args):
     """Generate visualizations for a saved model"""
@@ -409,10 +290,13 @@ def visualize(args):
         # --- Generate Standard Historical Plots --- 
         print("\nGenerating historical model diagnostics and visualization plots...")
         # These use the posterior trace directly
-        plot_latent_popularity_vs_polls(elections_model, viz_dir, include_target_date=True)
-        plot_latent_component_contributions(elections_model, viz_dir)
-        plot_recent_polls(elections_model, viz_dir) # Might need adjustment if it expects specific test set
-        plot_house_effects_heatmap(elections_model, viz_dir)
+        if elections_model.model_instance:
+            plot_latent_popularity_vs_polls(elections_model.model_instance, viz_dir, include_target_date=True)
+            plot_latent_component_contributions(elections_model.model_instance, viz_dir)
+            plot_recent_polls(elections_model.model_instance, viz_dir) # Might need adjustment if it expects specific test set
+            plot_house_effects_heatmap(elections_model.model_instance, viz_dir)
+        else:
+            print("Warning: Model instance not available for plotting.")
         print(f"Historical visualizations saved to {viz_dir}")
         
         # --- Generate Forecast Distribution Plot ---
@@ -457,6 +341,7 @@ def cross_validate(args):
             # Initialize model for this election
             elections_model = ElectionsFacade(
                 election_date=election_date,
+                model_class=ElectionModel,
                 baseline_timescales=args.baseline_timescales,
                 election_timescales=args.election_timescales,
                 debug=args.debug
@@ -544,7 +429,7 @@ def visualize_data(args):
         )
 
         # Call the plotting function
-        plot_election_data(dataset)
+        plot_election_data(dataset, args.output_dir)
 
         print("Data visualization complete.")
 
@@ -639,7 +524,10 @@ def predict(args):
         # Generate and plot the forecast distribution
         # Import the specific plot function here or ensure it's imported globally
         from src.visualization.plots import plot_forecasted_election_distribution
-        plot_forecasted_election_distribution(elections_model, pred_dir)
+        if elections_model.model_instance:
+            plot_forecasted_election_distribution(elections_model.model_instance, pred_dir)
+        else:
+             print("Warning: Model instance not available for plotting forecast distribution.")
         
         print(f"\nPrediction generation step complete. Results saved to {pred_dir}")
         

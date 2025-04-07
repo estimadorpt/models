@@ -721,7 +721,7 @@ def plot_forecasted_election_distribution(elections_model: 'ElectionsFacade', ou
         return
 
     # 2. Convert to DataFrame for easier plotting with Seaborn
-    latent_pop_df = latent_pop_samples.stack(sample=('chain', 'draw')).to_dataframe().reset_index()
+    latent_pop_df = latent_pop_samples.to_dataframe().reset_index() # Simpler conversion
     
     # Rename the value column for clarity
     value_col_name = latent_pop_samples.name if latent_pop_samples.name else 'latent_popularity' # Use variable name or default
