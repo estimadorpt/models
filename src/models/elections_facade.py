@@ -1,5 +1,5 @@
 import os
-from typing import Dict, List, Tuple, Optional, Union
+from typing import Dict, List, Tuple, Optional, Union, Type
 
 import arviz
 import arviz as az
@@ -14,6 +14,7 @@ import zarr
 
 from src.data.dataset import ElectionDataset
 from src.models.election_model import ElectionModel
+from src.models.base_model import BaseElectionModel
 
 
 class ElectionsFacade:
@@ -28,10 +29,12 @@ class ElectionsFacade:
     def __init__(
         self,
         election_date: str,
+        model_class: Type[BaseElectionModel] = ElectionModel,
         baseline_timescales: List[int] = [365],  # Annual cycle
         election_timescales: List[int] = [30, 15],  # Pre-campaign and official campaign
         test_cutoff: pd.Timedelta = None,
         debug: bool = False,
+        **model_kwargs
     ):
         """
         Initialize the elections facade.
@@ -40,6 +43,8 @@ class ElectionsFacade:
         -----------
         election_date : str
             The target election date in 'YYYY-MM-DD' format
+        model_class : Type[BaseElectionModel]
+            The model class to use for the facade
         baseline_timescales : List[int]
             Timescales for baseline GP components in days
         election_timescales : List[int]
@@ -48,10 +53,12 @@ class ElectionsFacade:
             How much data to hold out for testing
         debug : bool
             Whether to print detailed diagnostic information
+        model_kwargs :
+            Additional keyword arguments passed to the model class constructor.
         """
         self.debug = debug
         self.election_date = election_date
-        self.model: Optional[ElectionModel] = None
+        self.model_instance: Optional[BaseElectionModel] = None
         self.trace: Optional[az.InferenceData] = None
         self.test_cutoff = test_cutoff
 
@@ -64,6 +71,8 @@ class ElectionsFacade:
             "election_timescales": self.election_timescales,
             "cutoff_date": self.test_cutoff
         }
+        # Combine config with model-specific kwargs
+        self.model_config_full = {**self.config, **model_kwargs}
 
         if self.debug:
             print(f"Initializing Facade with -> election_date: {self.election_date}")
@@ -78,8 +87,12 @@ class ElectionsFacade:
             test_cutoff=self.test_cutoff,
         )
         
-        # Create the model
-        self.model = ElectionModel(self.dataset)
+        # Create the specific model instance using the provided class
+        print(f"Initializing model of type: {model_class.__name__}")
+        self.model_instance = model_class(
+            dataset=self.dataset,
+            **self.model_config_full
+        )
         
         # Initialize trace containers
         self.prior = None
@@ -89,24 +102,21 @@ class ElectionsFacade:
         self.prediction_dims = None
         
         # Set debug flag
-        self.debug = debug
+        # self.debug = debug # Already set
         
         # Initialize output_dir and model_config
         self.output_dir = None
-        self.model_config = {
-            "election_date": election_date,
-            "baseline_timescales": baseline_timescales,
-            "election_timescales": election_timescales,
-            "save_dir": None,
-            "seed": 12345,
-        }
         
         # Flag to track if inference results have been saved
         self._inference_results_saved = False
         
     def build_model(self):
-        """Build the PyMC model"""
-        return self.model.build_model()
+        """Build the PyMC model using the specific model instance"""
+        if self.model_instance is None:
+            raise RuntimeError("Model instance has not been initialized.")
+        # Delegate building to the specific model instance
+        self.model_instance.model = self.model_instance.build_model()
+        return self.model_instance.model
     
     def run_inference(
         self, 
@@ -150,7 +160,7 @@ class ElectionsFacade:
         sampler_kwargs['target_accept'] = target_accept
         sampler_kwargs['max_treedepth'] = 15 # Increase max tree depth
         
-        self.prior, self.trace, self.posterior = self.model.sample_all(
+        self.prior, self.trace, self.posterior = self.model_instance.sample_all(
             var_names=var_names,
             **sampler_kwargs
         )
@@ -782,7 +792,11 @@ class ElectionsFacade:
         if self.posterior is None:
             raise ValueError("Must run inference before performing posterior predictive checks")
             
-        return self.model.posterior_predictive_check(self.posterior)
+        if self.model_instance is None or not hasattr(self.model_instance, 'posterior_predictive_check'):
+            raise NotImplementedError("The current model does not implement posterior_predictive_check.")
+
+        # Delegate to the specific model instance
+        return self.model_instance.posterior_predictive_check(self.posterior)
 
     def _build_model(self):
         """
@@ -793,59 +807,43 @@ class ElectionsFacade:
         pymc.Model
             The built PyMC model
         """
+        if self.model_instance is None:
+            raise RuntimeError("Model instance has not been initialized.")
+        
         if self.debug:
             print("\n=== MODEL BUILD DIAGNOSTICS ===", flush=True)
             print("Model not built yet - building now...")
         
         try:
-            self.model_config = {
-                "election_date": self.dataset.election_date,
-                "baseline_timescales": self.dataset.baseline_timescales,
-                "election_timescales": self.dataset.election_timescales,
-                "save_dir": getattr(self, "output_dir", None),
-                "seed": 12345,
-            }
+            # model_config_full is already set in __init__
             
             # Set historical elections as coordinates
             if self.debug:
                 print(f"Setting elections coord to historical elections: {self.dataset.historical_election_dates}", flush=True)
                 print(f"Setting elections_observed to all historical elections: {self.dataset.historical_election_dates}", flush=True)
             
-            # Build the model
-            self.model = self.model.build_model()
+            # Build the model using the instance method
+            built_model = self.model_instance.build_model() # This assigns to self.model_instance.model
+            print("Model successfully built!") 
             
+            if built_model is None:
+                raise RuntimeError("Model building returned None.")
+
             if self.debug:
-                # Print model dimensions
-                print("\n=== MODEL DIMENSIONS ===", flush=True)
-                for dim_name, dim_values in self.model.coords.items():
-                    print(f"{dim_name}: shape={len(dim_values)}", flush=True)
-                
-                # Print information about results data
-                if hasattr(self.dataset, "results_oos"):
-                    print(f"results_oos shape: {self.dataset.results_oos.shape}", flush=True)
-                    print(f"results_oos election dates: {self.dataset.results_oos['election_date']}", flush=True)
-                
-                # Print more detailed model information
-                print(f"For inference: Using historical elections data with shape: {self.dataset.historical_elections.shape}", flush=True)
-                print(f"Setting election dimensions to match historical elections: {len(self.dataset.historical_election_dates)}", flush=True)
+                 # Print model variable counts
+                 var_count = len(built_model.named_vars)
+                 observed_vars = len(built_model.observed_RVs)
+                 free_vars = len(built_model.free_RVs)
+                 deterministics = len(built_model.deterministics)
+                  
+                 print("\nModel variables:", flush=True)
+                 print(f"Total variable count: {var_count}", flush=True)
+                 print(f"Observed variables: {observed_vars}", flush=True)
+                 print(f"Free variables: {free_vars}", flush=True)
+                 print(f"Deterministic variables: {deterministics}", flush=True)
+                 print("=====================================", flush=True)
             
-            print("Model successfully built!")
-            
-            if self.debug:
-                # Print model variable counts
-                var_count = len(self.model.named_vars)
-                observed_vars = len(self.model.observed_RVs)
-                free_vars = len(self.model.free_RVs)
-                deterministics = len(self.model.deterministics)
-                
-                print("\nModel variables:", flush=True)
-                print(f"Total variable count: {var_count}", flush=True)
-                print(f"Observed variables: {observed_vars}", flush=True)
-                print(f"Free variables: {free_vars}", flush=True)
-                print(f"Deterministic variables: {deterministics}", flush=True)
-                print("=====================================", flush=True)
-            
-            return self.model
+            return built_model
             
         except Exception as e:
             error_msg = f"Failed to build model: {e}"
@@ -905,124 +903,38 @@ class ElectionsFacade:
         print("=======================================", flush=True)
         return self.prediction, self.prediction_coords, self.prediction_dims 
 
-    def nowcast_party_support(self, current_polls: pd.DataFrame, latest_election_date: str):
-        """
-        Nowcast the current party support based on recent polls since the latest election.
-        
-        This method updates a pre-fit model with current poll data to generate
-        a forecast of current party support.
-        
-        Parameters:
-        -----------
-        current_polls : pd.DataFrame
-            DataFrame containing recent polls to use for nowcasting
-        latest_election_date : str
-            Date of the most recent election
-            
-        Returns:
-        --------
-        ppc : arviz.InferenceData
-            Posterior predictive samples from the nowcast
-        coords : dict
-            Coordinate mapping for the nowcast
-        dims : dict
-            Dimension mapping for the nowcast
-        """
+    def nowcast_party_support(self, *args, **kwargs):
+        """Calls the nowcast method of the specific model instance, if available."""
+        if self.model_instance is None or not hasattr(self.model_instance, 'nowcast_party_support'):
+            raise NotImplementedError("The current model does not implement nowcast_party_support.")
         if self.trace is None:
-            raise ValueError("Model must be fit with run_inference() before nowcasting")
-            
-        return self.model.nowcast_party_support(
-            idata=self.trace,
-            current_polls=current_polls,
-            latest_election_date=latest_election_date,
-            model_output_dir=self.output_dir
-        ) 
+             raise ValueError("Model must be fit with run_inference() before nowcasting")
+        # Pass necessary arguments, including trace
+        return self.model_instance.nowcast_party_support(idata=self.trace, *args, **kwargs)
 
-    def predict(self, oos_data: pd.DataFrame):
-        """
-        Perform prediction on out-of-sample data.
-        
-        Parameters:
-        -----------
-        oos_data : pd.DataFrame
-            Out-of-sample data to predict
-        
-        Returns:
-        --------
-        ppc : arviz.InferenceData
-            Posterior predictive samples from the prediction
-        coords : dict
-            Coordinate mapping for the prediction
-        dims : dict
-            Dimension mapping for the prediction
-        """
+    def predict(self, *args, **kwargs):
+        """Calls the predict method of the specific model instance, if available."""
+        if self.model_instance is None or not hasattr(self.model_instance, 'predict'):
+            raise NotImplementedError("The current model does not implement predict.")
         if self.trace is None:
-            raise ValueError("Model must be fit with run_inference() before predicting")
-            
-        ppc, coords, dims = self.model.predict(oos_data)
-        
-        return ppc, coords, dims
+             raise ValueError("Model must be fit with run_inference() before predicting")
+        return self.model_instance.predict(*args, **kwargs)
 
-    def predict_history(self, elections_to_predict: List[str]):
-        """
-        Calculate predictive accuracy for historical elections.
-        
-        Parameters:
-        -----------
-        elections_to_predict : List[str]
-            List of election dates to predict
-        
-        Returns:
-        --------
-        historical_ppc : arviz.InferenceData
-            Posterior predictive samples from the prediction
-        historical_coords : dict
-            Coordinate mapping for the prediction
-        historical_dims : dict
-            Dimension mapping for the prediction
-        """
+    def predict_history(self, *args, **kwargs):
+        """Calls the predict_history method of the specific model instance, if available."""
+        if self.model_instance is None or not hasattr(self.model_instance, 'predict_history'):
+            raise NotImplementedError("The current model does not implement predict_history.")
         if self.trace is None:
-            raise ValueError("Model must be fit with run_inference() before predicting historical accuracy")
-            
-        historical_ppc, historical_coords, historical_dims = self.model.predict_history(elections_to_predict)
-        
-        # Calculate predictive accuracy
-        predictive_accuracy_df = self.model.calculate_predictive_accuracy(historical_trace)
-        
-        # Save predictive accuracy results
-        if self.output_dir is not None:
-            accuracy_path = os.path.join(self.output_dir, "predictive_accuracy.csv")
-            predictive_accuracy_df.to_csv(accuracy_path, index=False)
-            print(f"Predictive accuracy results saved to {accuracy_path}")
-        
-        # Now plot the accuracy
-        # Commenting out the plot call as the function is removed
-        # plot_predictive_accuracy(predictive_accuracy_df, self.output_dir)
-        
-        return historical_ppc, historical_coords, historical_dims
+             raise ValueError("Model must be fit with run_inference() before predicting history")
+        return self.model_instance.predict_history(*args, **kwargs)
 
-    def retrodict(self):
-        """
-        Perform retrodictive analysis.
-        
-        Returns:
-        --------
-        posterior : arviz.InferenceData
-            Posterior predictive samples from the retrodictive analysis
-        coords : dict
-            Coordinate mapping for the retrodictive analysis
-        dims : dict
-            Dimension mapping for the retrodictive analysis
-        """
+    def predict_latent_trajectory(self, *args, **kwargs):
+        """Calls the predict_latent_trajectory method of the specific model instance, if available."""
+        if self.model_instance is None or not hasattr(self.model_instance, 'predict_latent_trajectory'):
+            raise NotImplementedError("The current model does not implement predict_latent_trajectory.")
         if self.trace is None:
-            raise ValueError("Model must be fit with run_inference() before retrodicting")
-            
-        posterior, coords, dims = self.model.retrodict()
-        
-        # Commenting out the plot call as the function is removed
-        # retrodictive_plot(posterior, self.dataset.observed_data, self.trace, self.output_dir)
-        
-        return posterior, coords, dims 
+             raise ValueError("Model must be fit with run_inference() before predicting trajectory")
+        return self.model_instance.predict_latent_trajectory(idata=self.trace, *args, **kwargs)
 
     def generate_diagnostic_plots(self, directory: str = "."):
         """
@@ -1169,38 +1081,8 @@ class ElectionsFacade:
             print("Error: Trace object not found. Cannot extract latent popularity.")
             return None
         
-        latent_var = "latent_popularity_trajectory"
-        target_election = self.election_date
-
-        if latent_var not in self.trace.posterior:
-            print(f"Error: Latent popularity ('{latent_var}') not found in posterior trace.")
-            return None
-       
-        try:
-            # Select latent popularity at election day (countdown=0) for the target election
-            latent_pop_at_election = self.trace.posterior[latent_var].sel(
-                elections=target_election, 
-                countdown=0
-            )
-            
-            # Ensure dimensions are correct
-            if tuple(latent_pop_at_election.dims) != ('chain', 'draw', 'parties_complete'):
-                if set(latent_pop_at_election.dims) == {'chain', 'draw', 'parties_complete'}:
-                    latent_pop_at_election = latent_pop_at_election.transpose('chain', 'draw', 'parties_complete')
-                else:
-                    raise ValueError(f"Unexpected dimensions for latent popularity: {latent_pop_at_election.dims}")
-
-            print(f"Successfully extracted latent popularity for {target_election} at countdown=0.")
-            return latent_pop_at_election
-
-        except KeyError:
-             print(f"Error: Election date '{target_election}' or countdown=0 not found in coordinates for '{latent_var}'.")
-             return None
-        except Exception as e:
-            print(f"Error extracting election day latent popularity: {e}")
-            import traceback
-            traceback.print_exc()
-            return None
+        # Delegate to the model instance if the method exists
+        return self.model_instance.get_election_day_latent_popularity()
 
     # TODO: Implement post-hoc adjustment for Blank/Null votes 
     #       when generating final forecasts (e.g., for seat projections). 
