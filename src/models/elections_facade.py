@@ -151,7 +151,8 @@ class ElectionsFacade:
             "latent_popularity_trajectory",
             "noisy_popularity",
             "N_approve",
-            "R"
+            "R",
+            "house_effects"
         ]
         
         # Include draws and tune in sampler_kwargs instead of passing them directly
@@ -327,9 +328,6 @@ class ElectionsFacade:
             
         if not loaded_posterior:
              print(f"Warning: Posterior predictive checks file not found at expected paths in {directory}")
-
-        # Perform and print diagnostics using self.trace
-        # self.print_diagnostics() # This method does not exist - Removed call
 
         print("Finished loading inference results.")
         # print("DEBUG: Attempting to return True from load_inference_results") # DEBUG

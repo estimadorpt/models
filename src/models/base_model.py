@@ -1,5 +1,5 @@
 import abc
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 
 import arviz
 import arviz as az
@@ -15,7 +15,7 @@ class BaseElectionModel(abc.ABC):
 
     def __init__(self, dataset: ElectionDataset, **kwargs):
         """
-        Initialize the base model.
+        Initialize the base model and prepare common data structures.
 
         Parameters
         ----------
@@ -25,14 +25,51 @@ class BaseElectionModel(abc.ABC):
             Additional model-specific configuration parameters.
         """
         self.dataset = dataset
+        self.model_config = kwargs # Store kwargs for potential use by subclasses
+
+        # --- Store common dataset attributes ---
+        self.political_families = dataset.political_families
+        self.all_election_dates = dataset.all_election_dates
+        self.historical_election_dates = dataset.historical_election_dates
+        self.polls_train = dataset.polls_train
+        self.results_mult = dataset.results_mult # Usually historical results + target election placeholder
+        self.results_oos = dataset.results_oos # Strictly historical results for likelihood evaluation
+        self.government_status = dataset.government_status
+        self.campaign_preds = dataset.campaign_preds # Predictors aligned with polls
+        self.results_preds = dataset.results_preds # Predictors aligned with results
+
+        # --- Initialize attributes for model components ---
         self.coords: Dict = {}
         self.data_containers: Dict = {}
-        # Store kwargs for potential use by subclasses
-        self.model_config = kwargs
-        
-        # Initialize attributes expected by sample_all and potentially other methods
         self.model: Optional[pm.Model] = None # To store the built PyMC model
         self.trace: Optional[az.InferenceData] = None # To store the posterior trace
+
+        # --- Prepare common data structures used by most models ---
+        self._prepare_common_data()
+
+    def _prepare_common_data(self):
+        """
+        Prepare common data structures like non-competing masks.
+        These are calculated once and stored as attributes.
+        """
+        # --- Non-competing masks for polls (based on polls_train) ---
+        polls = self.polls_train # Use the training polls for the base masks
+        is_here_polls = polls[self.political_families] > 0
+        self.non_competing_polls_additive_base = np.where(is_here_polls, 0, -10).astype(np.int32)
+        self.is_here_polls_base = is_here_polls.astype(int).to_numpy()
+
+        # --- Non-competing masks for results (aligned with ALL election dates) ---
+        # Reindex results_mult (which includes historical+target) to all election dates
+        reindexed_results = (
+            self.results_mult[self.political_families]
+            .reindex(pd.to_datetime(self.all_election_dates))
+        )
+        # is_competing_mask is True only for parties with > 0 votes in historical results
+        # NaN > 0 is False, so future date row will correctly be False here
+        is_competing_mask = reindexed_results > 0
+        self.non_competing_parties_results_base = np.where(is_competing_mask, 0, -10).astype(np.int32)
+
+        print(f"Shape of non_competing_parties_results_base (aligned with all elections): {self.non_competing_parties_results_base.shape}")
 
 
     @abc.abstractmethod
@@ -154,7 +191,8 @@ class BaseElectionModel(abc.ABC):
 
             print("Sampling posterior...")
             try:
-                trace = pm.sample(**sampler_kwargs)
+                # Pass var_names to pm.sample to ensure deterministics are included in the main trace
+                trace = pm.sample(var_names=var_names, **sampler_kwargs)
                 self.trace = trace # Store trace in the instance
 
                 # Store additional convergence diagnostics

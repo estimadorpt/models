@@ -158,7 +158,7 @@ def fit_model(args):
                 data=f"Error fitting model: {e}".encode(encoding='utf-8'))
         return None
 
-def load_model(directory, election_date=None, baseline_timescales=None, election_timescales=None, debug=False):
+def load_model(args, directory, election_date=None, baseline_timescales=None, election_timescales=None, debug=False):
     """
     Load a saved model
     
@@ -251,57 +251,40 @@ def load_model(directory, election_date=None, baseline_timescales=None, election
         return None
 
 def visualize(args):
-    """Generate visualizations for a saved model"""
+    """Visualize the results of a trained model"""
     try:
-        if args.debug:
-            print(f"Generating visualizations for model in {args.load_dir}")
+        print(f"Visualizing model from {args.load_dir}")
         
-        model_dir = os.path.abspath(args.load_dir)
-        if not os.path.exists(model_dir):
-            raise ValueError(f"Model directory not found: {model_dir}")
-            
-        viz_dir = os.path.join(model_dir, "visualizations")
-        os.makedirs(viz_dir, exist_ok=True)
-        
-        # Load the model (which now includes the full refit trace)
-        elections_model = load_model(
-            directory=model_dir,
-            debug=args.debug,
-            # Pass arguments explicitly or let load_model use config
-            election_date=args.election_date, 
-            baseline_timescales=args.baseline_timescale, 
-            election_timescales=args.election_timescale 
-        )
+        # Load the model using the modified load_model function signature
+        elections_model = load_model(args, args.load_dir, debug=args.debug)
         
         if elections_model is None:
-            raise ValueError(f"Failed to load model from {model_dir}")
+            print("Exiting visualization due to loading error.")
+            return
         
         # Rebuild the underlying PyMC model structure after loading trace/config
-        print("\nRebuilding model structure...")
-        try:
-            elections_model.build_model()
-            print("Model structure rebuilt successfully.")
-        except Exception as build_err:
-            print(f"ERROR: Failed to rebuild model structure after loading: {build_err}")
-            # Decide if we can proceed without the full structure for some plots
-            # For now, let's exit if build fails as prediction needs it.
-            return
+        # We don't need to rebuild here if plotting functions only need the trace and dataset?
+        # print("Rebuilding model structure...")
+        # elections_model.build_model()
+        # print("Model structure rebuilt successfully.")
 
-        # --- Generate Standard Historical Plots --- 
         print("\nGenerating historical model diagnostics and visualization plots...")
+        viz_dir = os.path.join(args.load_dir, "visualizations") # Define viz_dir based on load_dir
+        os.makedirs(viz_dir, exist_ok=True)
+
+        # Pass the facade instance (elections_model) directly to plotting functions
         # These use the posterior trace directly
-        if elections_model.model_instance:
-            plot_latent_popularity_vs_polls(elections_model.model_instance, viz_dir, include_target_date=True)
-            plot_latent_component_contributions(elections_model.model_instance, viz_dir)
-            plot_recent_polls(elections_model.model_instance, viz_dir) # Might need adjustment if it expects specific test set
-            plot_house_effects_heatmap(elections_model.model_instance, viz_dir)
-        else:
-            print("Warning: Model instance not available for plotting.")
+        # Ensure the plotting functions use elections_model.trace and elections_model.dataset
+        plot_latent_popularity_vs_polls(elections_model, viz_dir, include_target_date=True)
+        plot_latent_component_contributions(elections_model, viz_dir)
+        plot_recent_polls(elections_model, viz_dir)
+        plot_house_effects_heatmap(elections_model, viz_dir)
+
         print(f"Historical visualizations saved to {viz_dir}")
         
         # --- Generate Forecast Distribution Plot ---
         # print("\nGenerating election outcome forecast distribution...")
-        # plot_forecasted_election_distribution(elections_model, viz_dir)
+        # plot_forecasted_election_distribution(elections_model, args.output_dir)
         # --- End Forecast Plot Generation ---
         
         print(f"\nVisualizations generation step complete.") # Adjusted print statement
@@ -450,14 +433,7 @@ def diagnose_model(args):
             print(f"Diagnosing model from directory: {model_dir}")
 
         # Load the model and its trace
-        elections_model = load_model(
-            directory=model_dir,
-            debug=args.debug,
-            # Pass arguments explicitly
-            election_date=args.election_date, # Pass command-line args or default handled inside load_model
-            baseline_timescales=args.baseline_timescale, 
-            election_timescales=args.election_timescale
-        )
+        elections_model = load_model(args, model_dir, debug=args.debug)
 
         if elections_model is None:
             print(f"Failed to load model from {model_dir}")
