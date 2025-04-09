@@ -13,7 +13,7 @@ import pymc as pm
 import json
 
 from src.models.elections_facade import ElectionsFacade
-from src.models.election_model import ElectionModel
+from src.models.static_baseline_election_model import StaticBaselineElectionModel
 from src.visualization.plots import (
     plot_election_data, 
     plot_latent_popularity_vs_polls, 
@@ -53,7 +53,7 @@ def fit_model(args):
         # Initialize the elections model
         elections_model = ElectionsFacade(
             election_date=args.election_date,
-            model_class=ElectionModel,
+            model_class=StaticBaselineElectionModel,
             baseline_timescales=args.baseline_timescale,
             election_timescales=args.election_timescale,
             test_cutoff=pd.Timedelta(args.cutoff_date) if args.cutoff_date else None,
@@ -216,7 +216,7 @@ def load_model(args, directory, election_date=None, baseline_timescales=None, el
 
         # TODO: Handle model selection based on config/args if multiple models exist
         # For now, assume ElectionModel
-        model_class_to_load = ElectionModel
+        model_class_to_load = StaticBaselineElectionModel
 
         if debug:
             print(f"Initializing Facade with -> election_date: {final_election_date}")
@@ -324,7 +324,7 @@ def cross_validate(args):
             # Initialize model for this election
             elections_model = ElectionsFacade(
                 election_date=election_date,
-                model_class=ElectionModel,
+                model_class=StaticBaselineElectionModel,
                 baseline_timescales=args.baseline_timescales,
                 election_timescales=args.election_timescales,
                 debug=args.debug

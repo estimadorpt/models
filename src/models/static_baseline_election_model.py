@@ -14,8 +14,8 @@ from src.data.dataset import ElectionDataset
 from src.models.base_model import BaseElectionModel
 
 
-class ElectionModel(BaseElectionModel):
-    """A Bayesian election model"""
+class StaticBaselineElectionModel(BaseElectionModel):
+    """A Bayesian election model with a static baseline component."""
 
     def __init__(self, dataset: ElectionDataset, **kwargs):
         # Call the base class initializer, which now handles common data loading

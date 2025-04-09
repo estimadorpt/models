@@ -13,7 +13,7 @@ import datetime
 import zarr
 
 from src.data.dataset import ElectionDataset
-from src.models.election_model import ElectionModel
+from src.models.static_baseline_election_model import StaticBaselineElectionModel
 from src.models.base_model import BaseElectionModel
 
 
@@ -29,7 +29,7 @@ class ElectionsFacade:
     def __init__(
         self,
         election_date: str,
-        model_class: Type[BaseElectionModel] = ElectionModel,
+        model_class: Type[BaseElectionModel] = StaticBaselineElectionModel,
         baseline_timescales: List[int] = [365],  # Annual cycle
         election_timescales: List[int] = [30, 15],  # Pre-campaign and official campaign
         test_cutoff: pd.Timedelta = None,
