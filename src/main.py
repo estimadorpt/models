@@ -14,6 +14,7 @@ import json
 
 from src.models.elections_facade import ElectionsFacade
 from src.models.static_baseline_election_model import StaticBaselineElectionModel
+from src.models.dynamic_gp_election_model import DynamicGPElectionModel
 from src.visualization.plots import (
     plot_election_data, 
     plot_latent_popularity_vs_polls, 
@@ -26,14 +27,30 @@ from src.visualization.plots import (
 from src.config import DEFAULT_BASELINE_TIMESCALE, DEFAULT_ELECTION_TIMESCALES
 from src.data.dataset import ElectionDataset
 
+def get_model_class(model_type_str: str):
+    if model_type_str == "static":
+        return StaticBaselineElectionModel
+    elif model_type_str == "dynamic_gp":
+        return DynamicGPElectionModel
+    else:
+        raise ValueError(f"Unknown model type: {model_type_str}")
+
 def fit_model(args):
     """Fit a new model with the specified parameters"""
     try:
+        # --- Select Model Class ---
+        model_class_to_use = get_model_class(args.model_type)
+        print(f"Using model type: {args.model_type}")
+        # --- End Select Model Class ---
+        
         if args.debug:
             print(f"Fitting model for election date {args.election_date}")
-            print(f"Using baseline timescales: {args.baseline_timescale}")
-            print(f"Using election timescales: {args.election_timescale}")
-        
+            if args.model_type == "static":
+                 print(f"Using baseline timescales: {args.baseline_timescale}")
+                 print(f"Using election timescales: {args.election_timescale}")
+            elif args.model_type == "dynamic_gp":
+                 print(f"Using GP lengthscale: {args.gp_lengthscale}") # Use new argument
+
         # Create the model output directory with timestamp
         timestamp = pd.Timestamp.now().strftime("%Y-%m-%d_%H%M%S")
         
@@ -50,14 +67,27 @@ def fit_model(args):
         if args.debug:
             print(f"Using output directory: {output_dir}")
         
+        # --- Prepare Model Kwargs ---
+        model_kwargs = {
+             "debug": args.debug
+        }
+        if args.model_type == "static":
+             model_kwargs["baseline_lengthscale"] = args.baseline_timescale
+             model_kwargs["election_lengthscale"] = args.election_timescale
+        elif args.model_type == "dynamic_gp":
+             model_kwargs["gp_lengthscale"] = args.gp_lengthscale # Pass new arg
+             model_kwargs["gp_kernel"] = args.gp_kernel # Pass kernel type
+             model_kwargs["hsgp_m"] = args.hsgp_m # Pass hsgp m
+             model_kwargs["hsgp_c"] = args.hsgp_c # Pass hsgp c
+        # --- End Prepare Model Kwargs ---
+        
         # Initialize the elections model
         elections_model = ElectionsFacade(
             election_date=args.election_date,
-            model_class=StaticBaselineElectionModel,
-            baseline_timescales=args.baseline_timescale,
-            election_timescales=args.election_timescale,
+            model_class=model_class_to_use, # Use selected class
             test_cutoff=pd.Timedelta(args.cutoff_date) if args.cutoff_date else None,
-            debug=args.debug
+            # Pass model-specific kwargs using dictionary unpacking
+            **model_kwargs 
         )
         
         # Access the specific model instance for model-specific details if needed
@@ -214,23 +244,64 @@ def load_model(args, directory, election_date=None, baseline_timescales=None, el
         if not isinstance(final_election_timescales, list):
             final_election_timescales = [final_election_timescales]
 
-        # TODO: Handle model selection based on config/args if multiple models exist
-        # For now, assume ElectionModel
-        model_class_to_load = StaticBaselineElectionModel
+        # --- Determine Model Type and Class --- #
+        # Priority: Command-line args > Loaded config
+        # Use the literal default value "static" for comparison
+        final_model_type = args.model_type if args.model_type != "static" else loaded_config.get('model_type', None)
+        if not final_model_type:
+            print("Warning: Model type not found in args or config, defaulting to 'static'.")
+            final_model_type = 'static' # Default if still not found
+
+        print(f"DEBUG load_model: Determined final_model_type = {final_model_type}")
+        try:
+            model_class_to_load = get_model_class(final_model_type)
+        except ValueError as e:
+            print(f"Error determining model class: {e}. Falling back to StaticBaselineElectionModel.")
+            model_class_to_load = StaticBaselineElectionModel
+            final_model_type = 'static' # Ensure consistency
+        # --- End Determine Model Type --- #
+
+        # --- Prepare Model Kwargs (based on final_model_type) --- #
+        model_kwargs = { "debug": debug }
+        if final_model_type == "static":
+            # Ensure timescales are lists
+            if not isinstance(final_baseline_timescales, list): final_baseline_timescales = [final_baseline_timescales]
+            if not isinstance(final_election_timescales, list): final_election_timescales = [final_election_timescales]
+            model_kwargs["baseline_lengthscale"] = final_baseline_timescales
+            model_kwargs["election_lengthscale"] = final_election_timescales
+        elif final_model_type == "dynamic_gp":
+            # Priority: args -> loaded_config -> default (handled by model __init__)
+            gp_len_arg = args.gp_lengthscale if hasattr(args, 'gp_lengthscale') and args.gp_lengthscale is not None else None
+            gp_ker_arg = args.gp_kernel if hasattr(args, 'gp_kernel') and args.gp_kernel is not None else None
+            hsgp_m_arg = args.hsgp_m if hasattr(args, 'hsgp_m') and args.hsgp_m is not None else None
+            hsgp_c_arg = args.hsgp_c if hasattr(args, 'hsgp_c') and args.hsgp_c is not None else None
+
+            final_gp_lengthscale = gp_len_arg if gp_len_arg is not None else loaded_config.get('gp_lengthscale', None)
+            final_gp_kernel = gp_ker_arg if gp_ker_arg is not None else loaded_config.get('gp_kernel', None)
+            final_hsgp_m = hsgp_m_arg if hsgp_m_arg is not None else loaded_config.get('hsgp_m', None)
+            final_hsgp_c = hsgp_c_arg if hsgp_c_arg is not None else loaded_config.get('hsgp_c', None)
+
+            # Only add to kwargs if a value was determined (otherwise let model default handle it)
+            if final_gp_lengthscale is not None: model_kwargs["gp_lengthscale"] = final_gp_lengthscale
+            if final_gp_kernel is not None: model_kwargs["gp_kernel"] = final_gp_kernel
+            if final_hsgp_m is not None: model_kwargs["hsgp_m"] = final_hsgp_m
+            if final_hsgp_c is not None: model_kwargs["hsgp_c"] = final_hsgp_c
+        # --- End Prepare Model Kwargs --- #
 
         if debug:
             print(f"Initializing Facade with -> election_date: {final_election_date}")
-            print(f"Initializing Facade with -> baseline_timescales: {final_baseline_timescales}")
-            print(f"Initializing Facade with -> election_timescales: {final_election_timescales}")
+            print(f"Initializing Facade with -> model_type: {final_model_type}")
             print(f"Initializing Facade with -> cutoff_date: {final_cutoff_date}")
+            print(f"Initializing Facade with -> model_kwargs: {model_kwargs}")
+
+        # <<< Add debug print here >>>
+        print(f"DEBUG load_model: Instantiating facade with model_class = {model_class_to_load.__name__}")
 
         elections_model = ElectionsFacade(
             election_date=final_election_date,
             model_class=model_class_to_load,
-            baseline_timescales=final_baseline_timescales,
-            election_timescales=final_election_timescales,
-            test_cutoff=pd.Timedelta(final_cutoff_date) if final_cutoff_date else None, # Pass loaded/default cutoff
-            debug=debug
+            test_cutoff=pd.Timedelta(final_cutoff_date) if final_cutoff_date else None,
+            **model_kwargs # Pass determined kwargs
         )
         
         # Load the saved trace
@@ -514,6 +585,8 @@ def predict(args):
 
 def main(args=None):
     parser = argparse.ArgumentParser(description="Election Model CLI")
+    
+    # --- Mode Selection ---
     parser.add_argument(
         "--mode",
         choices=["train", "viz", "visualize-data", "diagnose", "cross-validate", "predict"],
@@ -521,104 +594,124 @@ def main(args=None):
         help="Operation mode",
     )
     parser.add_argument(
+        "--model-type",
+        choices=["static", "dynamic_gp"],
+        default="static", # Default to the original static model
+        help="Type of election model to use ('static' or 'dynamic_gp')",
+    )
+    
+    # --- Common Arguments ---
+    parser.add_argument(
         "--dataset",
         help="Path to dataset file",
     )
     parser.add_argument(
         "--election-date",
-        help="The election date to predict (required for train/predict modes)",
+        help="The target election date (YYYY-MM-DD). Required for 'train'. Used for context in others.",
     )
     parser.add_argument(
         "--output-dir",
-        default="outputs/latest",
-        help="Directory to save outputs",
-    )
-    parser.add_argument(
-        "--train-timescales", 
-        action='store_true', 
-        help="Train kernel timescales"
-    )
-    parser.add_argument(
-        "--baseline-timescale",
-        type=float,
-        nargs="+",
-        default=DEFAULT_BASELINE_TIMESCALE,
-        help="Baseline timescale(s) in days for GP kernel",
-    )
-    parser.add_argument(
-        "--election-timescale",
-        type=float,
-        nargs="+",
-        default=DEFAULT_ELECTION_TIMESCALES,
-        help="Election timescale(s) in days for GP kernel",
-    )
-    parser.add_argument(
-        "--draws",
-        type=int,
-        default=1000,
-        help="Number of posterior draws",
-    )
-    parser.add_argument(
-        "--chains",
-        type=int,
-        default=4,
-        help="Number of MCMC chains",
-    )
-    parser.add_argument(
-        "--tune",
-        type=int,
-        default=1000,
-        help="Number of tuning samples per chain",
-    )
-    parser.add_argument(
-        "--target-accept",
-        type=float,
-        default=0.95,
-        help="Target acceptance rate",
+        default="outputs/", # Default to base 'outputs' directory
+        help="Base directory to save outputs (timestamped/latest subdir will be created)",
     )
     parser.add_argument(
         "--load-dir",
-        help="Load model from directory for prediction",
-    )
-    parser.add_argument(
-        "--notify",
-        action="store_true",
-        help="Send notification on completion",
-    )
-    parser.add_argument(
-        "--seed",
-        type=int,
-        default=8675309,
-        help="Random seed",
-    )
-    parser.add_argument(
-        "--debug",
-        action="store_true",
-        help="Enable debugging output",
+        help="Directory to load model from for 'viz', 'diagnose', 'predict' modes.",
     )
     parser.add_argument(
         "--cutoff-date",
-        help="Exclude data after this date for retrodictive testing",
+        help="Exclude data after this number of days before election_date (e.g., '30d') for retrodictive testing",
+    )
+    parser.add_argument(
+        "--notify", action="store_true", help="Send ntfy.sh notification on completion/error",
+    )
+    parser.add_argument(
+        "--seed", type=int, default=8675309, help="Random seed",
+    )
+    parser.add_argument(
+        "--debug", action="store_true", help="Enable debugging output",
     )
     
+    # --- Sampling Arguments ---
+    sampling_group = parser.add_argument_group('Sampling Parameters (for train, cross-validate)')
+    sampling_group.add_argument(
+        "--draws", type=int, default=1000, help="Number of posterior draws per chain",
+    )
+    sampling_group.add_argument(
+        "--chains", type=int, default=4, help="Number of MCMC chains",
+    )
+    sampling_group.add_argument(
+        "--tune", type=int, default=1000, help="Number of tuning samples per chain",
+    )
+    sampling_group.add_argument(
+        "--target-accept", type=float, default=0.95, help="Target acceptance rate for NUTS",
+    )
+
+    # --- Static Model Specific Arguments ---
+    static_group = parser.add_argument_group('Static Model Parameters')
+    static_group.add_argument(
+        "--baseline-timescale",
+        type=float,
+        nargs="+", # Allow multiple, though model uses first
+        default=[DEFAULT_BASELINE_TIMESCALE], # Make default a list
+        help="Baseline timescale(s) in days for static model GP kernel",
+    )
+    static_group.add_argument(
+        "--election-timescale",
+        type=float,
+        nargs="+", # Allow multiple, though model uses first
+        default=[DEFAULT_ELECTION_TIMESCALES], # Make default a list with the int value
+        help="Election timescale(s) in days for static model GP kernel",
+    )
+    
+    # --- Dynamic GP Model Specific Arguments ---
+    dynamic_gp_group = parser.add_argument_group('Dynamic GP Model Parameters')
+    dynamic_gp_group.add_argument(
+        "--gp-lengthscale", type=float, default=180.0, help="GP lengthscale in days for dynamic_gp model"
+    )
+    dynamic_gp_group.add_argument(
+        "--gp-kernel", choices=["Matern52", "ExpQuad"], default="Matern52", help="GP kernel type for dynamic_gp model"
+    )
+    dynamic_gp_group.add_argument(
+        "--hsgp-m", type=int, nargs=1, default=[100], help="Number of basis functions (m) for HSGP in dynamic_gp model"
+    )
+    dynamic_gp_group.add_argument(
+        "--hsgp-c", type=float, default=2.0, help="Expansion factor (c) for HSGP in dynamic_gp model"
+    )
+
+    # --- Cross-validation Specific Arguments ---
+    cv_group = parser.add_argument_group('Cross-validation Parameters')
+    # cv_group.add_argument(
+    #     "--fast", action="store_true", help="Skip plot generation during cross-validation"
+    # ) # Example if needed
+
     args = parser.parse_args(args)
     
-    # Set random seed
+    # --- Argument Validation ---
     np.random.seed(args.seed)
 
-    # Add specific argument requirements based on mode
+    # Mode-specific requirements
     if args.mode == "train" and not args.election_date:
         parser.error("--election-date is required for train mode")
         
-    # Prediction mode needs a load directory
-    if args.mode == "predict" and not args.load_dir:
-        parser.error("--load-dir is required for predict mode")
+    if args.mode in ["predict", "viz", "diagnose"] and not args.load_dir:
+        parser.error(f"--load-dir is required for {args.mode} mode")
         
-    # Visualization modes need a load directory
-    if args.mode in ["viz", "diagnose"] and not args.load_dir:
-        parser.error("--load-dir is required for viz/diagnose modes")
+    if args.load_dir and not os.path.isdir(args.load_dir):
+        parser.error(f"--load-dir path '{args.load_dir}' does not exist or is not a directory.")
 
-    # Run the selected mode
+    # Clean up output_dir path if it ends with 'latest' but isn't the default
+    if args.output_dir.endswith('/latest') and args.output_dir != "outputs/latest":
+         args.output_dir = os.path.dirname(args.output_dir)
+         print(f"Adjusted output directory base to: {args.output_dir}")
+    elif not args.output_dir.endswith('/'):
+         args.output_dir += '/'
+         
+    # Ensure output directory exists (base path)
+    os.makedirs(args.output_dir, exist_ok=True)
+
+    # --- Execute Mode ---
+    start_main_time = time.time()
     try:
         if args.mode == "train":
             fit_model(args)
@@ -632,27 +725,36 @@ def main(args=None):
             visualize_data(args)
         elif args.mode == "diagnose":
             diagnose_model(args)
-    except Exception as e:
-        print(f"Error: {e}")
-        if args.debug:
-            traceback.print_exc()
+            
+        end_main_time = time.time()
+        print(f"\n'{args.mode}' mode finished in {end_main_time - start_main_time:.2f} seconds.")
+            
+        # Send success notification if requested
         if args.notify:
             try:
                 requests.post("https://ntfy.sh/bc-estimador",
-                    data=f"Error in {args.mode} mode: {e}".encode(encoding='utf-8'))
+                    data=f"{args.mode.capitalize()} ({args.model_type}) completed successfully".encode(encoding='utf-8'))
             except Exception as notify_err:
-                print(f"Failed to send notification: {notify_err}")
-        return 1
-    
-    # Send notification if requested
-    if args.notify:
-        try:
-            requests.post("https://ntfy.sh/bc-estimador",
-                data=f"{args.mode.capitalize()} completed successfully".encode(encoding='utf-8'))
-        except Exception as notify_err:
-            print(f"Failed to send notification: {notify_err}")
-    
-    return 0
+                print(f"Failed to send success notification: {notify_err}")
+                
+        return 0 # Success exit code
+
+    except Exception as e:
+        end_main_time = time.time()
+        print(f"\nError during '{args.mode}' mode after {end_main_time - start_main_time:.2f} seconds: {e}")
+        if args.debug:
+            traceback.print_exc()
+            
+        # Send error notification if requested
+        if args.notify:
+            try:
+                requests.post("https://ntfy.sh/bc-estimador",
+                    data=f"Error in {args.mode} mode ({args.model_type}): {e}".encode(encoding='utf-8'))
+            except Exception as notify_err:
+                print(f"Failed to send error notification: {notify_err}")
+                
+        return 1 # Error exit code
 
 if __name__ == "__main__":
-    main()
+    import sys
+    sys.exit(main())
