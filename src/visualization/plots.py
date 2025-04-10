@@ -9,6 +9,7 @@ import arviz as az
 from typing import TYPE_CHECKING, List
 import matplotlib.colors as mcolors
 import matplotlib.cm as cm
+import matplotlib.ticker as mtick
 if TYPE_CHECKING:
     from src.models.elections_facade import ElectionsFacade
 from src.models.dynamic_gp_election_model import DynamicGPElectionModel # Import the dynamic model class
@@ -168,162 +169,209 @@ def plot_election_data(dataset: ElectionDataset):
         plt.tight_layout()
         plt.show()
 
-def plot_latent_popularity_vs_polls(elections_model, output_dir, include_target_date=False):
+def plot_latent_popularity_vs_polls(elections_model, output_dir, include_target_date=True):
     """
-    Plots the latent popularity trajectory against observed polls for each party.
-    Adapts based on the model type loaded in the ElectionsFacade.
-    """
-    try:
-        if elections_model.trace is None or elections_model.trace.posterior is None:
-            print("Error: Posterior trace not found. Cannot generate latent popularity plot.")
-            return
+    Plots the latent popularity mean and HDI against observed polls over time.
+    Also plots the daily average of the mean noisy popularity (latent + house effect).
 
-        if elections_model.dataset is None:
-             print("Error: Dataset not found in ElectionsFacade. Cannot plot polls.")
+    Args:
+        elections_model: The fitted ElectionsFacade instance.
+        output_dir: Directory to save the plot.
+        include_target_date: Whether to include the target election date as a vertical line.
+    """
+    if elections_model.trace is None:
+        print("Trace not found. Skipping latent popularity plot.")
+        return
+
+    trace = elections_model.trace
+    dataset = elections_model.dataset
+    model_instance = elections_model.model_instance # Get the specific model instance
+    polls_train = dataset.polls_train
+    is_dynamic_model = isinstance(model_instance, DynamicGPElectionModel)
+    print(f"DEBUG plot_latent_pop: is_dynamic_model = {is_dynamic_model}")
+
+    # Determine which latent variable and time coordinate to use
+    if is_dynamic_model:
+        latent_var_name = "latent_popularity_calendar_trajectory"
+        time_coord_name = "calendar_time"
+        latent_time_values = pd.to_datetime(trace.posterior[time_coord_name].values)
+    else: # Static model
+        latent_var_name = "latent_popularity_t"
+        time_coord_name = "date"
+        # Ensure date coordinate is datetime
+        if time_coord_name in trace.posterior.coords:
+             latent_time_values = pd.to_datetime(trace.posterior[time_coord_name].values)
+        else:
+             print(f"Warning: Coordinate '{time_coord_name}' not found in posterior for static model. Cannot plot latent trajectory.")
              return
 
-        # Determine model type to select correct variables and coordinates
-        model_instance = elections_model.model_instance
-        is_dynamic_model = isinstance(model_instance, DynamicGPElectionModel)
-        print(f"DEBUG plot_latent_pop: is_dynamic_model = {is_dynamic_model}")
+    if latent_var_name not in trace.posterior:
+        print(f"Latent variable '{latent_var_name}' not found in trace. Skipping plot.")
+        return
 
-        if is_dynamic_model:
-            latent_var_name = "latent_popularity_calendar_trajectory"
-            time_coord_name = "calendar_time"
-            if latent_var_name not in elections_model.trace.posterior:
-                print(f"Error: '{latent_var_name}' not found in posterior trace for DynamicGPElectionModel.")
-                return
-            latent_popularity = elections_model.trace.posterior[latent_var_name]
-            # Ensure time coordinates are datetime objects for plotting
+    latent_pop = trace.posterior[latent_var_name]
+    latent_mean = latent_pop.mean(dim=["chain", "draw"])
+    # Call az.hdi(), expecting an xarray.Dataset
+    hdi_dataset = az.hdi(trace.posterior, var_names=[latent_var_name])
+    # Access the DataArray within the Dataset using the variable name
+    latent_hdi_da = hdi_dataset[latent_var_name]
+
+    # <<< --- Add Debugging Prints Here --- >>>
+    print("\n--- Debugging HDI DataArray --- ")
+    print(f"Type: {type(latent_hdi_da)}")
+    print(f"Dims: {latent_hdi_da.dims}")
+    print(f"Coords: {latent_hdi_da.coords}")
+    print(f"Shape: {latent_hdi_da.shape}")
+    # Check if 'hdi' dimension exists and its coordinates
+    if 'hdi' in latent_hdi_da.dims:
+        print(f"HDI dim coordinates: {latent_hdi_da['hdi'].values}")
+    else:
+        # Find potential dimension with size 2
+        potential_hdi_dims = [dim for dim, size in latent_hdi_da.sizes.items() if size == 2]
+        print(f"Potential HDI dims (size 2): {potential_hdi_dims}")
+        for dim in potential_hdi_dims:
             try:
-                time_coords = pd.to_datetime(latent_popularity[time_coord_name].values) # Convert calendar time coord to datetime
+                print(f"  Coords for dim '{dim}': {latent_hdi_da[dim].values}")
             except Exception as e:
-                 print(f"Error converting time coordinate '{time_coord_name}' to datetime: {e}")
-                 return
-            # For dynamic model, check if target election date is in the coordinates
-            election_date_dt = elections_model.dataset.election_date
-            election_date_in_coords = election_date_dt in time_coords
-            if include_target_date and not election_date_in_coords:
-                 # Check if the date *string* is present if direct datetime fails
-                 election_date_str = election_date_dt.strftime('%Y-%m-%d')
-                 time_coord_strs = [t.strftime('%Y-%m-%d') for t in time_coords]
-                 if election_date_str not in time_coord_strs:
-                      print(f"Warning: Target election date {election_date_dt.date()} not found in calendar_time coordinate. Cannot plot vertical line.")
-                      include_target_date = False # Disable if not found
+                print(f"  Could not get coords for dim '{dim}': {e}")
+    print("--- End Debugging HDI --- \n")
+    # <<< --- End Debugging Prints --- >>>
+
+    # --- Calculate Daily Average Noisy Popularity ---
+    noisy_pop_daily_mean = None
+    noisy_pop_daily_dates = None
+    if "noisy_popularity_polls" in trace.posterior:
+        try:
+            noisy_pop = trace.posterior["noisy_popularity_polls"]
+            # Calculate mean across samples
+            noisy_pop_mean_obs = noisy_pop.mean(dim=["chain", "draw"]) # Shape (observations, parties)
+
+            # Create a pandas Series for dates indexed by observation coord
+            # Ensure observation coordinates match polls_train index
+            obs_coords = noisy_pop_mean_obs['observations'].values
+            if not np.array_equal(obs_coords, polls_train.index.values):
+                 # Attempt to reindex if coords are just integers 0..N-1
+                 if np.array_equal(obs_coords, np.arange(len(polls_train))):
+                     print("Attempting to align observation coords with polls_train index.")
+                     poll_dates = pd.to_datetime(polls_train['date']).values
                  else:
-                      # Find the matching datetime object if string matches
-                      match_idx = time_coord_strs.index(election_date_str)
-                      election_date_dt = time_coords[match_idx]
+                      raise ValueError("Observation coordinates in trace do not match polls_train index.")
+            else:
+                 poll_dates = pd.to_datetime(polls_train.loc[obs_coords, 'date']).values
+
+            # Add dates as a coordinate to the xarray DataArray
+            noisy_pop_mean_obs = noisy_pop_mean_obs.assign_coords(date=("observations", poll_dates))
+
+            # Group by date and average
+            # Use dropna=False if needed, handle potential NaT dates if any
+            noisy_pop_daily_mean_xr = noisy_pop_mean_obs.groupby("date").mean()
+            noisy_pop_daily_dates = noisy_pop_daily_mean_xr['date'].values
+            noisy_pop_daily_mean = noisy_pop_daily_mean_xr.values # Numpy array (days, parties)
+            print("Successfully calculated daily average noisy popularity.")
+        except Exception as e:
+            print(f"Warning: Could not calculate daily average noisy popularity: {e}")
+            noisy_pop_daily_mean = None
+            noisy_pop_daily_dates = None
+    else:
+        print("Info: 'noisy_popularity_polls' not found in trace, skipping noisy popularity line.")
 
 
-        else: # Assume StaticBaselineElectionModel or similar
-            latent_var_name = "latent_popularity_trajectory"
-            time_coord_name = "countdown"
-            if latent_var_name not in elections_model.trace.posterior:
-                print(f"Error: '{latent_var_name}' not found in posterior trace for StaticBaselineElectionModel.")
-                return
+    # --- Plotting ---
+    parties = dataset.political_families
+    n_parties = len(parties)
+    n_cols = 3
+    n_rows = (n_parties + n_cols - 1) // n_cols
 
-            latent_popularity = elections_model.trace.posterior[latent_var_name]
-            # --- Handling time for static model ---
-            # The 'latent_popularity_trajectory' is indexed by (elections, countdown, parties)
-            # We typically want to visualize the trajectory for the *target* election cycle
-            print("Info: Plotting latent trajectory for the target election cycle (static model).")
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(6 * n_cols, 4 * n_rows), sharex=True, sharey=True)
+    axes = axes.flatten()
+
+    # --- Inspect polls_train before melt ---
+    print("\n--- Describing polls_train[parties] before melt ---")
+    print(polls_train[parties].describe())
+    print("--------------------------------------------------")
+    # --- End Inspection ---
+
+    polls_melt = polls_train.melt(
+        id_vars=['date', 'pollster', 'sample_size'],
+        value_vars=parties,
+        var_name='party',
+        value_name='vote_count'
+    )
+    polls_melt['date'] = pd.to_datetime(polls_melt['date'])
+
+    for i, party in enumerate(parties):
+        ax = axes[i]
+
+        # Plot Latent Popularity Mean and HDI (Scale 0-1 data by 100)
+        latent_mean_party = latent_mean.sel(parties_complete=party)
+        ax.plot(latent_time_values, latent_mean_party * 100, label="Latent Popularity (Mean)")
+
+        # Use the DataArray accessed above (latent_hdi_da)
+        hdi_coords = latent_hdi_da['hdi'].values
+        lower_coord = hdi_coords[0]
+        upper_coord = hdi_coords[1]
+        ax.fill_between(
+            latent_time_values,
+            latent_hdi_da.sel(parties_complete=party, hdi=lower_coord) * 100, # Scale 0-1 data by 100
+            latent_hdi_da.sel(parties_complete=party, hdi=upper_coord) * 100, # Scale 0-1 data by 100
+            alpha=0.3, label="94% HDI"
+        )
+
+        # Plot Daily Average Noisy Popularity (if available) (Scale 0-1 data by 100)
+        if noisy_pop_daily_mean is not None and noisy_pop_daily_dates is not None:
+             party_idx_noisy = parties.index(party)
+             ax.plot(noisy_pop_daily_dates, noisy_pop_daily_mean[:, party_idx_noisy] * 100, # Scale 0-1 data by 100
+                     label="Noisy Pop (Daily Avg)", color='green', linestyle='--', alpha=0.8)
+
+
+        # Plot Observed Polls (Calculate percentage from counts)
+        party_polls = polls_melt[polls_melt['party'] == party]
+        # Calculate percentage: (count / sample_size) * 100
+        # Handle potential division by zero if sample_size is 0 or NaN
+        observed_percentage = np.where(
+            party_polls['sample_size'] > 0,
+            (party_polls['vote_count'] / party_polls['sample_size']) * 100,
+            np.nan # Assign NaN if sample_size is not positive
+        )
+        ax.scatter(party_polls['date'], observed_percentage, alpha=0.6, s=10, label="Observed Polls", color='orange')
+
+        ax.set_title(party)
+        ax.set_ylabel("Vote Share")
+        ax.yaxis.set_major_formatter(mtick.PercentFormatter()) # Use default formatter for 0-100 data
+        ax.legend()
+        ax.grid(True, linestyle=':')
+        # Add reasonable y-limits for percentage data
+        # ax.set_ylim(-5, 105) # Set y-axis limits from -5% to 105% <-- Commented out
+
+        # Add vertical line for target election date
+        if include_target_date and dataset.election_date:
             try:
-                # Assume the last election in the 'elections' dimension is the target one
-                last_election_index = -1
-                latent_popularity = latent_popularity.isel(elections=last_election_index) # Select last election cycle
-                countdown_values = latent_popularity[time_coord_name].values
-                target_election_date = pd.to_datetime(elections_model.dataset.election_date)
-                # Calculate dates by subtracting countdown days from the target date
-                time_coords = target_election_date - pd.to_timedelta(countdown_values, unit='D')
-                election_date_dt = target_election_date # Use the target date for vline
+                election_dt = pd.to_datetime(dataset.election_date)
+                ax.axvline(election_dt, color='red', linestyle='--', alpha=0.7, label=f"Target ({dataset.election_date})")
             except Exception as e:
-                 print(f"Error processing static model trajectory coordinates: {e}")
-                 return
-            # --- End Static Model Time Handling ---
-
-        political_families = elections_model.dataset.political_families
-        polls_data = elections_model.dataset.polls_train # Use training polls for comparison
-
-        # Calculate poll proportions and dates
-        poll_proportions = polls_data[political_families].div(polls_data['sample_size'], axis=0)
-        poll_dates = pd.to_datetime(polls_data['date'])
-
-        num_parties = len(political_families)
-        num_cols = 3
-        num_rows = (num_parties + num_cols - 1) // num_cols
-
-        fig, axes = plt.subplots(num_rows, num_cols, figsize=(5 * num_cols, 4 * num_rows), sharex=False, sharey=True) # Allow separate x-axis for clarity
-        axes = axes.flatten()
-
-        for i, party in enumerate(political_families):
-            ax = axes[i]
-
-            # Plot latent popularity mean and HDI
-            party_latent_pop = latent_popularity.sel(parties_complete=party)
-            mean_pop = party_latent_pop.mean(dim=["chain", "draw"])
-            hdi_pop = az.hdi(party_latent_pop, hdi_prob=0.94) # Calculate 94% HDI
-
-            # --- Debug Prints ---
-            # print(f"DEBUG hdi_pop object:\n{hdi_pop}\n") # Removed
-            # print(f"DEBUG hdi_pop.dims: {hdi_pop.dims}\n") # Removed
-            # --- End Debug Prints ---
-
-            ax.plot(time_coords, mean_pop, label='Latent Popularity (Mean)', zorder=3)
-            # --- Corrected HDI Plotting ---
-            # Access the data variable within the hdi_pop Dataset
-            hdi_data_var_name = list(hdi_pop.data_vars)[0] # Get the name of the data variable (should be latent_pop...)
-            hdi_data = hdi_pop[hdi_data_var_name]
-            # Use the known coordinate name 'hdi' for selection
-            ax.fill_between(time_coords, hdi_data.sel(hdi='lower').values, hdi_data.sel(hdi='higher').values, alpha=0.3, label='94% HDI', zorder=2)
-            # --- End Correction ---
-
-            # Plot observed poll proportions
-            ax.scatter(poll_dates, poll_proportions[party], alpha=0.5, s=10, label='Observed Polls', color='orange', zorder=1)
-
-            # Plot target election date if applicable
-            if include_target_date:
-                 # Ensure datetime comparison works (naive vs aware) - convert both to naive UTC epoch?
-                 # Safest is usually numerical comparison if possible, or consistent timezone handling
-                 try:
-                      ax.axvline(election_date_dt, color='r', linestyle='--', label='Target Election Date', zorder=4)
-                 except Exception as vline_err:
-                      print(f"Warning: Could not plot vertical line for election date {election_date_dt}: {vline_err}")
+                 print(f"Warning: Could not plot vertical line for election date {dataset.election_date}: {e}")
 
 
-            ax.set_title(party)
-            ax.set_ylabel("Vote Share")
-            # Improve date formatting on x-axis
-            fig.autofmt_xdate() # Auto-rotate date labels
-            ax.xaxis.set_major_locator(plt.MaxNLocator(nbins=6)) # Limit number of x-ticks
-            ax.xaxis.set_major_formatter(plt.matplotlib.dates.DateFormatter('%Y-%m-%d'))
+    # Add vertical lines for historical election dates
+    historical_dates_dt = pd.to_datetime(dataset.historical_election_dates)
+    for ax in axes[:n_parties]: # Only plot on axes with data
+        for election_date in historical_dates_dt:
+            ax.axvline(election_date, color='grey', linestyle=':', alpha=0.5)
 
-            ax.legend()
-            ax.grid(True, linestyle='--', alpha=0.6)
-            ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: '{:.0%}'.format(y))) # Format y-axis as percentage
-            ax.set_ylim(bottom=0) # Ensure y-axis starts at 0
 
-        # Hide unused subplots
-        for j in range(i + 1, len(axes)):
-            fig.delaxes(axes[j])
+    # Remove unused subplots
+    for j in range(i + 1, len(axes)):
+        fig.delaxes(axes[j])
 
-        fig.suptitle("Latent Popularity Trajectory vs Observed Polls", fontsize=16, y=1.02)
-        plt.tight_layout(rect=[0, 0.03, 1, 0.98]) # Adjust layout to prevent title overlap
+    fig.suptitle("Latent Popularity Trajectory vs Observed Polls", fontsize=16, y=1.02)
+    plt.xticks(rotation=30, ha='right')
+    plt.tight_layout(rect=[0, 0.03, 1, 0.98]) # Adjust layout to prevent title overlap
 
-        # Save the plot
-        plot_path = os.path.join(output_dir, "latent_popularity_vs_polls.png")
-        plt.savefig(plot_path, bbox_inches='tight')
-        print(f"Latent popularity plot saved to {plot_path}")
-        plt.close(fig)
-
-    except KeyError as e:
-        print(f"Error plotting latent popularity: Missing key {e}. Check trace variables and coordinates for the loaded model type.")
-        import traceback
-        traceback.print_exc() # Print traceback for key errors too
-    except Exception as e:
-        print(f"An error occurred during latent popularity plotting: {e}")
-        import traceback
-        traceback.print_exc()
+    # Save plot
+    plot_path = os.path.join(output_dir, "latent_popularity_vs_polls.png")
+    plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+    plt.close(fig)
+    print(f"Latent popularity plot saved to {plot_path}")
 
 def plot_latent_component_contributions(elections_model, output_dir):
     """Plots the contribution of different latent components to the final popularity."""
