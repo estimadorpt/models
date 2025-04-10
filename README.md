@@ -65,49 +65,53 @@ forecast_fig = model.plot_forecast(hdi=True)
 You can run the model from the command line in different modes. **Make sure to run these commands from the project root directory (the one containing the `src` folder).**
 
 ```bash
-# Fit a new model for a future election (using all available data)
-python -m src.main --mode fit --election-date 2024-03-10 --draws 1000 --tune 1000
+# Train (fit) a new model for a specific election
+python -m src.main --mode train --election-date 2026-01-01 --output-dir outputs --draws 1000 --tune 1000 --notify
 
-# Load a previously saved model and generate forecasts
-# Note: Ensure --load-dir points to the correct path relative to the project root
-python -m src.main --mode load --election-date 2024-03-10 --load-dir outputs/your-model-directory
+# Load a saved model and generate diagnostic plots
+# Ensure --load-dir points to the model directory (e.g., outputs/2024-01-01_120000 or outputs/latest)
+python -m src.main --mode diagnose --load-dir outputs/latest
 
-# Run retrodictive testing with data cutoff
-python -m src.main --mode fit --election-date 2024-03-10 --cutoff-date 2024-01-01
-
-# Run cross-validation across past elections
-python -m src.main --mode cross-validate --election-date 2024-03-10
-
-# Run nowcasting using a pre-trained model
-# Note: Ensure --load-dir points to the correct path (e.g., outputs/latest)
-python -m src.main --mode nowcast --load-dir outputs/latest
-
-# Generate visualizations for a saved model
-# Note: Ensure --load-dir points to the correct path
+# Load a saved model and generate visualization plots (historical fit, etc.)
 python -m src.main --mode viz --load-dir outputs/latest
+
+# Load a saved model and generate the election outcome forecast distribution
+python -m src.main --mode predict --load-dir outputs/latest
+
+# Visualize the raw input data for a given election context
+python -m src.main --mode visualize-data --election-date 2026-01-01 --output-dir outputs/data_viz
+
+# Run cross-validation across historical elections
+# Note: --election-date is ignored here; it runs on all past elections found in the data
+python -m src.main --mode cross-validate --output-dir outputs/cv_results --draws 500 --tune 500
+
+# Train a model excluding data after a certain date (for retrodictive testing)
+python -m src.main --mode train --election-date 2024-03-10 --output-dir outputs --cutoff-date 2024-01-01
 ```
 
 Available modes:
-- `fit`: Train a new model
-- `predict`: Generate predictions using a saved model (Note: Currently implies loading, might need refinement based on `main.py` logic)
-- `predict-history`: Generate historical predictions (Note: Might need refinement based on `main.py` logic)
-- `retrodictive`: Run retrodictive evaluation (Note: Might need refinement based on `main.py` logic)
-- `nowcast`: Estimate current support using the latest polls and a saved model
-- `cross-validate`: Perform cross-validation on past elections
-- `viz`: Generate visualizations for a saved model
+- `train`: Train a new model and save the results.
+- `viz`: Load a saved model and generate visualization plots (historical fit, components, etc.).
+- `visualize-data`: Visualize the raw input poll and election data.
+- `diagnose`: Load a saved model and generate MCMC diagnostic plots.
+- `cross-validate`: Perform cross-validation by fitting the model to past elections.
+- `predict`: Load a saved model and generate the election outcome forecast distribution.
 
 Key parameters:
-- `--election-date`: Target election date (YYYY-MM-DD)
-- `--cutoff-date`: Exclude data after this date for retrodictive testing
-- `--baseline-timescales`: Timescales for baseline GP in days (default: 365)
-- `--election-timescales`: Timescales for election-specific GP in days (default: 60)
-- `--draws`: Number of posterior samples (default: 1000)
-- `--tune`: Number of tuning steps for NUTS sampler (default: 1000)
-- `--load-dir`: Directory to load saved model from
-- `--output-dir`: Directory to save outputs
-- `--fast`: Skip plots and non-essential operations for faster execution
-- `--notify`: Send notifications via ntfy.sh
-- `--debug`: Enable detailed diagnostic output
+- `--mode`: The operation mode (required). Choices: `train`, `viz`, `visualize-data`, `diagnose`, `cross-validate`, `predict`.
+- `--election-date`: Target election date (YYYY-MM-DD). Required for `train`, used for context in `visualize-data`.
+- `--output-dir`: Directory to save outputs (models, plots, etc.). Defaults to `outputs/latest`.
+- `--load-dir`: Directory to load a saved model from. Required for `viz`, `diagnose`, `predict`.
+- `--cutoff-date`: Exclude polling data after this date (YYYY-MM-DD) during training. Useful for retrodictive testing.
+- `--baseline-timescale`: Timescale(s) in days for the baseline GP kernel (e.g., `365` or `180 365`). Default: `365.0`.
+- `--election-timescale`: Timescale(s) in days for the election-specific GP kernel (e.g., `60` or `30 90`). Default: `[14.0, 60.0]`.
+- `--draws`: Number of posterior samples per chain. Default: 1000.
+- `--tune`: Number of tuning (warmup) steps per chain. Default: 1000.
+- `--target-accept`: Target acceptance rate for NUTS sampler. Default: 0.95.
+- `--chains`: Number of MCMC chains (currently unused in `main.py`'s `run_inference` call). Default: 4.
+- `--seed`: Random seed for reproducibility. Default: 8675309.
+- `--notify`: Send a notification via ntfy.sh upon completion or error.
+- `--debug`: Enable detailed diagnostic output.
 
 ## Model Description
 

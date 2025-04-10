@@ -190,9 +190,20 @@ class BaseElectionModel(abc.ABC):
                 print(f"Warning: Failed to sample prior predictive: {e}")
 
             print("Sampling posterior...")
-            try:
+            try: 
                 # Pass var_names to pm.sample to ensure deterministics are included in the main trace
                 trace = pm.sample(var_names=var_names, **sampler_kwargs)
+                # --- DEBUG PRINTS --- 
+                print(f"DEBUG (BaseModel): Type of trace returned by pm.sample: {type(trace)}")
+                if trace is None:
+                     print("DEBUG (BaseModel): trace is None AFTER pm.sample call!")
+                else:
+                     print("DEBUG (BaseModel): trace seems to exist AFTER pm.sample call.")
+                     if isinstance(trace, arviz.InferenceData):
+                          print(f"DEBUG (BaseModel): Trace is InferenceData with groups: {list(trace.groups())}")
+                     else:
+                          print(f"DEBUG (BaseModel): Trace is NOT InferenceData.")
+                # --- END DEBUG PRINTS --- 
                 self.trace = trace # Store trace in the instance
 
                 # Store additional convergence diagnostics
@@ -208,22 +219,32 @@ class BaseElectionModel(abc.ABC):
                         if max_depths > 0:
                             pct_max_depth = max_depths / (trace.posterior.dims['chain'] * trace.posterior.dims['draw'])
                             print(f"WARNING: {max_depths} samples ({pct_max_depth:.1%}) reached maximum tree depth")
-            except Exception as e:
-                print(f"ERROR: Failed during posterior sampling: {e}")
-                # Decide whether to continue or raise - for now, let's try post predictive if trace exists
-            
-            print("Sampling posterior predictive...")
-            if trace is not None: # Only sample post predictive if posterior sampling succeeded somewhat
-                 try:
-                     post_checks = pm.sample_posterior_predictive(
-                         trace, var_names=var_names
-                     )
-                 except Exception as e:
-                     print(f"Warning: Failed to sample posterior predictive: {e}")
-            else:
-                print("Skipping posterior predictive sampling as posterior trace is missing.")
+                            
+                # Include posterior predictive sampling within the try block as well
+                print("Sampling posterior predictive...")
+                if trace is not None: # Only sample post predictive if posterior sampling succeeded somewhat
+                     try:
+                         post_checks = pm.sample_posterior_predictive(
+                             trace, var_names=var_names
+                         )
+                     except Exception as e_ppc: # Specific exception for PPC
+                         print(f"Warning: Failed to sample posterior predictive: {e_ppc}")
+                else:
+                    print("Skipping posterior predictive sampling as posterior trace is missing.")
 
-        return prior_checks, trace, post_checks
+                # Debug print before returning
+                print(f"DEBUG (BaseModel): Returning trace of type: {type(trace)}")
+                return prior_checks, trace, post_checks
+                
+            # Catch exception for the whole sampling block
+            except Exception as e: 
+                print(f"ERROR: Exception during posterior sampling or post-processing: {e}")
+                # Ensure trace is None if an error occurred after pm.sample potentially assigned it
+                self.trace = None 
+                trace = None # Ensure local trace is also None before returning
+                # Still try to return something, even if trace failed
+                print(f"DEBUG (BaseModel): Returning None trace due to exception.")
+                return prior_checks, None, post_checks
 
     # --- Prediction/Nowcasting methods might be specific to models ---
     # Subclasses should implement their own versions if needed, 

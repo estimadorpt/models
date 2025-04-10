@@ -13,7 +13,7 @@ import datetime
 import zarr
 
 from src.data.dataset import ElectionDataset
-from src.models.election_model import ElectionModel
+from src.models.static_baseline_election_model import StaticBaselineElectionModel
 from src.models.base_model import BaseElectionModel
 
 
@@ -29,7 +29,7 @@ class ElectionsFacade:
     def __init__(
         self,
         election_date: str,
-        model_class: Type[BaseElectionModel] = ElectionModel,
+        model_class: Type[BaseElectionModel] = StaticBaselineElectionModel,
         baseline_timescales: List[int] = [365],  # Annual cycle
         election_timescales: List[int] = [30, 15],  # Pre-campaign and official campaign
         test_cutoff: pd.Timedelta = None,
@@ -144,17 +144,60 @@ class ElectionsFacade:
         prior, trace, posterior : tuple of arviz.InferenceData
             Prior, trace and posterior samples
         """
-        var_names = [
-            "party_baseline",
-            "election_party_baseline",
-            "party_time_effect",
-            "latent_popularity_trajectory",
-            "noisy_popularity",
-            "N_approve",
-            "R",
-            "house_effects"
-        ]
+        # Build the model if it hasn't been built yet
+        if self.model_instance.model is None:
+            self.build_model()
+
+        # --- Determine var_names based on model type --- 
+        model_type_name = self.model_instance.__class__.__name__
+        if model_type_name == "StaticBaselineElectionModel":
+            var_names = [
+                # Static Model Core Components
+                "party_baseline",
+                "election_party_baseline",
+                "party_time_effect", # Derived from GP
+                # Latent & Noisy Popularities
+                "latent_popularity_trajectory", # Full trajectory
+                "latent_pop_t0", # Election day latent pop
+                "noisy_popularity", # Poll-level noisy pop
+                # Likelihoods & House Effects
+                "N_approve", # Poll likelihood variable
+                "R", # Results likelihood variable
+                "house_effects",
+                # Parameters
+                "house_effects_sd",
+                "concentration_polls",
+                "concentration_results",
+                "gp_coef_baseline" # GP coefficients
+            ]
+        elif model_type_name == "DynamicGPElectionModel":
+             var_names = [
+                # Dynamic Model Core Components
+                "gp_coef_calendar_raw", # Raw GP coefficients
+                "gp_coef_calendar", # Zero-sum GP coefficients
+                "party_calendar_effect", # GP realization over time
+                # Latent & Noisy Popularities
+                "latent_popularity_calendar_trajectory", # Softmax of GP over time
+                "latent_pop_results", # Latent pop on election days
+                "noisy_popularity_polls", # Poll-level noisy pop
+                # Likelihoods & House Effects
+                "N_approve", # Poll likelihood variable
+                "R", # Results likelihood variable
+                "house_effects",
+                # Parameters
+                "house_effects_sd",
+                "concentration_polls",
+                "concentration_results",
+             ]
+        else:
+            # Default or raise error if unknown model
+            print(f"Warning: Unknown model type '{model_type_name}' for var_names selection. Using basic list.")
+            var_names = ["N_approve", "R", "house_effects"] # Fallback to minimal
         
+        if self.debug:
+            print(f"Selected var_names for {model_type_name}: {var_names}")
+        # --- End Determine var_names --- 
+
         # Include draws and tune in sampler_kwargs instead of passing them directly
         sampler_kwargs['draws'] = draws
         sampler_kwargs['tune'] = tune
