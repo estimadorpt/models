@@ -272,7 +272,7 @@ class DynamicGPElectionModel(BaseElectionModel):
             # --------------------------------------------------------
             # Standard deviation of house effects
             # house_effects_sd = pm.HalfNormal("house_effects_sd", sigma=0.1) # Tighter prior
-            house_effects_sd = pm.HalfNormal("house_effects_sd", sigma=0.1) # Tighter prior
+            house_effects_sd = pm.HalfNormal("house_effects_sd", sigma=0.05) # Even Tighter prior
 
             # House effects, constrained to sum to zero across parties for each pollster
             # house_effects = pm.ZeroSumNormal(
