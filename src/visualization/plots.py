@@ -212,30 +212,7 @@ def plot_latent_popularity_vs_polls(elections_model, output_dir, include_target_
     latent_pop = trace.posterior[latent_var_name]
     latent_mean = latent_pop.mean(dim=["chain", "draw"])
     # Call az.hdi(), expecting an xarray.Dataset
-    hdi_dataset = az.hdi(trace.posterior, var_names=[latent_var_name])
-    # Access the DataArray within the Dataset using the variable name
-    latent_hdi_da = hdi_dataset[latent_var_name]
-
-    # <<< --- Add Debugging Prints Here --- >>>
-    print("\n--- Debugging HDI DataArray --- ")
-    print(f"Type: {type(latent_hdi_da)}")
-    print(f"Dims: {latent_hdi_da.dims}")
-    print(f"Coords: {latent_hdi_da.coords}")
-    print(f"Shape: {latent_hdi_da.shape}")
-    # Check if 'hdi' dimension exists and its coordinates
-    if 'hdi' in latent_hdi_da.dims:
-        print(f"HDI dim coordinates: {latent_hdi_da['hdi'].values}")
-    else:
-        # Find potential dimension with size 2
-        potential_hdi_dims = [dim for dim, size in latent_hdi_da.sizes.items() if size == 2]
-        print(f"Potential HDI dims (size 2): {potential_hdi_dims}")
-        for dim in potential_hdi_dims:
-            try:
-                print(f"  Coords for dim '{dim}': {latent_hdi_da[dim].values}")
-            except Exception as e:
-                print(f"  Could not get coords for dim '{dim}': {e}")
-    print("--- End Debugging HDI --- \n")
-    # <<< --- End Debugging Prints --- >>>
+    latent_hdi_da_dataset = az.hdi(latent_pop, hdi_prob=0.94) # Returns a Dataset
 
     # --- Calculate Daily Average Noisy Popularity ---
     noisy_pop_daily_mean = None
@@ -306,14 +283,12 @@ def plot_latent_popularity_vs_polls(elections_model, output_dir, include_target_
         latent_mean_party = latent_mean.sel(parties_complete=party)
         ax.plot(latent_time_values, latent_mean_party * 100, label="Latent Popularity (Mean)")
 
-        # Use the DataArray accessed above (latent_hdi_da)
-        hdi_coords = latent_hdi_da['hdi'].values
-        lower_coord = hdi_coords[0]
-        upper_coord = hdi_coords[1]
+        # Plot HDI using positional index
+        hdi_data_array = latent_hdi_da_dataset['latent_popularity_calendar_trajectory'].sel(parties_complete=party)
         ax.fill_between(
             latent_time_values,
-            latent_hdi_da.sel(parties_complete=party, hdi=lower_coord) * 100, # Scale 0-1 data by 100
-            latent_hdi_da.sel(parties_complete=party, hdi=upper_coord) * 100, # Scale 0-1 data by 100
+            hdi_data_array.isel(hdi=0) * 100, # Use index 0 for lower bound
+            hdi_data_array.isel(hdi=1) * 100, # Use index 1 for upper bound
             alpha=0.3, label="94% HDI"
         )
 

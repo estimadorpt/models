@@ -49,7 +49,16 @@ def fit_model(args):
                  print(f"Using baseline timescales: {args.baseline_timescale}")
                  print(f"Using election timescales: {args.election_timescale}")
             elif args.model_type == "dynamic_gp":
-                 print(f"Using GP lengthscale: {args.gp_lengthscale}") # Use new argument
+                 # Print new args for dynamic_gp
+                 print(f"Using Baseline GP lengthscale: {args.baseline_gp_lengthscale}")
+                 print(f"Using Baseline GP kernel: {args.baseline_gp_kernel}")
+                 print(f"Using Cycle GP lengthscale: {args.cycle_gp_lengthscale}")
+                 print(f"Using Cycle GP kernel: {args.cycle_gp_kernel}")
+                 print(f"Using Cycle GP max days: {args.cycle_gp_max_days}")
+                 print(f"Using HSGP m (baseline): {args.hsgp_m}")
+                 print(f"Using HSGP c (baseline): {args.hsgp_c}")
+                 print(f"Using HSGP m (cycle): {args.hsgp_m_cycle}")
+                 print(f"Using HSGP c (cycle): {args.hsgp_c_cycle}")
 
         # Create the model output directory with timestamp
         timestamp = pd.Timestamp.now().strftime("%Y-%m-%d_%H%M%S")
@@ -71,14 +80,48 @@ def fit_model(args):
         model_kwargs = {
              "debug": args.debug
         }
+        # Store base config shared by multiple modes
+        config_to_save = {
+            "model_type": args.model_type,
+            "election_date": args.election_date,
+            "cutoff_date": args.cutoff_date,
+            "debug": args.debug,
+            # Add sampling params for reproducibility info
+            "draws": args.draws,
+            "tune": args.tune,
+            "chains": args.chains,
+            "target_accept": args.target_accept,
+            "seed": args.seed,
+        }
+
         if args.model_type == "static":
              model_kwargs["baseline_lengthscale"] = args.baseline_timescale
              model_kwargs["election_lengthscale"] = args.election_timescale
+             # Add static specific args to config_to_save
+             config_to_save["baseline_timescale"] = args.baseline_timescale # Note: Arg name mismatch in model
+             config_to_save["election_timescale"] = args.election_timescale # Note: Arg name mismatch in model
+
         elif args.model_type == "dynamic_gp":
-             model_kwargs["gp_lengthscale"] = args.gp_lengthscale # Pass new arg
-             model_kwargs["gp_kernel"] = args.gp_kernel # Pass kernel type
-             model_kwargs["hsgp_m"] = args.hsgp_m # Pass hsgp m
-             model_kwargs["hsgp_c"] = args.hsgp_c # Pass hsgp c
+             # Pass all relevant dynamic_gp args to model kwargs
+             model_kwargs["baseline_gp_lengthscale"] = args.baseline_gp_lengthscale
+             model_kwargs["baseline_gp_kernel"] = args.baseline_gp_kernel
+             model_kwargs["cycle_gp_lengthscale"] = args.cycle_gp_lengthscale
+             model_kwargs["cycle_gp_kernel"] = args.cycle_gp_kernel
+             model_kwargs["cycle_gp_max_days"] = args.cycle_gp_max_days
+             model_kwargs["hsgp_m"] = args.hsgp_m # Baseline HSGP m
+             model_kwargs["hsgp_c"] = args.hsgp_c # Baseline HSGP c
+             model_kwargs["hsgp_m_cycle"] = args.hsgp_m_cycle # Cycle HSGP m
+             model_kwargs["hsgp_c_cycle"] = args.hsgp_c_cycle # Cycle HSGP c
+             # Add dynamic_gp specific args to config_to_save
+             config_to_save["baseline_gp_lengthscale"] = args.baseline_gp_lengthscale
+             config_to_save["baseline_gp_kernel"] = args.baseline_gp_kernel
+             config_to_save["cycle_gp_lengthscale"] = args.cycle_gp_lengthscale
+             config_to_save["cycle_gp_kernel"] = args.cycle_gp_kernel
+             config_to_save["cycle_gp_max_days"] = args.cycle_gp_max_days
+             config_to_save["hsgp_m"] = args.hsgp_m
+             config_to_save["hsgp_c"] = args.hsgp_c
+             config_to_save["hsgp_m_cycle"] = args.hsgp_m_cycle
+             config_to_save["hsgp_c_cycle"] = args.hsgp_c_cycle
         # --- End Prepare Model Kwargs ---
         
         # Initialize the elections model
@@ -126,12 +169,6 @@ def fit_model(args):
         
         # Save model configuration
         print(f"Saving model configuration to {output_dir}/model_config.json")
-        config_to_save = {
-            "election_date": args.election_date,
-            "baseline_timescales": args.baseline_timescale,
-            "election_timescales": args.election_timescale,
-            "cutoff_date": args.cutoff_date,
-        }
         config_path = os.path.join(output_dir, "model_config.json")
         try:
             with open(config_path, 'w') as f:
@@ -140,20 +177,7 @@ def fit_model(args):
         except Exception as config_err:
             print(f"Warning: Failed to save model configuration: {config_err}")
         
-        # Debug: Check trace before saving
-        # print(f"DEBUG: Before saving - elections_model.trace is None? {elections_model.trace is None}")
-        # if elections_model.trace is not None:
-        #      print(f"DEBUG: Before saving - elections_model.trace type: {type(elections_model.trace)}")
-        # else:
-        #      print(f"DEBUG: Before saving - trace object does not exist or is None.")
-              
         # Save the trace and model - this now returns True/False
-        # print(f"DEBUG: Type of elections_model just before save call: {type(elections_model)}")
-        # try:
-        #     print(f"DEBUG: elections_model.save_inference_results method: {elections_model.save_inference_results}")
-        # except AttributeError:
-        #     print("DEBUG: elections_model does NOT have attribute save_inference_results")
-              
         save_successful = elections_model.save_inference_results(output_dir)
         
         # Create/update the 'latest' symlink only if saving was successful
@@ -270,22 +294,28 @@ def load_model(args, directory, election_date=None, baseline_timescales=None, el
             model_kwargs["baseline_lengthscale"] = final_baseline_timescales
             model_kwargs["election_lengthscale"] = final_election_timescales
         elif final_model_type == "dynamic_gp":
-            # Priority: args -> loaded_config -> default (handled by model __init__)
-            gp_len_arg = args.gp_lengthscale if hasattr(args, 'gp_lengthscale') and args.gp_lengthscale is not None else None
-            gp_ker_arg = args.gp_kernel if hasattr(args, 'gp_kernel') and args.gp_kernel is not None else None
-            hsgp_m_arg = args.hsgp_m if hasattr(args, 'hsgp_m') and args.hsgp_m is not None else None
-            hsgp_c_arg = args.hsgp_c if hasattr(args, 'hsgp_c') and args.hsgp_c is not None else None
+            # Helper to get value: arg -> config -> default (None here, handled by model init)
+            def get_gp_param(arg_name, config_key, default_val=None):
+                arg_val = getattr(args, arg_name, None)
+                # Check if arg_val is the default argparse value (might need specific check)
+                # For now, assume if arg_val is not None, it was specified or is the default we want
+                if arg_val is not None:
+                    return arg_val
+                return loaded_config.get(config_key, default_val)
 
-            final_gp_lengthscale = gp_len_arg if gp_len_arg is not None else loaded_config.get('gp_lengthscale', None)
-            final_gp_kernel = gp_ker_arg if gp_ker_arg is not None else loaded_config.get('gp_kernel', None)
-            final_hsgp_m = hsgp_m_arg if hsgp_m_arg is not None else loaded_config.get('hsgp_m', None)
-            final_hsgp_c = hsgp_c_arg if hsgp_c_arg is not None else loaded_config.get('hsgp_c', None)
+            # Get all dynamic_gp params using helper or direct access
+            model_kwargs["baseline_gp_lengthscale"] = get_gp_param("baseline_gp_lengthscale", "baseline_gp_lengthscale")
+            model_kwargs["baseline_gp_kernel"] = get_gp_param("baseline_gp_kernel", "baseline_gp_kernel")
+            model_kwargs["cycle_gp_lengthscale"] = get_gp_param("cycle_gp_lengthscale", "cycle_gp_lengthscale")
+            model_kwargs["cycle_gp_kernel"] = get_gp_param("cycle_gp_kernel", "cycle_gp_kernel")
+            model_kwargs["cycle_gp_max_days"] = get_gp_param("cycle_gp_max_days", "cycle_gp_max_days")
+            model_kwargs["hsgp_m"] = get_gp_param("hsgp_m", "hsgp_m")
+            model_kwargs["hsgp_c"] = get_gp_param("hsgp_c", "hsgp_c")
+            model_kwargs["hsgp_m_cycle"] = get_gp_param("hsgp_m_cycle", "hsgp_m_cycle")
+            model_kwargs["hsgp_c_cycle"] = get_gp_param("hsgp_c_cycle", "hsgp_c_cycle")
 
-            # Only add to kwargs if a value was determined (otherwise let model default handle it)
-            if final_gp_lengthscale is not None: model_kwargs["gp_lengthscale"] = final_gp_lengthscale
-            if final_gp_kernel is not None: model_kwargs["gp_kernel"] = final_gp_kernel
-            if final_hsgp_m is not None: model_kwargs["hsgp_m"] = final_hsgp_m
-            if final_hsgp_c is not None: model_kwargs["hsgp_c"] = final_hsgp_c
+            # Remove None values so model defaults take over if nothing was specified/loaded
+            model_kwargs = {k: v for k, v in model_kwargs.items() if v is not None}
         # --- End Prepare Model Kwargs --- #
 
         if debug:
@@ -667,16 +697,31 @@ def main(args=None):
     # --- Dynamic GP Model Specific Arguments ---
     dynamic_gp_group = parser.add_argument_group('Dynamic GP Model Parameters')
     dynamic_gp_group.add_argument(
-        "--gp-lengthscale", type=float, default=180.0, help="GP lengthscale in days for dynamic_gp model"
+        "--baseline-gp-lengthscale", type=float, default=365.0, help="Baseline GP lengthscale (days) for dynamic_gp"
     )
     dynamic_gp_group.add_argument(
-        "--gp-kernel", choices=["Matern52", "ExpQuad"], default="Matern52", help="GP kernel type for dynamic_gp model"
+        "--baseline-gp-kernel", choices=["Matern52", "ExpQuad"], default="Matern52", help="Baseline GP kernel for dynamic_gp"
     )
     dynamic_gp_group.add_argument(
-        "--hsgp-m", type=int, nargs=1, default=[100], help="Number of basis functions (m) for HSGP in dynamic_gp model"
+        "--cycle-gp-lengthscale", type=float, default=45.0, help="Cycle GP lengthscale (days) for dynamic_gp"
     )
     dynamic_gp_group.add_argument(
-        "--hsgp-c", type=float, default=2.0, help="Expansion factor (c) for HSGP in dynamic_gp model"
+        "--cycle-gp-kernel", choices=["Matern52", "ExpQuad"], default="Matern52", help="Cycle GP kernel for dynamic_gp"
+    )
+    dynamic_gp_group.add_argument(
+        "--cycle-gp-max-days", type=int, default=180, help="Maximum days before election for Cycle GP"
+    )
+    dynamic_gp_group.add_argument(
+        "--hsgp-m", type=int, nargs=1, default=[100], help="Number of basis functions (m) for Baseline HSGP"
+    )
+    dynamic_gp_group.add_argument(
+        "--hsgp-c", type=float, default=2.0, help="Expansion factor (c) for Baseline HSGP"
+    )
+    dynamic_gp_group.add_argument(
+        "--hsgp-m-cycle", type=int, nargs=1, default=[50], help="Number of basis functions (m) for Cycle HSGP"
+    )
+    dynamic_gp_group.add_argument(
+        "--hsgp-c-cycle", type=float, default=1.5, help="Expansion factor (c) for Cycle HSGP"
     )
 
     # --- Cross-validation Specific Arguments ---
