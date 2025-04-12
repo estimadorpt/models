@@ -297,8 +297,8 @@ def plot_latent_popularity_vs_polls(elections_model, output_dir, include_target_
         # Plot Daily Average Noisy Popularity (if available) (Scale 0-1 data by 100)
         if noisy_pop_daily_mean is not None and noisy_pop_daily_dates is not None:
              party_idx_noisy = parties.index(party)
-             ax.plot(noisy_pop_daily_dates, noisy_pop_daily_mean[:, party_idx_noisy] * 100, # Scale 0-1 data by 100
-                     label="Noisy Pop (Daily Avg)", color='green', linestyle='--', alpha=0.8)
+             # ax.plot(noisy_pop_daily_dates, noisy_pop_daily_mean[:, party_idx_noisy] * 100, # Scale 0-1 data by 100
+             #         label="Noisy Pop (Daily Avg)", color='green', linestyle='--', alpha=0.8)
 
 
         # Plot Observed Polls (Calculate percentage from counts)

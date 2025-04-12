@@ -187,18 +187,20 @@ class DynamicGPElectionModel(BaseElectionModel):
                              ) -> Dict[str, pm.Data]:
         """
         Build the data containers for the PyMC model.
+
+        Note on Penalties (Oct 2024):
+        Previous versions used large negative additive penalties (-100)
+        in the `non_competing_*_additive` masks to suppress probabilities
+        for parties during periods they weren't polled or didn't exist.
+        However, empirical runs (e.g., `pen0` vs `pen100`) showed that for
+        this two-timescale calendar GP model, the likelihood pressure from
+        zero observations was sufficient to correctly push latent scores low,
+        without causing sampling issues.
+        Therefore, the explicit penalty masks are no longer created or used.
+        The multiplicative mask (`non_competing_polls_multiplicative`) was also
+        found to be unused in this model's likelihood and has been removed.
         """
         current_polls = polls if polls is not None else self.polls_train
-
-        if polls is None:
-            # Set base penalty to 0 for the experiment
-            non_competing_polls_additive_np = np.where(self.is_here_polls_base, 0.0, 0.0).astype(np.float64)
-            is_here_polls_np = self.is_here_polls_base
-        else: # Recalculate masks if custom polls are provided
-            is_here_polls = current_polls[self.political_families] > 0
-            # Set penalty to 0 for the experiment
-            non_competing_polls_additive_np = np.where(is_here_polls, 0.0, 0.0).astype(np.float64)
-            is_here_polls_np = is_here_polls.astype(int).to_numpy()
 
         # --- Filter results-related data based on observed_election_indices ---
         if self.observed_election_indices is None:
@@ -206,9 +208,7 @@ class DynamicGPElectionModel(BaseElectionModel):
 
         # Use observed_election_indices (indices relative to all_election_dates)
         # to filter the *original* results_oos dataframe and cycle indices
-        # Note: Assuming self.results_oos only contains historical results already
         if isinstance(self.observed_election_indices, (list, np.ndarray)):
-             # Identify which rows in results_oos correspond to the dates defined by observed_election_indices
              observed_election_dates_in_all = pd.to_datetime([self.all_election_dates[i] for i in self.observed_election_indices])
              results_filter_mask = self.results_oos['election_date'].isin(observed_election_dates_in_all)
 
@@ -216,17 +216,11 @@ class DynamicGPElectionModel(BaseElectionModel):
                   print(f"Warning: No rows in results_oos matched the observed_election_indices dates. Check alignment.")
                   results_N_historical = np.array([], dtype=float)
                   observed_results_historical = np.empty((0, len(self.political_families)), dtype=float)
-                  # Filter non_competing_parties_results_base based on observed_election_indices directly
-                  # Set penalty to 0 for the experiment
-                  non_competing_parties_results_filtered_np = np.where(self.non_competing_parties_results_base[self.observed_election_indices] != 0, 0.0, 0.0).astype(np.float64)
                   calendar_time_result_id_filtered = np.array([], dtype=int)
                   result_cycle_idx_filtered = np.array([], dtype=int)
              elif results_filter_mask.sum() > 0:
                   results_N_historical = self.results_oos.loc[results_filter_mask, "sample_size"].to_numpy()
                   observed_results_historical = self.results_oos.loc[results_filter_mask, self.political_families].to_numpy()
-                  # Assuming non_competing_parties_results_base aligns with all_election_dates
-                  # Set penalty to 0 for the experiment
-                  non_competing_parties_results_filtered_np = np.where(self.non_competing_parties_results_base[self.observed_election_indices] != 0, 0.0, 0.0).astype(np.float64)
                   # Filter indices based on the mask applied to results_oos
                   if self.calendar_time_result_id is not None and len(self.calendar_time_result_id) == len(self.results_oos):
                       calendar_time_result_id_filtered = self.calendar_time_result_id[results_filter_mask]
@@ -234,25 +228,20 @@ class DynamicGPElectionModel(BaseElectionModel):
                   if self.result_cycle_idx is not None and len(self.result_cycle_idx) == len(self.results_oos):
                       result_cycle_idx_filtered = self.result_cycle_idx[results_filter_mask]
                   else: result_cycle_idx_filtered = np.array([], dtype=int); print("Warn: res_cycle_idx filtering issue")
-
              else: # observed_election_indices is empty
                  print(f"Warning: observed_election_indices is empty. Filtering results to empty arrays.")
                  results_N_historical = np.array([], dtype=float)
                  observed_results_historical = np.empty((0, len(self.political_families)), dtype=float)
-                 # Set penalty to 0 for the experiment
-                 non_competing_parties_results_filtered_np = np.empty((0, len(self.political_families)), dtype=np.float64) # Already zero-like
                  calendar_time_result_id_filtered = np.array([], dtype=int)
                  result_cycle_idx_filtered = np.array([], dtype=int)
-
         else:
              raise ValueError(f"Invalid type or structure for observed_election_indices: {self.observed_election_indices}")
         # --- End Filtering ---
 
-        print(f"Shape of filtered non_competing_parties_results: {non_competing_parties_results_filtered_np.shape}")
-        print(f"Shape of filtered observed_results: {observed_results_historical.shape}")
-        print(f"Shape of filtered results_N: {results_N_historical.shape}")
-        print(f"Shape of filtered calendar_time_result_id: {calendar_time_result_id_filtered.shape}")
-        print(f"Shape of filtered result_cycle_idx: {result_cycle_idx_filtered.shape}")
+        # print(f"Shape of filtered observed_results: {observed_results_historical.shape}") # Keep useful prints
+        # print(f"Shape of filtered results_N: {results_N_historical.shape}")
+        # print(f"Shape of filtered calendar_time_result_id: {calendar_time_result_id_filtered.shape}")
+        # print(f"Shape of filtered result_cycle_idx: {result_cycle_idx_filtered.shape}")
 
         # Ensure other necessary arrays are set
         if self.poll_days_numeric is None or self.poll_cycle_idx is None or \
@@ -275,12 +264,11 @@ class DynamicGPElectionModel(BaseElectionModel):
             observed_polls=pm.Data("observed_polls", current_polls[self.political_families].to_numpy(), dims=("observations", "parties_complete")),
             observed_N_results=pm.Data("observed_N_results", results_N_historical, dims="elections_observed"),
             observed_results=pm.Data("observed_results", observed_results_historical, dims=("elections_observed", "parties_complete")),
-            # --- Masks ---
-            non_competing_parties_results=pm.Data("non_competing_parties_results", non_competing_parties_results_filtered_np, dims=("elections_observed", "parties_complete")),
-            non_competing_polls_additive=pm.Data("non_competing_polls_additive", non_competing_polls_additive_np, dims=("observations", "parties_complete")),
-            non_competing_polls_multiplicative=pm.Data("non_competing_polls_multiplicative", is_here_polls_np, dims=("observations", "parties_complete")),
-            # Set penalty to 0 for the experiment
-            non_competing_calendar_additive=pm.Data("non_competing_calendar_additive", np.where(self.non_competing_calendar_additive_base != 0, 0.0, 0.0).astype(np.float64), dims=("calendar_time", "parties_complete"))
+            # --- Masks (Removed as penalty is no longer needed) ---
+            # non_competing_parties_results=... (Removed)
+            # non_competing_polls_additive=... (Removed)
+            # non_competing_polls_multiplicative=... (Removed)
+            # non_competing_calendar_additive=... (Removed)
         )
         return data_containers
 
@@ -388,8 +376,7 @@ class DynamicGPElectionModel(BaseElectionModel):
             latent_mu_polls = pm.Deterministic("latent_mu_polls",
                 (
                     baseline_effect_calendar[data_containers["calendar_time_poll_idx"]] + # Baseline effect
-                    short_term_effect_calendar[data_containers["calendar_time_poll_idx"]] + # Short-term effect
-                    data_containers['non_competing_polls_additive']
+                    short_term_effect_calendar[data_containers["calendar_time_poll_idx"]]   # Short-term effect
                 ),
                 dims=("observations", "parties_complete")
             )
@@ -419,8 +406,7 @@ class DynamicGPElectionModel(BaseElectionModel):
             latent_mu_results = pm.Deterministic("latent_mu_results",
                 (
                      baseline_effect_calendar[data_containers["calendar_time_result_idx"]] + # Baseline effect
-                     short_term_effect_calendar[data_containers["calendar_time_result_idx"]] + # Short-term effect
-                     data_containers['non_competing_parties_results']
+                     short_term_effect_calendar[data_containers["calendar_time_result_idx"]] # Short-term effect
                  ),
                 dims=("elections_observed", "parties_complete")
             )
@@ -453,16 +439,9 @@ class DynamicGPElectionModel(BaseElectionModel):
                 dims=("calendar_time", "parties_complete")
             )
 
-            # Penalized versions (still useful for checking likelihood inputs)
-            penalized_latent_mu_calendar = pm.Deterministic("penalized_latent_mu_calendar",
-                latent_mu_calendar + data_containers["non_competing_calendar_additive"],
-                dims=("calendar_time", "parties_complete")
-            )
-            penalized_latent_popularity_calendar_trajectory = pm.Deterministic(
-                "penalized_latent_popularity_calendar_trajectory",
-                pt.special.softmax(penalized_latent_mu_calendar, axis=1),
-                dims=("calendar_time", "parties_complete")
-            )
+            # Penalized versions removed as penalty mask is no longer used
+            # penalized_latent_mu_calendar = ...
+            # penalized_latent_popularity_calendar_trajectory = ...
 
         self.model = model
         print("\nModel building complete (Two-Timescale Calendar GP + House Effects).")
