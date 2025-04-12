@@ -6,7 +6,7 @@ import os
 import numpy as np
 import xarray as xr
 import arviz as az
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, Dict
 import matplotlib.colors as mcolors
 import matplotlib.cm as cm
 import matplotlib.ticker as mtick
@@ -721,4 +721,99 @@ def plot_forecasted_election_distribution(elections_model: 'ElectionsFacade', ou
     finally:
         plt.close()
 
-    print("Finished generating election day latent distribution plot.") 
+    print("Finished generating election day latent distribution plot.")
+
+def plot_reliability_diagram(calibration_data: Dict[str, np.ndarray], title: str, filename: str):
+    """
+    Plots a reliability diagram based on calibration data.
+
+    Args:
+        calibration_data: Dictionary containing 'mean_predicted_prob', 
+                          'mean_observed_prob', and 'bin_counts'.
+        title: Title for the plot.
+        filename: Full path to save the plot image.
+    """
+    mean_predicted = calibration_data['mean_predicted_prob']
+    mean_observed = calibration_data['mean_observed_prob']
+    counts = calibration_data['bin_counts']
+
+    # Filter out bins with zero counts (where probs are NaN)
+    valid_bins = ~np.isnan(mean_predicted)
+    mean_predicted = mean_predicted[valid_bins]
+    mean_observed = mean_observed[valid_bins]
+    counts = counts[valid_bins]
+
+    if len(mean_predicted) == 0:
+        print(f"Skipping reliability diagram '{title}': No valid bins with data.")
+        return
+
+    fig, ax = plt.subplots(figsize=(7, 7))
+
+    # Plot the calibration curve
+    ax.plot(mean_predicted, mean_observed, 'o-', label='Model Calibration', markersize=8, color='blue')
+
+    # Plot the perfect calibration line
+    ax.plot([0, 1], [0, 1], 'k--', label='Perfect Calibration')
+
+    # Add counts as text annotations (optional, can get crowded)
+    # for i, count in enumerate(counts):
+    #     ax.text(mean_predicted[i], mean_observed[i] + 0.02, f'{count}', 
+    #             ha='center', va='bottom', fontsize=8)
+
+    # Create a simple histogram for the distribution of predictions
+    ax_hist = ax.twinx() # Share the x-axis
+    bin_edges_plot = calibration_data['bin_edges'][valid_bins] # Get edges for valid bins
+    counts_plot = counts # Counts corresponding to valid bins
+
+    # Calculate widths based on the *valid* bin edges for plotting
+    if len(bin_edges_plot) > 1:
+        widths = np.diff(bin_edges_plot)
+        # Add width for the last bin (use width of second-to-last if available)
+        if len(widths) > 0:
+             widths = np.append(widths, widths[-1])
+        else: # Only two edges, one bin
+             widths = [bin_edges_plot[1] - bin_edges_plot[0]]
+    elif len(bin_edges_plot) == 1:
+        # Only one valid bin edge means one bar. Estimate width.
+        # Use 1/n_bins as approximate width
+        n_bins_total = len(calibration_data['mean_predicted_prob']) # Original number of bins
+        widths = [1.0 / n_bins_total if n_bins_total > 0 else 0.1] 
+    else: # No valid bins
+        widths = []
+
+    # Ensure widths array matches the number of counts/bars
+    if len(widths) != len(counts_plot):
+         print(f"Warning: Mismatch in counts ({len(counts_plot)}) and widths ({len(widths)}). Skipping histogram.")
+         can_plot_hist = False
+    elif len(bin_edges_plot) == 0 or len(counts_plot) == 0:
+         can_plot_hist = False
+    else:
+         can_plot_hist = True
+
+    if can_plot_hist:
+         # Use bin_edges_plot as the left edge for bars
+         ax_hist.bar(bin_edges_plot, counts_plot, width=widths, alpha=0.2, align='edge', color='gray', label='Prediction Count')
+         ax_hist.set_ylabel('Count', color='gray')
+         ax_hist.tick_params(axis='y', labelcolor='gray')
+         ax_hist.set_yscale('log') # Use log scale for counts often
+    else:
+         print("Could not plot histogram due to bin/width mismatch or no data.")
+
+    ax.set_xlabel('Mean Predicted Probability (in bin)')
+    ax.set_ylabel('Mean Observed Proportion (in bin)')
+    ax.set_title(title)
+    ax.grid(True, linestyle=':', alpha=0.7)
+    ax.legend(loc='upper left')
+    
+    # Set limits and aspect ratio
+    ax.set_xlim([0, 1])
+    ax.set_ylim([0, 1])
+    ax.set_aspect('equal', adjustable='datalim') # Changed 'box' to 'datalim'
+
+    plt.tight_layout()
+    try:
+        plt.savefig(filename)
+        print(f"Reliability diagram saved to {filename}")
+    except Exception as e:
+        print(f"Error saving reliability diagram '{filename}': {e}")
+    plt.close(fig) 

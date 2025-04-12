@@ -204,11 +204,76 @@ class ElectionsFacade:
         sampler_kwargs['target_accept'] = target_accept
         sampler_kwargs['max_treedepth'] = 15 # Increase max tree depth
         
-        self.prior, self.trace, self.posterior = self.model_instance.sample_all(
+        # Run sampling
+        prior_checks, trace_from_sample, posterior_checks = self.model_instance.sample_all(
             var_names=var_names,
             **sampler_kwargs
         )
         
+        # Assign prior and posterior checks (might be None)
+        self.prior = prior_checks
+        self.posterior = posterior_checks # Note: sample_all currently returns None here
+
+        # Initialize self.trace to None before potentially assigning the enhanced version
+        self.trace = None 
+        
+        # --- Explicitly construct InferenceData with observed_data --- #
+        # Check if trace_from_sample was generated and has posterior
+        if trace_from_sample is not None and hasattr(trace_from_sample, 'posterior'):
+            try:
+                print("Constructing final InferenceData including observed_data...")
+                observed_data_dict = {}
+                model = self.model_instance.model
+                required_obs_vars = [
+                    "observed_polls", "observed_N_polls",
+                    "observed_results", "observed_N_results"
+                ]
+                # Use coordinates from the generated posterior trace
+                coords = trace_from_sample.posterior.coords 
+
+                for var_name in required_obs_vars:
+                    if var_name in model.named_vars:
+                        pm_data_var = model[var_name]
+                        if hasattr(pm_data_var, 'get_value'):
+                            data_val = pm_data_var.get_value(borrow=True)
+                            dims = model.named_vars_to_dims.get(var_name)
+                            if dims:
+                                relevant_coords = {dim: coords[dim] for dim in dims if dim in coords}
+                                observed_data_dict[var_name] = xr.DataArray(data_val, coords=relevant_coords, dims=dims)
+                            else:
+                                observed_data_dict[var_name] = xr.DataArray(data_val)
+                        else:
+                             print(f"Warning: Could not get value for observed var '{var_name}'.")
+                    else:
+                         print(f"Warning: Observed data variable '{var_name}' not found in model.")
+                
+                if observed_data_dict:
+                     observed_data_group = xr.Dataset(observed_data_dict)
+                     # Create a new InferenceData object using trace_from_sample
+                     final_idata = az.InferenceData(
+                         posterior=trace_from_sample.posterior,
+                         observed_data=observed_data_group,
+                         sample_stats=getattr(trace_from_sample, 'sample_stats', None),
+                         prior=getattr(trace_from_sample, 'prior', None), 
+                     )
+                     self.trace = final_idata # Assign the final, enhanced object to self.trace
+                     print("Final InferenceData constructed successfully.")
+                else:
+                     print("Warning: No observed data collected; assigning original trace from sample.")
+                     self.trace = trace_from_sample # Use the original trace if no obs data added
+
+            except Exception as e:
+                 print(f"Warning: Failed to construct final InferenceData with observed_data: {e}")
+                 import traceback
+                 traceback.print_exc()
+                 # Fallback: assign the original trace if construction failed
+                 self.trace = trace_from_sample 
+        else:
+             print("Warning: No trace or posterior found after sampling. Cannot add observed_data.")
+             self.trace = trace_from_sample # Assign whatever was returned
+        # --- End Construct InferenceData --- #
+        
+        # Return the objects stored in the facade instance attributes
         return self.prior, self.trace, self.posterior
     
     def save_inference_results(self, directory: str = ".", force: bool = False):
@@ -1069,36 +1134,48 @@ class ElectionsFacade:
         summary_path = os.path.join(directory, "diagnostic_summary.txt")
         print(f"- Generating diagnostic summary text file...")
         try:
-            summary = az.summary(self.trace)
-            rhat_threshold = 1.05
-            ess_threshold = 400 # Assuming 4 chains, 100 per chain
+            # Calculate required ESS based on 10% of total samples
+            # Default to 400 if dimensions aren't available
+            total_samples = 4000 # Fallback
+            if hasattr(self.trace, 'posterior') and 'chain' in self.trace.posterior.dims and 'draw' in self.trace.posterior.dims:
+                 total_samples = self.trace.posterior.dims['chain'] * self.trace.posterior.dims['draw']
+            ess_threshold_pct = 0.10 # 10%
+            ess_threshold = int(total_samples * ess_threshold_pct)
+            if ess_threshold == 0: ess_threshold = 1 # Ensure threshold is at least 1
 
+            summary = az.summary(self.trace)
+            rhat_threshold = 1.01 # New R-hat threshold
+
+            # Identify potentially problematic parameters
             bad_rhat = summary[summary['r_hat'] > rhat_threshold]
             bad_ess_bulk = summary[summary['ess_bulk'] < ess_threshold]
             bad_ess_tail = summary[summary['ess_tail'] < ess_threshold]
+
+            # Combine indices of all potentially problematic parameters
+            bad_indices = set(bad_rhat.index) | set(bad_ess_bulk.index) | set(bad_ess_tail.index)
+            bad_summary = summary.loc[list(bad_indices)]
 
             with open(summary_path, 'w') as f:
                 f.write("Convergence Diagnostics Summary\n")
                 f.write("=============================\n")
                 f.write(f"R-hat Threshold: > {rhat_threshold}\n")
-                f.write(f"ESS Threshold (Bulk & Tail): < {ess_threshold}\n\n")
+                f.write(f"ESS Threshold (Bulk & Tail): < {ess_threshold} ({ess_threshold_pct:.0%} of {total_samples} total samples)\n\n")
 
-                if bad_rhat.empty and bad_ess_bulk.empty and bad_ess_tail.empty:
-                    f.write("No major convergence issues detected based on R-hat and ESS thresholds.\n")
+                if bad_indices:
+                    f.write("Potential convergence issues detected for the following parameters:\n")
+                    f.write("------------------------------------------------------------------\n")
+                    # Select relevant columns for the problematic summary
+                    problem_cols = ['mean', 'sd', 'hdi_3%', 'hdi_97%', 'ess_bulk', 'ess_tail', 'r_hat']
+                    f.write(bad_summary[problem_cols].to_string())
+                    f.write("\n\n")
                 else:
-                    f.write("Potential convergence issues detected:\n")
-                    if not bad_rhat.empty:
-                        f.write("\n--- Parameters with R-hat > {}: ---\n".format(rhat_threshold))
-                        f.write(bad_rhat[['r_hat']].to_string())
-                        f.write("\n")
-                    if not bad_ess_bulk.empty:
-                        f.write("\n--- Parameters with Bulk ESS < {}: ---\n".format(ess_threshold))
-                        f.write(bad_ess_bulk[['ess_bulk']].to_string())
-                        f.write("\n")
-                    if not bad_ess_tail.empty:
-                        f.write("\n--- Parameters with Tail ESS < {}: ---\n".format(ess_threshold))
-                        f.write(bad_ess_tail[['ess_tail']].to_string())
-                        f.write("\n")
+                    f.write("No major convergence issues detected based on R-hat and ESS thresholds.\n\n")
+
+                # Append the full summary for reference
+                f.write("Full ArviZ Summary:\n")
+                f.write("==================\n")
+                f.write(summary.to_string())
+
             print(f"  Saved diagnostic summary to {summary_path}")
         except Exception as e:
             print(f"  Error generating diagnostic summary: {e}")

@@ -21,6 +21,7 @@ from src.visualization.plots import (
     plot_latent_component_contributions, 
     plot_recent_polls,
     plot_house_effects_heatmap,
+    plot_reliability_diagram,
     # plot_forecasted_election_distribution # Moved to predict function
     # plot_nowcast_latent_vs_polls_combined # Removed import
 )
@@ -60,11 +61,24 @@ def fit_model(args):
                  print(f"Using HSGP m (cycle): {args.hsgp_m_cycle}")
                  print(f"Using HSGP c (cycle): {args.hsgp_c_cycle}")
 
-        # Define the output directory directly from args, removing timestamp nesting
-        output_dir = args.output_dir.rstrip('/')
-        print(f"Saving results directly to: {output_dir}")
+        # --- Determine Output Directory --- #
+        # Check if the user provided a specific output dir or if it's the default
+        # We need the actual default value from argparse setup
+        # Assuming the default is 'outputs/' based on argparse definition below
+        default_output_dir = "outputs/"
+        if args.output_dir == default_output_dir:
+            # Default case: Create a timestamped subdirectory
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            run_name = f"{args.model_type}_run_{timestamp}" # Include model type for clarity
+            output_dir = os.path.join(default_output_dir.rstrip('/'), run_name)
+            print(f"No specific output directory provided. Creating timestamped directory: {output_dir}")
+        else:
+            # User provided a specific path: Use it directly
+            output_dir = args.output_dir
+            print(f"Using specified output directory: {output_dir}")
+        # --- End Determine Output Directory --- #
 
-        # Make sure the specified output directory exists
+        # Make sure the final output directory exists
         os.makedirs(output_dir, exist_ok=True)
 
         if args.debug:
@@ -159,6 +173,47 @@ def fit_model(args):
         else:
             print("Skipping diagnostic plot generation as trace is not available.")
         
+        # --- Calculate and Save Fit Metrics ---
+        metrics_dict = {}
+        if elections_model.trace is not None and hasattr(model_instance, 'calculate_fit_metrics'):
+            try:
+                print("\nCalculating fit metrics...")
+                # Ensure the trace object is available in the model instance if needed by methods
+                if not hasattr(model_instance, 'trace') or model_instance.trace is None:
+                     model_instance.trace = elections_model.trace # Assign trace if needed
+                metrics_dict = model_instance.calculate_fit_metrics(elections_model.trace)
+                print("Fit Metrics:")
+                for key, value in metrics_dict.items():
+                    print(f"  {key}: {value:.4f}")
+                
+                metrics_path = os.path.join(output_dir, "fit_metrics.json")
+                with open(metrics_path, 'w') as f:
+                    json.dump(metrics_dict, f, indent=4)
+                print(f"Fit metrics saved to {metrics_path}")
+
+                # --- Plot Calibration --- #
+                viz_dir = os.path.join(output_dir, "visualizations") # Use same dir as other plots
+                os.makedirs(viz_dir, exist_ok=True)
+                if "poll_calibration" in metrics_dict:
+                     plot_reliability_diagram(
+                         metrics_dict["poll_calibration"],
+                         title="Poll Calibration",
+                         filename=os.path.join(viz_dir, "calibration_polls.png")
+                     )
+                if "result_calibration" in metrics_dict:
+                     plot_reliability_diagram(
+                         metrics_dict["result_calibration"],
+                         title="Election Result Calibration",
+                         filename=os.path.join(viz_dir, "calibration_results.png")
+                     )
+                # --- End Plot Calibration --- #
+
+            except Exception as metrics_err:
+                 print(f"Warning: Failed to calculate or save fit metrics: {metrics_err}")
+        else:
+            print("Skipping fit metric calculation (no trace or method unavailable).")
+        # --- End Calculate and Save Fit Metrics ---
+
         # Save model configuration
         print(f"Saving model configuration to {output_dir}/model_config.json")
         config_path = os.path.join(output_dir, "model_config.json")
@@ -554,6 +609,57 @@ def diagnose_model(args):
         elections_model.generate_diagnostic_plots(diag_plot_dir)
 
         print(f"Diagnostic plots saved to {diag_plot_dir}")
+
+        # --- Calculate and Display Fit Metrics (from loaded model) ---
+        metrics_dict = {}
+        if elections_model.trace is not None and hasattr(elections_model.model_instance, 'calculate_fit_metrics'):
+            try:
+                print("\nCalculating fit metrics for the loaded model...")
+                # Ensure the trace object is available in the model instance
+                if not hasattr(elections_model.model_instance, 'trace') or elections_model.model_instance.trace is None:
+                     elections_model.model_instance.trace = elections_model.trace # Assign trace if needed
+                metrics_dict = elections_model.model_instance.calculate_fit_metrics(elections_model.trace)
+                print("Fit Metrics:")
+                for key, value in metrics_dict.items():
+                    # Handle potential NaN values from calculation
+                    if isinstance(value, float) and np.isnan(value):
+                         print(f"  {key}: NaN")
+                    # Skip printing the calibration dictionaries directly
+                    elif isinstance(value, dict) and key.endswith('_calibration'):
+                         print(f"  {key}: [Calibration Data - see plots]")
+                    else:
+                         print(f"  {key}: {value:.4f}")
+
+                # Optionally save metrics again or just display
+                # metrics_path = os.path.join(model_dir, "fit_metrics_diagnose.json")
+                # with open(metrics_path, 'w') as f:
+                #     json.dump(metrics_dict, f, indent=4)
+                # print(f"Fit metrics saved to {metrics_path}")
+
+                # --- Plot Calibration --- #
+                viz_dir = os.path.join(model_dir, "visualizations") # Use same dir as other plots
+                os.makedirs(viz_dir, exist_ok=True)
+                if "poll_calibration" in metrics_dict:
+                     plot_reliability_diagram(
+                         metrics_dict["poll_calibration"],
+                         title="Poll Calibration",
+                         filename=os.path.join(viz_dir, "calibration_polls.png")
+                     )
+                if "result_calibration" in metrics_dict:
+                     plot_reliability_diagram(
+                         metrics_dict["result_calibration"],
+                         title="Election Result Calibration",
+                         filename=os.path.join(viz_dir, "calibration_results.png")
+                     )
+                # --- End Plot Calibration --- #
+
+            except ValueError as ve:
+                 print(f"Warning: Could not calculate fit metrics: {ve}") # Often due to missing data in idata
+            except Exception as metrics_err:
+                 print(f"Warning: Failed to calculate fit metrics: {metrics_err}")
+        else:
+            print("Skipping fit metric calculation (no trace or method unavailable).")
+        # --- End Calculate and Display Fit Metrics ---
 
     except Exception as e:
         print(f"Error during model diagnosis: {e}")

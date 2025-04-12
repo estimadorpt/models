@@ -11,6 +11,13 @@ from scipy.special import softmax
 
 from src.data.dataset import ElectionDataset # Assuming dataset structure
 from src.models.base_model import BaseElectionModel
+from src.evaluation.metrics import (
+    calculate_mae,
+    calculate_rmse,
+    calculate_log_score,
+    calculate_rps,
+    calculate_calibration_data
+)
 
 
 class DynamicGPElectionModel(BaseElectionModel):
@@ -448,9 +455,200 @@ class DynamicGPElectionModel(BaseElectionModel):
         return model
 
     # --- Placeholder methods ---
-    def posterior_predictive_check(self, posterior):
-        print("Warning: posterior_predictive_check not yet implemented.")
-        return {}
+    def posterior_predictive_check(self, idata: az.InferenceData, extend_idata: bool = True) -> az.InferenceData | Dict:
+        """
+        Performs posterior predictive checks on the poll and result likelihoods.
+
+        Generates samples from the posterior predictive distribution for observed
+        variables (poll counts 'N_approve' and result counts 'R').
+
+        Args:
+            idata: The InferenceData object containing the posterior trace.
+            extend_idata: If True (default), adds the posterior predictive samples
+                          to the input InferenceData object and returns it.
+                          If False, returns a dictionary containing the samples.
+
+        Returns:
+            The input InferenceData object extended with posterior predictive samples
+            (if extend_idata=True), or a dictionary containing the samples.
+
+        Raises:
+            ValueError: If the model hasn't been built yet.
+        """
+        if self.model is None:
+            raise ValueError("Model must be built before running PPC. Call build_model() first.")
+        if idata is None or "posterior" not in idata:
+             raise ValueError("Valid InferenceData object with posterior samples required.")
+
+        with self.model: # Re-enter the model context
+            # Sample from the posterior predictive distribution for polls and results
+            # We want samples of the *observed* variables based on the posterior
+            ppc_samples = pm.sample_posterior_predictive(
+                idata,
+                var_names=[
+                    "N_approve", # Simulated poll counts
+                    "R",         # Simulated election result counts
+                    "noisy_popularity_polls", # Also sample the underlying probability for polls
+                    "latent_pop_results"      # And the underlying probability for results
+                    ],
+                predictions=False, # Ensure we are sampling the observed nodes
+                extend_inferencedata=extend_idata, # Add samples to idata
+            )
+
+        print("Posterior predictive samples generated.")
+        print("Use ArviZ (e.g., az.plot_ppc) or custom functions to compare:")
+        print("  - 'N_approve' samples vs observed_polls data")
+        print("  - 'R' samples vs observed_results data")
+
+        if extend_idata:
+            return idata # idata is modified in-place if extend_idata=True in sample_posterior_predictive
+        else:
+            # If not extending, sample_posterior_predictive returns the dictionary directly
+            return ppc_samples
+
+
+    def calculate_fit_metrics(self, idata: az.InferenceData) -> Dict[str, float]:
+        """
+        Calculates various goodness-of-fit metrics using posterior predictive samples.
+
+        Compares model predictions against observed poll and election result data.
+
+        Args:
+            idata: InferenceData object containing posterior and ideally
+                   posterior_predictive and observed_data groups.
+
+        Returns:
+            A dictionary containing calculated metrics:
+            - poll_mae: Mean Absolute Error on poll proportions.
+            - poll_rmse: Root Mean Squared Error on poll proportions.
+            - poll_log_score: Average Log Score for poll counts.
+            - poll_rps: Average Rank Probability Score for poll proportions.
+            - result_mae: Mean Absolute Error on result proportions.
+            - result_rmse: Root Mean Squared Error on result proportions.
+            - result_log_score: Average Log Score for result counts.
+            - result_rps: Average Rank Probability Score for result proportions.
+
+        Raises:
+            ValueError: If required data groups (posterior_predictive, observed_data)
+                      or variables are missing from idata.
+        """
+        # 1. Ensure Posterior Predictive samples exist
+        if "posterior_predictive" not in idata:
+            print("Posterior predictive samples not found in idata. Running posterior_predictive_check...")
+            try:
+                self.posterior_predictive_check(idata, extend_idata=True) # Modifies idata in-place
+            except Exception as e:
+                 raise ValueError(f"Failed to generate posterior predictive samples: {e}")
+
+        if "observed_data" not in idata:
+            raise ValueError("observed_data group is required in InferenceData to calculate metrics.")
+
+        # 2. Extract Predictions (Mean Probabilities) and Observed Data
+        print("\n--- Debugging Metric Calculation Inputs ---") # DEBUG
+        try:
+            # --- Polls --- 
+            pp_poll_da = idata.posterior_predictive["noisy_popularity_polls"]
+            pred_poll_probs = pp_poll_da.mean(dim=["chain", "draw"]).values
+            obs_poll_counts = idata.observed_data["observed_polls"].values
+            obs_poll_n = idata.observed_data["observed_N_polls"].values
+            with np.errstate(divide='ignore', invalid='ignore'):
+                obs_poll_probs = obs_poll_counts / obs_poll_n[:, np.newaxis]
+            obs_poll_probs = np.nan_to_num(obs_poll_probs)
+            
+            print("\n[Poll Data]")
+            print(f"  Shape pred_poll_probs: {pred_poll_probs.shape}")
+            print(f"  Shape obs_poll_probs: {obs_poll_probs.shape}")
+            print(f"  Shape obs_poll_counts: {obs_poll_counts.shape}")
+            print(f"  Pred Poll Probs (mean): {pred_poll_probs.mean():.4f}, (min): {pred_poll_probs.min():.4f}, (max): {pred_poll_probs.max():.4f}")
+            print(f"  Obs Poll Probs (mean): {obs_poll_probs.mean():.4f}, (min): {obs_poll_probs.min():.4f}, (max): {obs_poll_probs.max():.4f}")
+            # print(f"  Pred Poll Probs (first 2 rows):\n{pred_poll_probs[:2]}") # Optional: uncomment for more detail
+            # print(f"  Obs Poll Probs (first 2 rows):\n{obs_poll_probs[:2]}") # Optional: uncomment for more detail
+
+            # --- Results --- 
+            pp_result_da = idata.posterior_predictive["latent_pop_results"]
+            pred_result_probs = pp_result_da.mean(dim=["chain", "draw"]).values
+            obs_result_counts = idata.observed_data["observed_results"].values
+            obs_result_n = idata.observed_data["observed_N_results"].values
+            with np.errstate(divide='ignore', invalid='ignore'):
+                obs_result_probs = obs_result_counts / obs_result_n[:, np.newaxis]
+            obs_result_probs = np.nan_to_num(obs_result_probs)
+            
+            print("\n[Result Data]")
+            print(f"  Shape pred_result_probs: {pred_result_probs.shape}")
+            print(f"  Shape obs_result_probs: {obs_result_probs.shape}")
+            print(f"  Shape obs_result_counts: {obs_result_counts.shape}")
+            print(f"  Pred Result Probs (mean): {pred_result_probs.mean():.4f}, (min): {pred_result_probs.min():.4f}, (max): {pred_result_probs.max():.4f}")
+            print(f"  Obs Result Probs (mean): {obs_result_probs.mean():.4f}, (min): {obs_result_probs.min():.4f}, (max): {obs_result_probs.max():.4f}")
+            print(f"  Pred Result Probs:\n{pred_result_probs}") # Print full array for results (usually small)
+            print(f"  Obs Result Probs:\n{obs_result_probs}") # Print full array for results
+
+        except KeyError as e:
+            raise ValueError(f"Missing required variable in InferenceData: {e}")
+        except Exception as e:
+             raise ValueError(f"Error extracting data from InferenceData: {e}")
+
+        # 3. Calculate Metrics
+        metrics = {}
+
+        # --- Poll Metrics ---
+        if obs_poll_counts.shape[0] > 0:
+            metrics["poll_mae"] = calculate_mae(pred_poll_probs, obs_poll_probs)
+            metrics["poll_rmse"] = calculate_rmse(pred_poll_probs, obs_poll_probs)
+            individual_poll_log_scores = calculate_log_score(pred_poll_probs, obs_poll_counts)
+            metrics["poll_log_score"] = np.mean(individual_poll_log_scores[np.isfinite(individual_poll_log_scores)]) # Average finite scores
+            metrics["poll_rps"] = calculate_rps(pred_poll_probs, obs_poll_probs)
+            # Calculate calibration data for polls
+            metrics["poll_calibration"] = calculate_calibration_data(pred_poll_probs, obs_poll_probs)
+
+            # Identify worst fitting polls
+            num_worst_polls = 5
+            if len(individual_poll_log_scores) >= num_worst_polls:
+                worst_poll_indices = np.argsort(individual_poll_log_scores)[-num_worst_polls:][::-1] # Indices of highest scores
+                print(f"\n  Top {num_worst_polls} Worst Poll Log Scores (Indices):")
+                for idx in worst_poll_indices:
+                     if np.isfinite(individual_poll_log_scores[idx]):
+                          print(f"    Poll Index {idx}: {individual_poll_log_scores[idx]:.2f}")
+                     else:
+                          print(f"    Poll Index {idx}: {individual_poll_log_scores[idx]}") # Print inf/nan
+        else:
+            print("Warning: No poll observations found in idata. Skipping poll metrics.")
+            metrics["poll_mae"] = np.nan
+            metrics["poll_rmse"] = np.nan
+            metrics["poll_log_score"] = np.nan
+            metrics["poll_rps"] = np.nan
+
+        # --- Result Metrics ---
+        if obs_result_counts.shape[0] > 0:
+            metrics["result_mae"] = calculate_mae(pred_result_probs, obs_result_probs)
+            metrics["result_rmse"] = calculate_rmse(pred_result_probs, obs_result_probs)
+            individual_result_log_scores = calculate_log_score(pred_result_probs, obs_result_counts)
+            metrics["result_log_score"] = np.mean(individual_result_log_scores[np.isfinite(individual_result_log_scores)])
+            metrics["result_rps"] = calculate_rps(pred_result_probs, obs_result_probs)
+            # Calculate calibration data for results
+            metrics["result_calibration"] = calculate_calibration_data(pred_result_probs, obs_result_probs)
+
+            # Identify worst fitting results
+            num_worst_results = min(5, len(individual_result_log_scores))
+            if num_worst_results > 0:
+                 worst_result_indices = np.argsort(individual_result_log_scores)[-num_worst_results:][::-1]
+                 print(f"\n  Top {num_worst_results} Worst Result Log Scores (Indices):")
+                 # Get corresponding election dates for context
+                 election_coords = idata.observed_data["observed_results"].coords["elections_observed"].values
+                 for idx in worst_result_indices:
+                      if np.isfinite(individual_result_log_scores[idx]):
+                           print(f"    Result Index {idx} (Election: {election_coords[idx]}): {individual_result_log_scores[idx]:.2f}")
+                      else:
+                           print(f"    Result Index {idx} (Election: {election_coords[idx]}): {individual_result_log_scores[idx]}")
+        else:
+            print("Warning: No result observations found in idata. Skipping result metrics.")
+            metrics["result_mae"] = np.nan
+            metrics["result_rmse"] = np.nan
+            metrics["result_log_score"] = np.nan
+            metrics["result_rps"] = np.nan
+
+        print("--- End Debugging Metric Calculation Inputs ---") # DEBUG
+        return metrics
+
 
     def predict_latent_trajectory(self, idata: az.InferenceData, start_date: pd.Timestamp, end_date: pd.Timestamp) -> az.InferenceData:
         print("Warning: predict_latent_trajectory not yet implemented.")
