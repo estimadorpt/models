@@ -60,19 +60,13 @@ def fit_model(args):
                  print(f"Using HSGP m (cycle): {args.hsgp_m_cycle}")
                  print(f"Using HSGP c (cycle): {args.hsgp_c_cycle}")
 
-        # Create the model output directory with timestamp
-        timestamp = pd.Timestamp.now().strftime("%Y-%m-%d_%H%M%S")
-        
-        # Create output directory with timestamp as a subdirectory
-        base_output_dir = args.output_dir.rstrip('/')
-        if base_output_dir.endswith('/latest'):
-            base_output_dir = os.path.dirname(base_output_dir)
-            
-        output_dir = os.path.join(base_output_dir, timestamp)
-        
-        # Make sure all parent directories exist
+        # Define the output directory directly from args, removing timestamp nesting
+        output_dir = args.output_dir.rstrip('/')
+        print(f"Saving results directly to: {output_dir}")
+
+        # Make sure the specified output directory exists
         os.makedirs(output_dir, exist_ok=True)
-        
+
         if args.debug:
             print(f"Using output directory: {output_dir}")
         
@@ -97,22 +91,19 @@ def fit_model(args):
         if args.model_type == "static":
              model_kwargs["baseline_lengthscale"] = args.baseline_timescale
              model_kwargs["election_lengthscale"] = args.election_timescale
-             # Add static specific args to config_to_save
-             config_to_save["baseline_timescale"] = args.baseline_timescale # Note: Arg name mismatch in model
-             config_to_save["election_timescale"] = args.election_timescale # Note: Arg name mismatch in model
+             config_to_save["baseline_timescale"] = args.baseline_timescale
+             config_to_save["election_timescale"] = args.election_timescale
 
         elif args.model_type == "dynamic_gp":
-             # Pass all relevant dynamic_gp args to model kwargs
              model_kwargs["baseline_gp_lengthscale"] = args.baseline_gp_lengthscale
              model_kwargs["baseline_gp_kernel"] = args.baseline_gp_kernel
              model_kwargs["cycle_gp_lengthscale"] = args.cycle_gp_lengthscale
              model_kwargs["cycle_gp_kernel"] = args.cycle_gp_kernel
              model_kwargs["cycle_gp_max_days"] = args.cycle_gp_max_days
-             model_kwargs["hsgp_m"] = args.hsgp_m # Baseline HSGP m
-             model_kwargs["hsgp_c"] = args.hsgp_c # Baseline HSGP c
-             model_kwargs["hsgp_m_cycle"] = args.hsgp_m_cycle # Cycle HSGP m
-             model_kwargs["hsgp_c_cycle"] = args.hsgp_c_cycle # Cycle HSGP c
-             # Add dynamic_gp specific args to config_to_save
+             model_kwargs["hsgp_m"] = args.hsgp_m
+             model_kwargs["hsgp_c"] = args.hsgp_c
+             model_kwargs["hsgp_m_cycle"] = args.hsgp_m_cycle
+             model_kwargs["hsgp_c_cycle"] = args.hsgp_c_cycle
              config_to_save["baseline_gp_lengthscale"] = args.baseline_gp_lengthscale
              config_to_save["baseline_gp_kernel"] = args.baseline_gp_kernel
              config_to_save["cycle_gp_lengthscale"] = args.cycle_gp_lengthscale
@@ -160,6 +151,7 @@ def fit_model(args):
         # Generate diagnostic plots
         if elections_model.trace is not None:
             diag_plot_dir = os.path.join(output_dir, "diagnostics")
+            os.makedirs(diag_plot_dir, exist_ok=True)
             elections_model.generate_diagnostic_plots(diag_plot_dir)
             # If there are model-specific diagnostic plots, call them here:
             # if hasattr(model_instance, 'generate_specific_diagnostics'):
@@ -180,26 +172,36 @@ def fit_model(args):
         # Save the trace and model - this now returns True/False
         save_successful = elections_model.save_inference_results(output_dir)
         
+        # --- RE-ADD and ADAPT automatic 'latest' symlink creation block ---
         # Create/update the 'latest' symlink only if saving was successful
         if save_successful:
+            # Determine the parent directory to place the 'latest' link
+            base_output_dir = os.path.dirname(output_dir)
+            # Handle case where output_dir might be the root (e.g., './my_run') or just a name
+            if not base_output_dir:
+                 base_output_dir = '.' # Assume current directory if no parent path given
+
             latest_link_path = os.path.join(base_output_dir, "latest")
             target_path_absolute = os.path.abspath(output_dir)
-            
+
             print(f"Updating symbolic link '{latest_link_path}' to point to '{target_path_absolute}'")
-            
+
             try:
                 # Remove existing link/file if it exists
                 if os.path.islink(latest_link_path) or os.path.exists(latest_link_path):
                     os.remove(latest_link_path)
-                
+
                 # Create the new symlink
-                os.symlink(target_path_absolute, latest_link_path, target_is_directory=True)
+                # Check if the target is actually a directory (should be)
+                target_is_dir = os.path.isdir(target_path_absolute)
+                os.symlink(target_path_absolute, latest_link_path, target_is_directory=target_is_dir)
                 print(f"Symbolic link 'latest' updated successfully.")
             except Exception as symlink_err:
                 print(f"Warning: Failed to create/update symbolic link: {symlink_err}")
         else:
             print("Skipping 'latest' symlink creation as no inference results were saved.")
-        
+        # --- End RE-ADD symlink logic ---
+
         print(f"Training process complete for {args.election_date}.")
         return elections_model
         

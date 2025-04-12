@@ -86,7 +86,6 @@ class DynamicGPElectionModel(BaseElectionModel):
             - calendar_time_days_numeric (Full mapping for calendar_time)
             - COORDS dictionary
             - observed_election_indices
-            - days_to_election_numeric_coord (Values for the days_to_election coord axis)
         """
         data_polls = polls if polls is not None else self.polls_train
         historical_results = self.results_oos # From base class
@@ -160,14 +159,12 @@ class DynamicGPElectionModel(BaseElectionModel):
                                           if election_iso in observed_election_dates_iso_set]
 
         # --- Define Coordinates ---
-        days_to_election_numeric_coord = np.linspace(0, self.cycle_gp_max_days, self.cycle_gp_max_days + 1)
         COORDS = {
             "observations": data_polls.index,
             "parties_complete": self.political_families,
             "calendar_time": unique_dates.strftime('%Y-%m-%d'),
             "elections_observed": [all_election_dates_iso[i] for i in self.observed_election_indices],
             "election_cycles": cycle_names,
-            "days_to_election": days_to_election_numeric_coord.astype(int)
         }
 
         pollster_id, COORDS["pollsters"] = data_polls["pollster"].factorize(sort=True)
@@ -176,13 +173,13 @@ class DynamicGPElectionModel(BaseElectionModel):
         for key, value in COORDS.items():
             print(f"{key}: length={len(value)}")
         print(f"Calendar time range: {COORDS['calendar_time'][0]} to {COORDS['calendar_time'][-1]}")
-        print(f"Days to election range: {COORDS['days_to_election'][0]} to {COORDS['days_to_election'][-1]}")
         print(f"Number of election cycles: {len(COORDS['election_cycles'])}")
 
+        # Return only 10 values, excluding days_to_election_numeric_coord
         return (pollster_id, calendar_time_poll_id, self.calendar_time_result_id,
                 self.poll_days_numeric, self.poll_cycle_idx, self.result_cycle_idx,
                 self.calendar_time_cycle_idx, self.calendar_time_days_numeric,
-                COORDS, self.observed_election_indices, days_to_election_numeric_coord)
+                COORDS, self.observed_election_indices)
 
 
     def _build_data_containers(self,
@@ -198,7 +195,7 @@ class DynamicGPElectionModel(BaseElectionModel):
             is_here_polls_np = self.is_here_polls_base
         else: # Recalculate masks if custom polls are provided
             is_here_polls = current_polls[self.political_families] > 0
-            non_competing_polls_additive_np = np.where(is_here_polls, 0, -10).astype(np.float64)
+            non_competing_polls_additive_np = np.where(is_here_polls, 0, -40).astype(np.float64)
             is_here_polls_np = is_here_polls.astype(int).to_numpy()
 
         # --- Filter results-related data based on observed_election_indices ---
@@ -283,184 +280,98 @@ class DynamicGPElectionModel(BaseElectionModel):
 
     def build_model(self, polls: pd.DataFrame = None) -> pm.Model:
         """
-        Build the PyMC model with two GPs: baseline (calendar time) and cycle (days to election).
+        Build the PyMC model with two GPs over calendar time (long & short timescale) + house effects.
         """
+        # Unpacking expects 10 values (no days_to_election_coord)
         (
             self.pollster_id,
             self.calendar_time_poll_id,
-            self.calendar_time_result_id, # Unfiltered here
+            self.calendar_time_result_id,
             self.poll_days_numeric,
             self.poll_cycle_idx,
-            self.result_cycle_idx, # Unfiltered here
+            self.result_cycle_idx,
             self.calendar_time_cycle_idx,
             self.calendar_time_days_numeric,
             self.coords,
-            self.observed_election_indices,
-            days_to_election_numeric_coord # Coordinate values for cycle GP input
+            self.observed_election_indices
         ) = self._build_coords(polls)
 
-        baseline_gp_len = float(self.baseline_gp_config["lengthscale"])
-        cycle_gp_len = float(self.cycle_gp_config["lengthscale"])
-        print(f"Using Baseline GP lengthscale: {baseline_gp_len} days")
-        print(f"Using Cycle GP lengthscale: {cycle_gp_len} days (over {self.cycle_gp_max_days} max days)")
-
         with pm.Model(coords=self.coords) as model:
-            data_containers = self._build_data_containers(polls) # Build containers inside context
+            data_containers = self._build_data_containers(polls)
 
             # --------------------------------------------------------
-            #        1. BASELINE GP (Slow Trend over Calendar Time)
+            #        1. BASELINE GP (Long Trend over Calendar Time)
             # --------------------------------------------------------
-            # Stronger Priors for Identifiability
-            baseline_gp_ls = pm.LogNormal("baseline_gp_ls", mu=np.log(365*2), sigma=0.5) # Mean ~2 years
-            baseline_gp_amp_sd = pm.HalfNormal("baseline_gp_amp_sd", sigma=0.3) # Tighter amplitude prior
+            baseline_gp_ls = pm.LogNormal("baseline_gp_ls", mu=np.log(365*2.5), sigma=0.3) # Mean ~2.5 years
+            baseline_gp_amp_sd = pm.HalfNormal("baseline_gp_amp_sd", sigma=0.2) # Tight amplitude
 
             if self.baseline_gp_config["kernel"] == "Matern52":
-                 cov_func_calendar = baseline_gp_amp_sd**2 * pm.gp.cov.Matern52(input_dim=1, ls=baseline_gp_ls)
+                 cov_func_baseline = baseline_gp_amp_sd**2 * pm.gp.cov.Matern52(input_dim=1, ls=baseline_gp_ls)
             elif self.baseline_gp_config["kernel"] == "ExpQuad":
-                 cov_func_calendar = baseline_gp_amp_sd**2 * pm.gp.cov.ExpQuad(input_dim=1, ls=baseline_gp_ls)
+                 cov_func_baseline = baseline_gp_amp_sd**2 * pm.gp.cov.ExpQuad(input_dim=1, ls=baseline_gp_ls)
             else: raise ValueError(f"Unsupported Baseline GP kernel: {self.baseline_gp_config['kernel']}")
 
-            # Reduce GP Complexity
-            baseline_hsgp_m = [50] # Fewer basis functions
-            baseline_hsgp_c = 1.8  # Slightly smaller c
-
-            self.gp_calendar_time = pm.gp.HSGP(
-                cov_func=cov_func_calendar, m=baseline_hsgp_m, c=baseline_hsgp_c
+            baseline_hsgp_m = [50] # Keep reduced complexity
+            baseline_hsgp_c = 1.8
+            self.gp_baseline_time = pm.gp.HSGP(
+                cov_func=cov_func_baseline, m=baseline_hsgp_m, c=baseline_hsgp_c
             )
-            # Use calendar_time_numeric (all unique dates) for basis evaluation
-            phi_calendar, sqrt_psd_calendar = self.gp_calendar_time.prior_linearized(X=self.calendar_time_numeric[:, None])
+            phi_baseline, sqrt_psd_baseline = self.gp_baseline_time.prior_linearized(X=self.calendar_time_numeric[:, None])
 
-            coord_name_gp_basis_cal = "gp_basis_calendar"
-            if coord_name_gp_basis_cal not in model.coords:
-                 model.add_coords({coord_name_gp_basis_cal: np.arange(self.gp_calendar_time.n_basis_vectors)})
+            coord_name_gp_basis_base = "gp_basis_baseline"
+            if coord_name_gp_basis_base not in model.coords:
+                 model.add_coords({coord_name_gp_basis_base: np.arange(self.gp_baseline_time.n_basis_vectors)})
 
             baseline_gp_coef_raw = pm.Normal("baseline_gp_coef_raw", mu=0, sigma=1,
-                                             dims=(coord_name_gp_basis_cal, "parties_complete"))
-            # Center coefficients across parties for identifiability
+                                             dims=(coord_name_gp_basis_base, "parties_complete"))
             baseline_gp_coef = pm.Deterministic("baseline_gp_coef",
                                                 baseline_gp_coef_raw - baseline_gp_coef_raw.mean(axis=1, keepdims=True),
-                                                dims=(coord_name_gp_basis_cal, "parties_complete"))
-
-            # Latent baseline effect over all calendar time points
+                                                dims=(coord_name_gp_basis_base, "parties_complete"))
             baseline_effect_calendar = pm.Deterministic("baseline_effect_calendar",
-                pt.einsum('cb,bp->cp', phi_calendar, baseline_gp_coef * sqrt_psd_calendar[:, None]),
+                pt.einsum('cb,bp->cp', phi_baseline, baseline_gp_coef * sqrt_psd_baseline[:, None]),
                 dims=("calendar_time", "parties_complete")
             )
 
             # --------------------------------------------------------
-            #        2. CYCLE GP (Faster Trend over Days to Election)
-            #           Hierarchical per Election Cycle
+            #        2. SHORT-TERM GP (Over Calendar Time)
             # --------------------------------------------------------
-            # --- Hierarchical Amplitude for Cycle GP ---
-            # Stronger Priors for Identifiability
-            cycle_gp_ls = pm.LogNormal("cycle_gp_ls", mu=np.log(30), sigma=0.5) # Mean ~30 days
-            log_cycle_gp_amp_mu = pm.Normal("log_cycle_gp_amp_mu", mu=np.log(0.1), sigma=0.3) # Smaller, tighter prior mean amp
-            log_cycle_gp_amp_sigma = pm.HalfNormal("log_cycle_gp_amp_sigma", sigma=0.3) # Tighter variation
+            short_term_gp_ls = pm.LogNormal("short_term_gp_ls", mu=np.log(30), sigma=0.5) # Shorter Mean: ~1 month
+            short_term_gp_amp_sd = pm.HalfNormal("short_term_gp_amp_sd", sigma=0.1) # Keep smaller amplitude than baseline
 
-            log_cycle_gp_amp_offset = pm.Normal("log_cycle_gp_amp_offset", mu=0, sigma=1, dims="election_cycles")
-            log_cycle_gp_amp = pm.Deterministic("log_cycle_gp_amp",
-                log_cycle_gp_amp_mu + log_cycle_gp_amp_offset * log_cycle_gp_amp_sigma,
-                dims="election_cycles"
+            # Assume same kernel type as baseline for now, can be configured later
+            if self.baseline_gp_config["kernel"] == "Matern52":
+                 cov_func_short_term = short_term_gp_amp_sd**2 * pm.gp.cov.Matern52(input_dim=1, ls=short_term_gp_ls)
+            elif self.baseline_gp_config["kernel"] == "ExpQuad":
+                 cov_func_short_term = short_term_gp_amp_sd**2 * pm.gp.cov.ExpQuad(input_dim=1, ls=short_term_gp_ls)
+            else: raise ValueError(f"Unsupported Short-Term GP kernel (using baseline type): {self.baseline_gp_config['kernel']}")
+
+            # Potentially different complexity for short-term GP
+            short_term_hsgp_m = [75] # Maybe allow more flexibility here?
+            short_term_hsgp_c = 1.8
+            self.gp_short_term_time = pm.gp.HSGP(
+                cov_func=cov_func_short_term, m=short_term_hsgp_m, c=short_term_hsgp_c
             )
-            cycle_gp_amplitude = pm.Deterministic("cycle_gp_amplitude", pt.exp(log_cycle_gp_amp), dims="election_cycles")
-            # ---
+            # Uses the same calendar time input as baseline GP
+            phi_short_term, sqrt_psd_short_term = self.gp_short_term_time.prior_linearized(X=self.calendar_time_numeric[:, None])
 
-            if self.cycle_gp_config["kernel"] == "Matern52":
-                # Lengthscale fixed, amplitude varies per cycle
-                cov_func_cycle = cycle_gp_amplitude**2 * pm.gp.cov.Matern52(input_dim=1, ls=cycle_gp_len)
-            elif self.cycle_gp_config["kernel"] == "ExpQuad":
-                cov_func_cycle = cycle_gp_amplitude**2 * pm.gp.cov.ExpQuad(input_dim=1, ls=cycle_gp_len)
-            else: raise ValueError(f"Unsupported Cycle GP kernel: {self.cycle_gp_config['kernel']}")
+            coord_name_gp_basis_short = "gp_basis_short_term"
+            if coord_name_gp_basis_short not in model.coords:
+                 model.add_coords({coord_name_gp_basis_short: np.arange(self.gp_short_term_time.n_basis_vectors)})
 
-            # Define base covariance function for HSGP (amplitude=1, handled later)
-            base_cycle_gp_amp_sd = 1.0
-            if self.cycle_gp_config["kernel"] == "Matern52":
-                 cov_func_cycle_base = base_cycle_gp_amp_sd**2 * pm.gp.cov.Matern52(input_dim=1, ls=cycle_gp_ls)
-            elif self.cycle_gp_config["kernel"] == "ExpQuad":
-                 cov_func_cycle_base = base_cycle_gp_amp_sd**2 * pm.gp.cov.ExpQuad(input_dim=1, ls=cycle_gp_ls)
-            else: raise ValueError(f"Unsupported Cycle GP kernel: {self.cycle_gp_config['kernel']}")
-
-            # Reduce GP Complexity
-            cycle_hsgp_m = [30] # Fewer basis functions
-            cycle_hsgp_c = 1.5 # Smaller c
-
-            self.gp_cycle_time = pm.gp.HSGP(
-                 cov_func=cov_func_cycle_base, m=cycle_hsgp_m, c=cycle_hsgp_c
-            )
-            # Use days_to_election_numeric_coord (0 to max_days) for basis evaluation
-            phi_cycle, sqrt_psd_cycle = self.gp_cycle_time.prior_linearized(X=days_to_election_numeric_coord[:, None])
-
-            coord_name_gp_basis_cyc = "gp_basis_cycle"
-            if coord_name_gp_basis_cyc not in model.coords:
-                 model.add_coords({coord_name_gp_basis_cyc: np.arange(self.gp_cycle_time.n_basis_vectors)})
-
-            # Hierarchical Coefficients: Shape (election_cycles, gp_basis_cycle, parties_complete)
-            cycle_gp_coef_raw = pm.Normal("cycle_gp_coef_raw", mu=0, sigma=1, # Base sigma=1, scaled by amp later
-                                         dims=("election_cycles", coord_name_gp_basis_cyc, "parties_complete"))
-            # Center coefficients across parties for each cycle independently
-            cycle_gp_coef = pm.Deterministic("cycle_gp_coef",
-                                            cycle_gp_coef_raw - cycle_gp_coef_raw.mean(axis=2, keepdims=True),
-                                            dims=("election_cycles", coord_name_gp_basis_cyc, "parties_complete"))
-
-            # --- Evaluate Cycle GP effect for each Poll ---
-            # Simplification: Map poll_days_numeric to indices of the days_to_election_coord
-            poll_days_indices = pt.round(data_containers["poll_days_numeric"]).astype('int32') # Ensure int32
-            poll_days_indices = pt.clip(poll_days_indices, 0, phi_cycle.shape[0] - 1)
-            phi_cycle_at_polls = phi_cycle[poll_days_indices] # Shape (obs, basis_cyc)
-
-            # Get coefficients for the specific cycle of each poll
-            poll_cycle_coef = cycle_gp_coef[data_containers["poll_cycle_idx"]] # Shape (obs, basis_cyc, parties)
-
-            # Get amplitude for the specific cycle of each poll
-            poll_cycle_amp = cycle_gp_amplitude[data_containers["poll_cycle_idx"]] # Shape (obs,)
-
-            # Combine basis, coefficients, sqrt_psd, and amplitude
-            cycle_effect_polls = pm.Deterministic("cycle_effect_polls",
-                pt.einsum('ob,obp->op',
-                          phi_cycle_at_polls,
-                          poll_cycle_coef * sqrt_psd_cycle[None, :, None]
-                         ) * poll_cycle_amp[:, None],
-                dims=("observations", "parties_complete")
-            )
-
-            # --- Evaluate Cycle GP effect for each Result (implicitly at days_to_election = 0) ---
-            phi_cycle_at_results = phi_cycle[0] # Shape (basis_cyc,)
-
-            # Get coefficients for the specific cycle of each result (using filtered index)
-            result_cycle_coef = cycle_gp_coef[data_containers["result_cycle_idx"]] # Shape (elec_obs, basis_cyc, parties)
-
-            # Get amplitude for the specific cycle of each result (using filtered index)
-            result_cycle_amp = cycle_gp_amplitude[data_containers["result_cycle_idx"]] # Shape (elec_obs,)
-
-            # Combine basis, coefficients, sqrt_psd, and amplitude
-            cycle_effect_results = pm.Deterministic("cycle_effect_results",
-                pt.einsum('b,ebp->ep',
-                          phi_cycle_at_results,
-                          result_cycle_coef * sqrt_psd_cycle[None, :, None]
-                         ) * result_cycle_amp[:, None],
-                dims=("elections_observed", "parties_complete")
-            )
-
-            # --- Evaluate Cycle GP effect for ALL Calendar Time points ---
-            calendar_time_days_indices = pt.round(data_containers["calendar_time_days_numeric"]).astype('int32')
-            calendar_time_days_indices = pt.clip(calendar_time_days_indices, 0, phi_cycle.shape[0] - 1)
-            phi_cycle_at_calendar = phi_cycle[calendar_time_days_indices] # Shape (calendar_time, basis_cyc)
-
-            calendar_time_cycle_coef = cycle_gp_coef[data_containers["calendar_time_cycle_idx"]] # Shape (cal_time, basis_cyc, parties)
-            calendar_time_cycle_amp = cycle_gp_amplitude[data_containers["calendar_time_cycle_idx"]] # Shape (cal_time,)
-
-            cycle_effect_calendar = pm.Deterministic("cycle_effect_calendar",
-                 pt.einsum('cb,cbp->cp',
-                           phi_cycle_at_calendar,
-                           calendar_time_cycle_coef * sqrt_psd_cycle[None, :, None]
-                          ) * calendar_time_cycle_amp[:, None],
-                 dims=("calendar_time", "parties_complete")
+            short_term_gp_coef_raw = pm.Normal("short_term_gp_coef_raw", mu=0, sigma=1,
+                                              dims=(coord_name_gp_basis_short, "parties_complete"))
+            short_term_gp_coef = pm.Deterministic("short_term_gp_coef",
+                                                 short_term_gp_coef_raw - short_term_gp_coef_raw.mean(axis=1, keepdims=True),
+                                                 dims=(coord_name_gp_basis_short, "parties_complete"))
+            short_term_effect_calendar = pm.Deterministic("short_term_effect_calendar",
+                pt.einsum('cb,bp->cp', phi_short_term, short_term_gp_coef * sqrt_psd_short_term[:, None]),
+                dims=("calendar_time", "parties_complete")
             )
 
             # --------------------------------------------------------
             #          3. HOUSE EFFECTS (Pollster Bias)
             # --------------------------------------------------------
-            house_effects_sd = pm.HalfNormal("house_effects_sd", sigma=0.05) # Keep tight prior
+            house_effects_sd = pm.HalfNormal("house_effects_sd", sigma=0.1) # Keep relaxed prior
             house_effects = pm.ZeroSumNormal("house_effects", sigma=house_effects_sd,
                                              dims=("pollsters", "parties_complete"))
 
@@ -469,28 +380,25 @@ class DynamicGPElectionModel(BaseElectionModel):
             # --------------------------------------------------------
             latent_mu_polls = pm.Deterministic("latent_mu_polls",
                 (
-                    baseline_effect_calendar[data_containers["calendar_time_poll_idx"]] # Baseline effect at poll date
-                    + cycle_effect_polls # Cycle effect at poll countdown & cycle
-                    + data_containers['non_competing_polls_additive']
+                    baseline_effect_calendar[data_containers["calendar_time_poll_idx"]] + # Baseline effect
+                    short_term_effect_calendar[data_containers["calendar_time_poll_idx"]] + # Short-term effect
+                    data_containers['non_competing_polls_additive']
                 ),
                 dims=("observations", "parties_complete")
             )
 
             noisy_mu_polls = pm.Deterministic("noisy_mu_polls",
                 (
-                    latent_mu_polls
-                    + house_effects[data_containers["pollster_idx"]] # Add house effect
+                    latent_mu_polls +
+                    house_effects[data_containers["pollster_idx"]] # Add house effect
                 ) * data_containers['non_competing_polls_multiplicative'],
                 dims=("observations", "parties_complete")
             )
-
             noisy_popularity_polls = pm.Deterministic("noisy_popularity_polls",
                 pt.special.softmax(noisy_mu_polls, axis=1),
                 dims=("observations", "parties_complete"),
             )
-
-            concentration_polls = pm.Gamma("concentration_polls", alpha=100, beta=0.1) # Consider if prior needs adjustment
-
+            concentration_polls = pm.Gamma("concentration_polls", alpha=100, beta=0.1)
             N_approve = pm.DirichletMultinomial("N_approve",
                 a=(concentration_polls * noisy_popularity_polls),
                 n=data_containers["observed_N_polls"],
@@ -503,20 +411,17 @@ class DynamicGPElectionModel(BaseElectionModel):
             # --------------------------------------------------------
             latent_mu_results = pm.Deterministic("latent_mu_results",
                 (
-                     baseline_effect_calendar[data_containers["calendar_time_result_idx"]] # Baseline effect at result date
-                     + cycle_effect_results # Cycle effect at result countdown (0) & cycle
-                     + data_containers['non_competing_parties_results']
+                     baseline_effect_calendar[data_containers["calendar_time_result_idx"]] + # Baseline effect
+                     short_term_effect_calendar[data_containers["calendar_time_result_idx"]] + # Short-term effect
+                     data_containers['non_competing_parties_results']
                  ),
                 dims=("elections_observed", "parties_complete")
             )
-
             latent_pop_results = pm.Deterministic("latent_pop_results",
                 pt.special.softmax(latent_mu_results, axis=1),
                 dims=("elections_observed", "parties_complete"),
             )
-
-            concentration_results = pm.Gamma("concentration_results", alpha=100, beta=0.05) # Consider if prior needs adjustment
-
+            concentration_results = pm.Gamma("concentration_results", alpha=100, beta=0.05)
             R = pm.DirichletMultinomial("R",
                 n=data_containers["observed_N_results"],
                 a=(concentration_results * latent_pop_results),
@@ -527,9 +432,9 @@ class DynamicGPElectionModel(BaseElectionModel):
             # --------------------------------------------------------
             #       (Optional) Deterministics for Analysis
             # --------------------------------------------------------
-            # Combined latent trajectory (Calendar time GP + relevant Cycle GP)
+            # Combined latent trajectory sums both GP effects
             latent_mu_calendar = pm.Deterministic("latent_mu_calendar",
-                baseline_effect_calendar + cycle_effect_calendar,
+                baseline_effect_calendar + short_term_effect_calendar,
                 dims=("calendar_time", "parties_complete")
             )
             latent_popularity_calendar_trajectory = pm.Deterministic(
@@ -539,7 +444,7 @@ class DynamicGPElectionModel(BaseElectionModel):
             )
 
         self.model = model
-        print("\nModel building complete (Two-GP version).")
+        print("\nModel building complete (Two-Timescale Calendar GP + House Effects).")
         return model
 
     # --- Placeholder methods ---
