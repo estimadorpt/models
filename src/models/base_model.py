@@ -55,7 +55,7 @@ class BaseElectionModel(abc.ABC):
         # --- Non-competing masks for polls (based on polls_train) ---
         polls = self.polls_train # Use the training polls for the base masks
         is_here_polls = polls[self.political_families] > 0
-        self.non_competing_polls_additive_base = np.where(is_here_polls, 0, -10).astype(np.int32)
+        self.non_competing_polls_additive_base = np.where(is_here_polls, 0, -100).astype(np.int32)
         self.is_here_polls_base = is_here_polls.astype(int).to_numpy()
 
         # --- Non-competing masks for results (aligned with ALL election dates) ---
@@ -67,10 +67,28 @@ class BaseElectionModel(abc.ABC):
         # is_competing_mask is True only for parties with > 0 votes in historical results
         # NaN > 0 is False, so future date row will correctly be False here
         is_competing_mask = reindexed_results > 0
-        self.non_competing_parties_results_base = np.where(is_competing_mask, 0, -10).astype(np.int32)
+        self.non_competing_parties_results_base = np.where(is_competing_mask, 0, -100).astype(np.int32)
 
         print(f"Shape of non_competing_parties_results_base (aligned with all elections): {self.non_competing_parties_results_base.shape}")
 
+        # --- Non-competing masks for calendar time (aligned with ALL calendar dates) ---
+        # Calculate unique calendar dates needed for this mask
+        poll_dates_dt = pd.to_datetime(self.polls_train['date']).unique()
+        all_election_dates_dt = pd.to_datetime(self.all_election_dates).unique()
+        calendar_dates_dt = pd.to_datetime(np.union1d(poll_dates_dt, all_election_dates_dt)).unique()
+        calendar_dates_dt = calendar_dates_dt.sort_values()
+        self.all_calendar_dates_dt = calendar_dates_dt # Store if needed elsewhere
+
+        # Determine first appearance date for each party based on results_mult > 0
+        first_appearance = self.results_mult[self.political_families].gt(0).idxmax()
+        # Create a boolean mask: True if calendar date >= first appearance date
+        is_present_calendar = pd.DataFrame(
+            {party: calendar_dates_dt >= first_appearance[party] for party in self.political_families},
+            index=calendar_dates_dt
+        )
+        self.non_competing_calendar_additive_base = np.where(is_present_calendar, 0, -100).astype(np.int32)
+        self.is_non_competing_calendar_mask_base = ~is_present_calendar.to_numpy() # Boolean: True if NOT competing
+        print(f"Shape of non_competing_calendar_additive_base (aligned with calendar time): {self.non_competing_calendar_additive_base.shape}")
 
     @abc.abstractmethod
     def _build_coords(self, polls: pd.DataFrame = None) -> Tuple[np.ndarray, np.ndarray, np.ndarray, Dict, List[int]]:
@@ -190,21 +208,62 @@ class BaseElectionModel(abc.ABC):
                 print(f"Warning: Failed to sample prior predictive: {e}")
 
             print("Sampling posterior...")
-            try: 
-                # Pass var_names to pm.sample to ensure deterministics are included in the main trace
-                trace = pm.sample(var_names=var_names, **sampler_kwargs)
-                # --- DEBUG PRINTS --- 
+            try:
+                # Define essential deterministic variables to track
+                vars_to_track = [
+                    "latent_popularity_calendar_trajectory", # Already plotted
+                    "latent_mu_calendar", # Raw latent score sum
+                    "baseline_effect_calendar", # Baseline GP contribution
+                    "short_term_effect_calendar", # Short-term GP contribution
+                    "latent_mu_polls", # Penalized latent score for polls
+                    "noisy_mu_polls", # Penalized + house effect for polls
+                    "noisy_popularity_polls", # Final poll probability
+                    "latent_mu_results", # Penalized latent score for results
+                    "latent_pop_results" # Final result probability
+                    # Add any other deterministics you might want to inspect
+                ]
+
+                # Filter to only variables present in the model
+                model_det_names = [v.name for v in model.deterministics]
+                vars_actually_in_model = [v for v in vars_to_track if v in model_det_names]
+
+                if not vars_actually_in_model:
+                    print("Warning: None of the specified vars_to_track are in the model's deterministics.")
+
+                # Sample using InferenceData=True, explicitly requesting deterministics
+                # Note: track_deterministics is relatively new, might need PyMC v5+
+                # If older PyMC, this might not work, and we might need return_inferencedata=False + manual conversion
+                try:
+                    trace = pm.sample(
+                        return_inferencedata=True,
+                        var_names=vars_actually_in_model, # Use filtered list
+                        **sampler_kwargs
+                    )
+                    print(f"DEBUG (BaseModel): Sampling attempted with var_names tracking.")
+                except TypeError as e:
+                    # Handle potential incompatibility of var_names with deterministics in older PyMC
+                    print(f"DEBUG (BaseModel): Sampling with var_names failed ({e}). Retrying without var_names...")
+                    trace = pm.sample(
+                        **sampler_kwargs
+                    )
+                    # We might need to manually add deterministics later if this path is taken
+
                 print(f"DEBUG (BaseModel): Type of trace returned by pm.sample: {type(trace)}")
-                if trace is None:
-                     print("DEBUG (BaseModel): trace is None AFTER pm.sample call!")
+                if not isinstance(trace, az.InferenceData):
+                    print("Error: pm.sample did not return InferenceData as expected.")
+                    return prior_checks, None, None # Return None trace
+
+                # Check if variables were actually saved
+                if "posterior" in trace:
+                    saved_vars = list(trace.posterior.data_vars)
+                    print(f"DEBUG (BaseModel): Variables actually saved in posterior: {sorted(saved_vars)}")
+                    missing_vars = set(vars_actually_in_model) - set(saved_vars)
+                    if missing_vars:
+                         print(f"Warning: The following requested deterministics were NOT saved in posterior: {missing_vars}")
+                         # Potentially try adding them from posterior_predictive if sampled separately later?
                 else:
-                     print("DEBUG (BaseModel): trace seems to exist AFTER pm.sample call.")
-                     if isinstance(trace, arviz.InferenceData):
-                          print(f"DEBUG (BaseModel): Trace is InferenceData with groups: {list(trace.groups())}")
-                     else:
-                          print(f"DEBUG (BaseModel): Trace is NOT InferenceData.")
-                # --- END DEBUG PRINTS --- 
-                self.trace = trace # Store trace in the instance
+                     print("Warning: No posterior group found in returned InferenceData.")
+
 
                 # Store additional convergence diagnostics
                 if trace is not None and isinstance(trace, arviz.InferenceData):
@@ -212,39 +271,27 @@ class BaseElectionModel(abc.ABC):
                     n_divergent = trace.sample_stats.diverging.sum().item()
                     if n_divergent > 0:
                         print(f"WARNING: {n_divergent} divergent transitions detected")
-                    
+
                     # Check if any parameters hit max tree depth frequently
                     if 'tree_depth' in trace.sample_stats:
                         max_depths = (trace.sample_stats.tree_depth >= sampler_kwargs.get('max_treedepth', 10)).sum().item()
                         if max_depths > 0:
                             pct_max_depth = max_depths / (trace.posterior.dims['chain'] * trace.posterior.dims['draw'])
                             print(f"WARNING: {max_depths} samples ({pct_max_depth:.1%}) reached maximum tree depth")
-                            
-                # Include posterior predictive sampling within the try block as well
-                print("Sampling posterior predictive...")
-                if trace is not None: # Only sample post predictive if posterior sampling succeeded somewhat
-                     try:
-                         post_checks = pm.sample_posterior_predictive(
-                             trace, var_names=var_names
-                         )
-                     except Exception as e_ppc: # Specific exception for PPC
-                         print(f"Warning: Failed to sample posterior predictive: {e_ppc}")
-                else:
-                    print("Skipping posterior predictive sampling as posterior trace is missing.")
 
                 # Debug print before returning
                 print(f"DEBUG (BaseModel): Returning trace of type: {type(trace)}")
-                return prior_checks, trace, post_checks
-                
+                return prior_checks, trace, None # Post checks TBD / maybe sampled later
+
             # Catch exception for the whole sampling block
-            except Exception as e: 
+            except Exception as e:
                 print(f"ERROR: Exception during posterior sampling or post-processing: {e}")
                 # Ensure trace is None if an error occurred after pm.sample potentially assigned it
                 self.trace = None 
                 trace = None # Ensure local trace is also None before returning
                 # Still try to return something, even if trace failed
                 print(f"DEBUG (BaseModel): Returning None trace due to exception.")
-                return prior_checks, None, post_checks
+                return prior_checks, None, None
 
     # --- Prediction/Nowcasting methods might be specific to models ---
     # Subclasses should implement their own versions if needed, 
