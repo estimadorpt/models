@@ -236,17 +236,16 @@ class BaseElectionModel(abc.ABC):
                 try:
                     trace = pm.sample(
                         return_inferencedata=True,
-                        var_names=vars_actually_in_model, # Use filtered list
                         **sampler_kwargs
                     )
-                    print(f"DEBUG (BaseModel): Sampling attempted with var_names tracking.")
-                except TypeError as e:
-                    # Handle potential incompatibility of var_names with deterministics in older PyMC
-                    print(f"DEBUG (BaseModel): Sampling with var_names failed ({e}). Retrying without var_names...")
-                    trace = pm.sample(
-                        **sampler_kwargs
-                    )
-                    # We might need to manually add deterministics later if this path is taken
+                    print(f"DEBUG (BaseModel): Sampling attempted.")
+                except Exception as e:
+                    # Keep general exception handling
+                    print(f"ERROR: Exception during posterior sampling: {e}")
+                    self.trace = None
+                    trace = None
+                    print(f"DEBUG (BaseModel): Returning None trace due to exception.")
+                    return prior_checks, None, None
 
                 print(f"DEBUG (BaseModel): Type of trace returned by pm.sample: {type(trace)}")
                 if not isinstance(trace, az.InferenceData):
@@ -283,13 +282,11 @@ class BaseElectionModel(abc.ABC):
                 print(f"DEBUG (BaseModel): Returning trace of type: {type(trace)}")
                 return prior_checks, trace, None # Post checks TBD / maybe sampled later
 
-            # Catch exception for the whole sampling block
             except Exception as e:
-                print(f"ERROR: Exception during posterior sampling or post-processing: {e}")
-                # Ensure trace is None if an error occurred after pm.sample potentially assigned it
-                self.trace = None 
-                trace = None # Ensure local trace is also None before returning
-                # Still try to return something, even if trace failed
+                # Keep general exception handling
+                print(f"ERROR: Exception during posterior sampling: {e}")
+                self.trace = None
+                trace = None
                 print(f"DEBUG (BaseModel): Returning None trace due to exception.")
                 return prior_checks, None, None
 
