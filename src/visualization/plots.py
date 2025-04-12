@@ -148,7 +148,7 @@ def plot_election_data(dataset: ElectionDataset):
         # Melt cycle result
         cycle_result_melt = cycle_result_pct.melt(
             id_vars=['date'], 
-            value_vars=political_families, 
+            value_vars=political_families,
             var_name='party', 
             value_name='percentage'
         )
@@ -209,46 +209,47 @@ def plot_latent_popularity_vs_polls(elections_model, output_dir, include_target_
         print(f"Latent variable '{latent_var_name}' not found in trace. Skipping plot.")
         return
 
-    latent_pop = trace.posterior[latent_var_name]
-    latent_mean = latent_pop.mean(dim=["chain", "draw"])
-    # Call az.hdi(), expecting an xarray.Dataset
-    latent_hdi_da_dataset = az.hdi(latent_pop, hdi_prob=0.94) # Returns a Dataset
+    latent_popularity = trace.posterior["latent_popularity_calendar_trajectory"] # Use RAW (unpenalized) version for visualization
 
-    # --- Calculate Daily Average Noisy Popularity ---
-    noisy_pop_daily_mean = None
-    noisy_pop_daily_dates = None
-    if "noisy_popularity_polls" in trace.posterior:
-        try:
-            noisy_pop = trace.posterior["noisy_popularity_polls"]
-            # Calculate mean across samples
-            noisy_pop_mean_obs = noisy_pop.mean(dim=["chain", "draw"]) # Shape (observations, parties)
+    # Calculate mean and HDI for latent popularity
+    mean_latent_popularity = latent_popularity.mean(dim=["chain", "draw"])
+    hdi_latent_popularity = az.hdi(latent_popularity, hdi_prob=0.94)
 
-            # Create a pandas Series for dates indexed by observation coord
-            # Ensure observation coordinates match polls_train index
-            obs_coords = noisy_pop_mean_obs['observations'].values
-            if not np.array_equal(obs_coords, polls_train.index.values):
-                 # Attempt to reindex if coords are just integers 0..N-1
-                 if np.array_equal(obs_coords, np.arange(len(polls_train))):
-                     print("Attempting to align observation coords with polls_train index.")
-                     poll_dates = pd.to_datetime(polls_train['date']).values
-                 else:
-                      raise ValueError("Observation coordinates in trace do not match polls_train index.")
-            else:
-                 poll_dates = pd.to_datetime(polls_train.loc[obs_coords, 'date']).values
+    # Extract calendar time coordinates
+    calendar_time_coord = pd.to_datetime(trace.posterior["calendar_time"].values)
 
-            # Add dates as a coordinate to the xarray DataArray
-            noisy_pop_mean_obs = noisy_pop_mean_obs.assign_coords(date=("observations", poll_dates))
+    # Daily average noisy popularity (if available)
+    try:
+        noisy_pop = trace.posterior["noisy_popularity_polls"]
+        # Calculate mean across samples
+        noisy_pop_mean_obs = noisy_pop.mean(dim=["chain", "draw"]) # Shape (observations, parties)
 
-            # Group by date and average
-            # Use dropna=False if needed, handle potential NaT dates if any
-            noisy_pop_daily_mean_xr = noisy_pop_mean_obs.groupby("date").mean()
-            noisy_pop_daily_dates = noisy_pop_daily_mean_xr['date'].values
-            noisy_pop_daily_mean = noisy_pop_daily_mean_xr.values # Numpy array (days, parties)
-            print("Successfully calculated daily average noisy popularity.")
-        except Exception as e:
-            print(f"Warning: Could not calculate daily average noisy popularity: {e}")
-            noisy_pop_daily_mean = None
-            noisy_pop_daily_dates = None
+        # Create a pandas Series for dates indexed by observation coord
+        # Ensure observation coordinates match polls_train index
+        obs_coords = noisy_pop_mean_obs['observations'].values
+        if not np.array_equal(obs_coords, polls_train.index.values):
+             # Attempt to reindex if coords are just integers 0..N-1
+             if np.array_equal(obs_coords, np.arange(len(polls_train))):
+                 print("Attempting to align observation coords with polls_train index.")
+                 poll_dates = pd.to_datetime(polls_train['date']).values
+             else:
+                  raise ValueError("Observation coordinates in trace do not match polls_train index.")
+        else:
+             poll_dates = pd.to_datetime(polls_train.loc[obs_coords, 'date']).values
+
+        # Add dates as a coordinate to the xarray DataArray
+        noisy_pop_mean_obs = noisy_pop_mean_obs.assign_coords(date=("observations", poll_dates))
+
+        # Group by date and average
+        # Use dropna=False if needed, handle potential NaT dates if any
+        noisy_pop_daily_mean_xr = noisy_pop_mean_obs.groupby("date").mean()
+        noisy_pop_daily_dates = noisy_pop_daily_mean_xr['date'].values
+        noisy_pop_daily_mean = noisy_pop_daily_mean_xr.values # Numpy array (days, parties)
+        print("Successfully calculated daily average noisy popularity.")
+    except Exception as e:
+        print(f"Warning: Could not calculate daily average noisy popularity: {e}")
+        noisy_pop_daily_mean = None
+        noisy_pop_daily_dates = None
     else:
         print("Info: 'noisy_popularity_polls' not found in trace, skipping noisy popularity line.")
 
@@ -280,13 +281,14 @@ def plot_latent_popularity_vs_polls(elections_model, output_dir, include_target_
         ax = axes[i]
 
         # Plot Latent Popularity Mean and HDI (Scale 0-1 data by 100)
-        latent_mean_party = latent_mean.sel(parties_complete=party)
-        ax.plot(latent_time_values, latent_mean_party * 100, label="Latent Popularity (Mean)")
+        latent_mean_party = mean_latent_popularity.sel(parties_complete=party)
+        ax.plot(calendar_time_coord, latent_mean_party * 100, label="Latent Popularity (Mean)")
 
         # Plot HDI using positional index
-        hdi_data_array = latent_hdi_da_dataset['latent_popularity_calendar_trajectory'].sel(parties_complete=party)
+        # Select the specific DataArray from the HDI Dataset first
+        hdi_data_array = hdi_latent_popularity[latent_var_name].sel(parties_complete=party)
         ax.fill_between(
-            latent_time_values,
+            calendar_time_coord,
             hdi_data_array.isel(hdi=0) * 100, # Use index 0 for lower bound
             hdi_data_array.isel(hdi=1) * 100, # Use index 1 for upper bound
             alpha=0.3, label="94% HDI"
