@@ -409,12 +409,11 @@ def load_election_results(election_dates, political_families):
         temp_results_df = temp_results_df[available_columns + ['other']]
         temp_results_df = temp_results_df.rename(columns={'B.E.': 'BE', 'PCP-PEV': 'CDU'})
 
-        # Divide all numerical columns by 100 to avoid overflow in Multinomial
+        # Remove the division block
+        # No longer dividing by 100 here
         for col in ['PS', 'AD', 'BE', 'CDU', 'IL', 'PAN', 'L', 'CH', 'other']:
-            if col in temp_results_df.columns:
-                temp_results_df[col] = temp_results_df[col] // 100
-            else:
-                temp_results_df[col] = 0
+             if col not in temp_results_df.columns:
+                 temp_results_df[col] = 0 # Ensure missing columns are set to 0
         
         # Recalculate sample size to be the sum of party votes
         available_parties = [col for col in ['PS', 'AD', 'BE', 'CDU', 'IL', 'PAN', 'L', 'CH'] if col in temp_results_df.columns]
