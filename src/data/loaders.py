@@ -194,6 +194,8 @@ def load_marktest_polls():
          if not all(c in df.columns for c in ["Pollster", "Date", "Sample Size"]):
               raise ValueError("Essential columns missing even after reading the full CSV.") from e
 
+    # Clean the 'Pollster' column
+    df['Pollster'] = df['Pollster'].str.lstrip('* ')
 
     # Convert 'Date' and fieldwork dates to datetime
     df['Date'] = pd.to_datetime(df['Date'], format='%d/%m/%Y')
