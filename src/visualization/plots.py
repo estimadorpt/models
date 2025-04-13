@@ -995,3 +995,81 @@ def plot_latent_trend_since_last_election(elections_model: 'ElectionsFacade', ou
     plt.savefig(filename)
     print(f"Latent trend plot saved to {filename}")
     plt.close(fig) 
+
+def plot_seat_distribution_histograms(seats_df: pd.DataFrame, output_dir: str, filename="seat_distribution_histograms.png"):
+    """
+    Plots histograms of the predicted seat distribution for each party.
+
+    Args:
+        seats_df (pd.DataFrame): DataFrame where rows are samples and columns are parties 
+                                 (plus potentially 'sample_index').
+        output_dir (str): Directory to save the plot.
+        filename (str): Name for the output image file.
+    """
+    if seats_df is None or seats_df.empty:
+        print("Seat distribution DataFrame is empty, skipping histogram plot.")
+        return
+
+    # Identify party columns (exclude 'sample_index' if present)
+    party_cols = [col for col in seats_df.columns if col != 'sample_index']
+    if not party_cols:
+        print("No party columns found in DataFrame, skipping histogram plot.")
+        return
+
+    num_parties = len(party_cols)
+    # Determine grid size (prefer wider than tall)
+    ncols = int(np.ceil(np.sqrt(num_parties * 1.5))) # Heuristic for wider grid
+    nrows = int(np.ceil(num_parties / ncols))
+
+    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(ncols * 4, nrows * 3), squeeze=False)
+    axes = axes.flatten() # Flatten to easily iterate
+
+    plot_count = 0
+    for i, party in enumerate(sorted(party_cols)): # Plot alphabetically
+        ax = axes[i]
+        party_seats = seats_df[party]
+        
+        # Determine reasonable bins - max observed seats + 1 edge
+        max_seats = party_seats.max()
+        if max_seats < 1:
+             # Handle case where a party got 0 seats in all samples
+             bins = [0, 1]
+             ax.hist(party_seats, bins=bins, density=True, alpha=0.7, label=f'Mean: {party_seats.mean():.1f}')
+        else:
+             bins = range(int(max_seats) + 2) # Bins 0, 1, ..., max_seats+1
+             # Plot histogram
+             ax.hist(party_seats, bins=bins, density=True, alpha=0.7, align='left', label=f'Mean: {party_seats.mean():.1f}')
+
+        # Optional: Overlay Kernel Density Estimate (KDE)
+        # try:
+        #     sns.kdeplot(party_seats, ax=ax, warn_singular=False) # warn_singular handles cases with no variance
+        # except Exception as kde_err:
+        #     print(f"Note: Could not generate KDE for {party}: {kde_err}") # Non-critical
+
+        ax.set_title(party)
+        ax.set_xlabel("Seats")
+        ax.set_ylabel("Density")
+        ax.legend()
+        ax.grid(axis='y', linestyle='--', alpha=0.7)
+        # Ensure x-axis ticks are integers
+        ax.xaxis.set_major_locator(plt.MaxNLocator(integer=True))
+        # Set x-limits for better comparison, maybe 0 to max+1?
+        if max_seats >= 0:
+             ax.set_xlim(-0.5, max_seats + 1.5)
+
+        plot_count += 1
+
+    # Hide unused subplots
+    for j in range(plot_count, len(axes)):
+        axes[j].set_visible(False)
+
+    fig.suptitle('Distribution of Predicted Seats per Party (Posterior Samples)', fontsize=16)
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95]) # Adjust layout to prevent title overlap
+    
+    output_path = os.path.join(output_dir, filename)
+    try:
+        plt.savefig(output_path)
+        print(f"Saved seat distribution histograms to {output_path}")
+    except Exception as e:
+        print(f"Error saving seat distribution histogram plot: {e}")
+    plt.close(fig) 
