@@ -1,6 +1,6 @@
 import os
 import argparse
-import arviz
+import arviz as az
 import requests
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -670,52 +670,101 @@ def diagnose_model(args):
 def predict(args):
     """Loads a trained model and generates the election outcome forecast distribution."""
     print(f"Generating election outcome forecast for model in {args.load_dir}")
-    
+
     try:
-        # 1. Read election_date from config first
-        config_path = os.path.join(args.load_dir, "model_config.json")
-        if not os.path.exists(config_path):
-            print(f"Error: model_config.json not found in {args.load_dir}")
+        # Load the model using the modified load_model function signature
+        # Pass args to load_model to ensure it picks up command-line overrides if needed
+        elections_model = load_model(args, args.load_dir, debug=args.debug)
+
+        if elections_model is None:
+            print("Exiting prediction due to loading error.")
             return
-            
+
+        if elections_model.trace is None:
+            print(f"No trace found in {args.load_dir}. Cannot generate predictions.")
+            return
+
+        # --- Calculate Election Day Latent Popularity Prediction ---
+        print("\nCalculating Election Day Latent Popularity Prediction...")
+        election_day_pop_posterior = elections_model.get_election_day_latent_popularity()
+
+        if election_day_pop_posterior is None:
+             print("Could not retrieve election day latent popularity from the model. Skipping prediction.")
+        else:
+            # Calculate summary statistics (mean, median, hdi)
+            # Use arviz for robust HDI calculation
+            hdi_prob = 0.94 # Standard 94% HDI
+            # kind='stats' gives 'mean', 'sd', 'hdi_3%', 'hdi_97%'
+            # Use round_to=None to prevent potential floating point issues in column names
+            pred_summary = az.summary(election_day_pop_posterior, hdi_prob=hdi_prob, kind='stats', round_to=None)
+
+            # Rename columns for clarity
+            # Use the standard column names from arviz summary output as keys
+            pred_summary = pred_summary.rename(columns={
+                'mean': 'Mean',
+                'hdi_3%': 'HDI 3%',  # Correct key and new name
+                'hdi_97%': 'HDI 97%' # Correct key and new name
+            })
+
+            # Select and reorder columns - Remove Median
+            output_cols = ['Mean', 'HDI 3%', 'HDI 97%'] # Updated output cols
+            # Use a different variable for the display subset to keep original numeric data
+            pred_summary_display = pred_summary[output_cols]
+
+            # Format as percentages for display
+            pred_summary_pct = pred_summary_display.applymap(lambda x: f"{x*100:.1f}%")
+
+            # Print the summary table
+            print("\n--- Election Day Latent Popularity Prediction ---")
+            print(pred_summary_pct.to_string())
+            print("-------------------------------------------------")
+
+            # Save the prediction summary to CSV
+            pred_dir = os.path.join(args.load_dir, "predictions")
+            os.makedirs(pred_dir, exist_ok=True)
+            output_path = os.path.join(pred_dir, "election_day_prediction.csv")
+            # Save the numerical values (not percentages)
+            pred_summary.to_csv(output_path)
+            print(f"Prediction summary saved to {output_path}")
+        # --- End Election Day Prediction ---
+
+        # --- Generate Latent Trend Plot ---
+        # Import the new plot function
+        from src.visualization.plots import plot_latent_trend_since_last_election 
         try:
-            with open(config_path, 'r') as f:
-                config = json.load(f)
-            loaded_election_date = config.get('election_date')
-            if not loaded_election_date:
-                 raise ValueError("election_date not found or is empty in model_config.json")
-        except (json.JSONDecodeError, ValueError, Exception) as e:
-             print(f"Error reading or parsing election_date from {config_path}: {e}")
-             return
+             print("\nGenerating plot for latent trend since last election...")
+             # Define output dir for this plot (can reuse pred_dir)
+             plot_dir = os.path.join(args.load_dir, "predictions") 
+             os.makedirs(plot_dir, exist_ok=True) # Ensure it exists
+             # Call the new function
+             plot_latent_trend_since_last_election(elections_model, plot_dir)
+        except Exception as trend_plot_err:
+             print(f"Warning: Failed to generate latent trend plot: {trend_plot_err}")
+             if args.debug:
+                  import traceback
+                  traceback.print_exc()
+        # --- End Latent Trend Plot ---
 
-        # 2. Instantiate Facade with the loaded date
-        print(f"Instantiating model for election date: {loaded_election_date}")
-        elections_model = ElectionsFacade(election_date=loaded_election_date, debug=args.debug)
-        
-        # 3. Load the inference results (trace, etc.)
-        load_status = elections_model.load_inference_results(args.load_dir) # DEBUG
-        if not load_status:
-             print(f"Error: Failed to load model results from {args.load_dir}")
-             return
+        # pred_dir is already defined above
 
-        # Rebuild model structure if needed (though prediction might not need full rebuild)
-        # predict_election_outcome primarily needs trace data.
-        # Let's keep it simple for now and assume predict_election_outcome handles needed data.
-        
-        # Define output directory for predictions
-        pred_dir = os.path.join(args.load_dir, "predictions") # Changed from visualizations
-        os.makedirs(pred_dir, exist_ok=True)
-        
+        # --- Existing Plotting (Review relevance) ---
         # Generate and plot the forecast distribution
-        # Import the specific plot function here or ensure it's imported globally
         from src.visualization.plots import plot_forecasted_election_distribution
-        if elections_model.model_instance:
-            plot_forecasted_election_distribution(elections_model.model_instance, pred_dir)
+        if hasattr(elections_model, 'model_instance') and elections_model.model_instance:
+            try:
+                 print("\nAttempting to generate forecast distribution plot...")
+                 # Pass the facade instance, not the model_instance
+                 plot_forecasted_election_distribution(elections_model, pred_dir)
+            except Exception as plot_err:
+                 print(f"Warning: Failed to generate forecast distribution plot: {plot_err}")
+                 if args.debug:
+                      traceback.print_exc()
         else:
              print("Warning: Model instance not available for plotting forecast distribution.")
-        
+        # --- End Existing Plotting ---
+
         print(f"\nPrediction generation step complete. Results saved to {pred_dir}")
-        
+
     except Exception as e:
         print(f"Error during prediction: {e}")
         import traceback

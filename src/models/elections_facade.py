@@ -1200,7 +1200,8 @@ class ElectionsFacade:
             return None
         
         # Delegate to the model instance if the method exists
-        return self.model_instance.get_election_day_latent_popularity()
+        # Pass the Facade's loaded trace (self.trace) to the instance method
+        return self.model_instance.get_election_day_latent_popularity(idata=self.trace)
 
     # TODO: Implement post-hoc adjustment for Blank/Null votes 
     #       when generating final forecasts (e.g., for seat projections). 

@@ -1,5 +1,5 @@
 import os
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 
 import arviz as az
 import numpy as np
@@ -660,4 +660,82 @@ class DynamicGPElectionModel(BaseElectionModel):
 
     def predict_history(self, elections_to_predict: List[str]) -> az.InferenceData:
         print("Warning: predict_history not yet implemented.")
-        return az.InferenceData() 
+        return az.InferenceData()
+
+    def get_election_day_latent_popularity(self, idata: Optional[az.InferenceData] = None):
+        """
+        Extracts the posterior distribution of the latent popularity 
+        specifically at the target election day.
+
+        Parameters:
+        -----------
+        idata : arviz.InferenceData, optional
+            The inference data object containing the posterior trace. 
+            If None, uses self.trace.
+
+        Returns:
+        --------
+        xr.DataArray or None:
+            An xarray DataArray containing the posterior samples of latent popularity
+            at the target election date. 
+            Dimensions: (chain, draw, parties_complete).
+            Returns None if the necessary data or coordinates are not available.
+        """
+        trace_to_use = idata if idata is not None else self.trace
+        
+        if trace_to_use is None or "posterior" not in trace_to_use:
+            print("Error: Posterior trace not found. Cannot extract election day latent popularity.")
+            return None
+        
+        posterior = trace_to_use.posterior
+
+        # Variable name in the Dynamic GP model
+        latent_pop_var = "latent_popularity_calendar_trajectory" 
+
+        if latent_pop_var not in posterior:
+            print(f"Error: Variable '{latent_pop_var}' not found in posterior.")
+            return None
+            
+        if "calendar_time" not in posterior.coords:
+            print("Error: Coordinate 'calendar_time' not found in posterior.")
+            return None
+            
+        # Ensure the target election date is in datetime64 format
+        try:
+            target_date_dt = np.datetime64(self.dataset.election_date)
+        except ValueError:
+            print(f"Error: Invalid election date format: {self.dataset.election_date}")
+            return None
+
+        # Find the index of the target election date in the calendar_time coordinate
+        calendar_times = posterior["calendar_time"].values
+        try:
+            # Use np.where for robust matching, converting both to ns precision if needed
+            target_index_arr = np.where(calendar_times.astype('datetime64[ns]') == target_date_dt.astype('datetime64[ns]'))[0]
+            if len(target_index_arr) == 0:
+                 # If exact match fails, try finding the closest date (within a tolerance)
+                 time_diffs = np.abs(calendar_times - target_date_dt)
+                 closest_index = np.argmin(time_diffs)
+                 # Check if the closest date is reasonably close (e.g., within 1 day)
+                 if time_diffs[closest_index] <= np.timedelta64(1, 'D'):
+                      target_index = closest_index
+                      print(f"Warning: Exact election date {target_date_dt} not found in calendar_time. Using closest date: {calendar_times[target_index]}")
+                 else:
+                      print(f"Error: Target election date {target_date_dt} not found in calendar_time coordinate, and no close date found.")
+                      return None
+            else:
+                 target_index = target_index_arr[0] # Take the first match if multiple
+                 
+        except Exception as e:
+            print(f"Error finding election date index in calendar_time: {e}")
+            return None
+
+        # Select the latent popularity at the target date index
+        try:
+            election_day_pop = posterior[latent_pop_var].isel(calendar_time=target_index)
+            # Ensure the output has the correct dimensions ('chain', 'draw', 'parties_complete')
+            # The isel operation should preserve these dimensions
+            return election_day_pop
+        except Exception as e:
+            print(f"Error selecting data at target index {target_index}: {e}")
+            return None 
