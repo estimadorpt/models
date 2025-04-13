@@ -11,6 +11,7 @@ import numpy as np
 from datetime import datetime, timedelta
 import pymc as pm
 import json
+import numbers
 
 from src.models.elections_facade import ElectionsFacade
 from src.models.static_baseline_election_model import StaticBaselineElectionModel
@@ -184,7 +185,19 @@ def fit_model(args):
                 metrics_dict = model_instance.calculate_fit_metrics(elections_model.trace)
                 print("Fit Metrics:")
                 for key, value in metrics_dict.items():
-                    print(f"  {key}: {value:.4f}")
+                    # Check if value is a number (int, float, numpy number)
+                    if isinstance(value, numbers.Number):
+                        # Handle potential NaN values
+                        if np.isnan(value):
+                             print(f"  {key}: NaN")
+                        else:
+                             print(f"  {key}: {value:.4f}")
+                    # Check if it's one of the calibration dictionaries
+                    elif isinstance(value, dict) and key.endswith('_calibration'):
+                         print(f"  {key}: [Calibration Data - see plots]")
+                    # Otherwise, print the value as a string
+                    else:
+                        print(f"  {key}: {value}")
                 
                 metrics_path = os.path.join(output_dir, "fit_metrics.json")
                 with open(metrics_path, 'w') as f:
@@ -621,14 +634,19 @@ def diagnose_model(args):
                 metrics_dict = elections_model.model_instance.calculate_fit_metrics(elections_model.trace)
                 print("Fit Metrics:")
                 for key, value in metrics_dict.items():
-                    # Handle potential NaN values from calculation
-                    if isinstance(value, float) and np.isnan(value):
-                         print(f"  {key}: NaN")
-                    # Skip printing the calibration dictionaries directly
+                    # Check if value is a number (int, float, numpy number)
+                    if isinstance(value, numbers.Number):
+                        # Handle potential NaN values
+                        if np.isnan(value):
+                             print(f"  {key}: NaN")
+                        else:
+                             print(f"  {key}: {value:.4f}")
+                    # Check if it's one of the calibration dictionaries
                     elif isinstance(value, dict) and key.endswith('_calibration'):
                          print(f"  {key}: [Calibration Data - see plots]")
+                    # Otherwise, print the value as a string
                     else:
-                         print(f"  {key}: {value:.4f}")
+                        print(f"  {key}: {value}")
 
                 # Optionally save metrics again or just display
                 # metrics_path = os.path.join(model_dir, "fit_metrics_diagnose.json")
