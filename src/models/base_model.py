@@ -235,7 +235,6 @@ class BaseElectionModel(abc.ABC):
                 # If older PyMC, this might not work, and we might need return_inferencedata=False + manual conversion
                 try:
                     trace = pm.sample(
-                        return_inferencedata=True,
                         **sampler_kwargs
                     )
                     print(f"DEBUG (BaseModel): Sampling attempted.")
