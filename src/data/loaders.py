@@ -57,6 +57,14 @@ def _consolidate_tracking_polls(df, party_cols, rolling_window_days=3):
     tracking_polls = df[is_tracking].copy()
     non_tracking_polls = df[~is_tracking].copy()
 
+    # --- DEBUG: Dates Before Consolidation ---
+    if not tracking_polls.empty:
+        unique_dates_before = pd.to_datetime(tracking_polls['date']).dt.date.unique()
+        print(f"DEBUG LOADER: Unique tracking poll dates BEFORE consolidation (count={len(unique_dates_before)}):\n{sorted(unique_dates_before)}")
+    else:
+        print("DEBUG LOADER: No tracking polls found before consolidation step.")
+    # --- END DEBUG ---
+
     if tracking_polls.empty:
         print("No tracking polls identified based on 'Stratification' column.")
         return df # Return original df if no tracking polls
@@ -164,6 +172,22 @@ def _consolidate_tracking_polls(df, party_cols, rolling_window_days=3):
 
     # Re-sort by date
     final_df = final_df.sort_values('date').reset_index(drop=True)
+
+    # --- DEBUG: Dates After Consolidation ---
+    if not final_df.empty:
+        # Identify which rows were originally tracking polls (either consolidated or kept as is)
+        # This requires checking if the poll was in the original tracking_polls DataFrame index or if it's a new consolidated row
+        # A simpler proxy: check if the final_df row came from consolidated_df or the original tracking_polls if group size was 1
+        
+        # Let's just print unique dates of the tracking poll subset in the final dataframe for simplicity
+        final_tracking_mask = final_df['Stratification'].astype(str).str.contains("Tracking poll", na=False, case=False) | \
+                              final_df['Stratification'].astype(str).str.contains("Consolidated", na=False, case=False)
+        final_tracking_dates = final_df.loc[final_tracking_mask, 'date']
+        unique_dates_after = pd.to_datetime(final_tracking_dates).dt.date.unique()
+        print(f"DEBUG LOADER: Unique tracking poll dates AFTER consolidation (count={len(unique_dates_after)}):\n{sorted(unique_dates_after)}")
+    else:
+        print("DEBUG LOADER: Final dataframe is empty after consolidation step.")
+    # --- END DEBUG ---
 
     # Drop the Stratification column now if it's no longer needed downstream
     # final_df = final_df.drop(columns=['Stratification'])
@@ -340,143 +364,322 @@ def load_rr_polls():
     return polls_df
 
 
-def load_election_results(election_dates, political_families):
-    """Load election results from parquet files"""
+def load_election_results(election_dates, political_families, aggregate_national=True):
+    """Load election results from parquet files.
+
+    Args:
+        election_dates (List[str]): List of election dates (YYYY-MM-DD).
+        political_families (List[str]): List of party names to focus on.
+        aggregate_national (bool): If True, aggregate results nationally.
+                                    If False, return results per district (Circulo).
+
+    Returns:
+        pd.DataFrame: Election results, either aggregated nationally or per district.
+    """
     dfs = []
-    
+    code_to_district = load_code_to_district_map() # Load map once
+    if not code_to_district:
+        print("Error: Failed to load territory code map. Cannot proceed with district-level results.")
+        # Depending on desired behavior, maybe return empty or only allow national aggregation.
+        # For now, let's allow national but fail district-level.
+        if not aggregate_national:
+            return pd.DataFrame()
+
     # Print diagnostic information
     print("\n=== ELECTION DATES ===")
     print(f"Expected election dates: {election_dates}")
-    
+
     available_files = glob.glob(os.path.join(DATA_DIR, 'legislativas_*.parquet'))
     print(f"Available election result files: {available_files}")
-    
+
     matched_dates = []
-    # For each legislativas_* file in the data folder, load the data and append it to the results_df
     for file in available_files:
-        # Get the file date
-        file_date = file.split('_')[-1].split('.')[0]
-        print(f"\nProcessing file: {file} (date: {file_date})")
-        
-        # Get the date from election_dates which year matches the file date
-        matching_dates = [date for date in election_dates if file_date in date]
-        
+        file_date_str = file.split('_')[-1].split('.')[0]
+        print(f"\nProcessing file: {file} (date: {file_date_str})")
+
+        matching_dates = [date for date in election_dates if file_date_str in date]
         if not matching_dates:
             print(f"WARNING: No matching election date found for file {file}")
             continue
-            
         election_date = matching_dates[0]
         matched_dates.append(election_date)
         print(f"Matched to election date: {election_date}")
 
-        temp_results_df = pd.read_parquet(file)
-        temp_results_df = temp_results_df.drop(columns='territoryName').sum().to_frame().T
-        # Add sample size column with sum of all numeric columns
-        temp_results_df['sample_size'] = temp_results_df.select_dtypes(include='number').sum(axis=1)
-        temp_results_df['election_date'] = pd.to_datetime(election_date)
-        temp_results_df['date'] = pd.to_datetime(election_date)
-        temp_results_df['pollster'] = 'result'
+        try:
+            raw_results_df = pd.read_parquet(file)
+        except Exception as e:
+            print(f"Error reading parquet file {file}: {e}")
+            continue # Skip this file
 
-        # Print available columns in temp_results_df
-        print(f"Available columns in result file: {temp_results_df.columns.tolist()}")
+        # --- Add Circulo Column from territoryCode --- 
+        if 'territoryCode' not in raw_results_df.columns:
+             print(f"WARNING: 'territoryCode' column not found in {file}. Cannot determine districts for this file.")
+             if not aggregate_national:
+                 print("Skipping file for district-level results.")
+                 continue
+             else: 
+                 # If aggregating nationally, we can proceed but won't have district info from this file
+                 print("Proceeding with national aggregation despite missing territoryCode.")
+                 # We won't have a 'Circulo' column for this file's data
+                 pass # Let the aggregation happen without district grouping
+        else:
+             # Ensure territoryCode is string
+             raw_results_df['territoryCode'] = raw_results_df['territoryCode'].astype(str)
+             # Extract the 2-digit code, allowing for optional 'LOCAL-' prefix
+             extracted_codes = raw_results_df['territoryCode'].str.extract(r'(?:LOCAL-)?(\d{2})', expand=False)
+             raw_results_df['district_code'] = extracted_codes.fillna('XX') # Handle non-matches with 'XX'
+             
+             # Map code to district name
+             raw_results_df['Circulo'] = raw_results_df['district_code'].map(code_to_district)
+             
+             # Check for codes that didn't map (excluding the 'XX' for non-matches)
+             unmapped_codes = raw_results_df[raw_results_df['Circulo'].isna() & (raw_results_df['district_code'] != 'XX')]['district_code'].unique()
+             if len(unmapped_codes) > 0:
+                 print(f"Warning: Found territory codes in {file} with no match in code map: {unmapped_codes.tolist()}")
+             # Fill NaNs in Circulo (resulting from unmapped codes or initial XX) with a placeholder
+             raw_results_df['Circulo'] = raw_results_df['Circulo'].fillna('Unknown District')
+             # Can optionally drop helper columns now if not needed later
+             # raw_results_df = raw_results_df.drop(columns=['district_code'])
 
-        L_columns_to_sum = [col for col in temp_results_df if col in ['L', 'L/TDA']]
-        temp_results_df['L'] = temp_results_df[L_columns_to_sum].sum(axis=1)
-        if 'L/TDA' in temp_results_df.columns:
-            temp_results_df = temp_results_df.drop(columns='L/TDA')
+        # --- Continue with existing processing --- 
+        raw_results_df['election_date'] = pd.to_datetime(election_date)
+        raw_results_df['date'] = pd.to_datetime(election_date)
+        raw_results_df['pollster'] = 'result'
 
-        AD_columns_to_sum = list(set(temp_results_df.filter(like='PPD/PSD').columns.tolist() + 
-                                    temp_results_df.filter(like='CDS').columns.tolist()))
-        print(f"AD columns to sum: {AD_columns_to_sum}")
-        temp_results_df['AD'] = temp_results_df[AD_columns_to_sum].sum(axis=1)
-        temp_results_df = temp_results_df.drop(columns=AD_columns_to_sum)
+        # Standardize party names early
+        raw_results_df = raw_results_df.rename(columns={'B.E.': 'BE', 'PCP-PEV': 'CDU'})
 
-        # Keep only the columns we want
-        columns_to_keep = ['date', 'election_date', 'pollster', 'sample_size', 'PS', 'AD', 'B.E.', 'PCP-PEV', 
-                         'IL', 'PAN', 'CH', 'L']
-        # Drop items from columns_to_keep that are not in temp_results_df
-        available_columns = [col for col in columns_to_keep if col in temp_results_df.columns]
-        missing_columns = [col for col in columns_to_keep if col not in temp_results_df.columns]
-        
-        print(f"Available columns in needed set: {available_columns}")
-        print(f"Missing columns: {missing_columns}")
-        
-        # Calculate 'other' as the sum of all parties not in columns_to_keep
-        party_columns = [col for col in temp_results_df.columns if col not in columns_to_keep and 
-                       col not in ['sample_size', 'date', 'election_date', 'pollster', 
-                                  'number_voters', 'percentage_voters', 'subscribed_voters']]
-        temp_results_df['other'] = temp_results_df[party_columns].sum(axis=1)
-        temp_results_df = temp_results_df[available_columns + ['other']]
-        temp_results_df = temp_results_df.rename(columns={'B.E.': 'BE', 'PCP-PEV': 'CDU'})
+        # --- Party Consolidation (pre-aggregation) ---
+        l_cols = [col for col in raw_results_df.columns if col in ['L', 'L/TDA']]
+        if l_cols:
+            raw_results_df['L'] = raw_results_df[l_cols].sum(axis=1)
+            if 'L/TDA' in raw_results_df.columns:
+                raw_results_df = raw_results_df.drop(columns='L/TDA')
+        elif 'L' not in raw_results_df.columns:
+             raw_results_df['L'] = 0 
 
-        # Remove the division block
-        # No longer dividing by 100 here
-        for col in ['PS', 'AD', 'BE', 'CDU', 'IL', 'PAN', 'L', 'CH', 'other']:
-             if col not in temp_results_df.columns:
-                 temp_results_df[col] = 0 # Ensure missing columns are set to 0
-        
-        # Recalculate sample size to be the sum of party votes
-        available_parties = [col for col in ['PS', 'AD', 'BE', 'CDU', 'IL', 'PAN', 'L', 'CH'] if col in temp_results_df.columns]
-        temp_results_df['sample_size'] = temp_results_df[available_parties].sum(axis=1)
-        
-        # Print expected vs actual parties
-        print(f"Expected political families: {political_families}")
-        print(f"Available political families in this file: {available_parties}")
-        
-        # Debug: Print election date being added
-        print(f"---> Adding results for date: {temp_results_df['election_date'].iloc[0]}")
-        dfs.append(temp_results_df)
-    
-    # Check if all election dates have corresponding result files
+        ad_components_pattern = ['PPD/PSD', 'CDS-PP']
+        ad_cols_to_sum = [col for col in raw_results_df.columns if any(pat in col for pat in ad_components_pattern)]
+        if ad_cols_to_sum:
+            # Ensure components are numeric, fillna(0) before summing
+            raw_results_df['AD'] = raw_results_df[ad_cols_to_sum].apply(pd.to_numeric, errors='coerce').fillna(0).sum(axis=1)
+            raw_results_df = raw_results_df.drop(columns=ad_cols_to_sum)
+        elif 'AD' not in raw_results_df.columns:
+            raw_results_df['AD'] = 0
+            
+        # Identify relevant parties present in the data
+        present_parties = [p for p in political_families if p in raw_results_df.columns]
+
+        # Define base columns to keep
+        base_cols = ['date', 'election_date', 'pollster']
+        if not aggregate_national and 'Circulo' in raw_results_df.columns:
+            base_cols.append('Circulo')
+            
+        # Identify 'other' parties 
+        other_party_cols = [col for col in raw_results_df.columns if col not in base_cols + present_parties + 
+                            ['territoryCode', 'district_code', # Explicitly exclude original code columns
+                             'null_votes', 'blank_votes', # Exclude non-party vote types if present
+                             'number_voters', 'percentage_voters', 'subscribed_voters'] and 
+                             isinstance(raw_results_df[col].iloc[0], (int, float))] # Rough check for numeric type
+        if other_party_cols:
+            # Ensure 'other' columns are numeric before summing
+            raw_results_df['other'] = raw_results_df[other_party_cols].apply(pd.to_numeric, errors='coerce').fillna(0).sum(axis=1)
+        else:
+            raw_results_df['other'] = 0
+
+        # Define columns to keep explicitly 
+        cols_to_keep = base_cols + present_parties + ['other']
+        final_cols = [col for col in cols_to_keep if col in raw_results_df.columns]
+        temp_results_df = raw_results_df[final_cols].copy()
+
+        # --- Aggregation or District-Level Preparation ---
+        if aggregate_national:
+            # Aggregate nationally: sum votes across all rows (districts/subdistricts)
+            numeric_cols = present_parties + ['other']
+            metadata_cols = ['date', 'election_date', 'pollster']
+            
+            numeric_cols_present = [col for col in numeric_cols if col in temp_results_df.columns]
+            if not numeric_cols_present:
+                 aggregated_numeric = pd.DataFrame(columns=numeric_cols)
+            else:
+                 # Ensure numeric before summing
+                 aggregated_numeric = temp_results_df[numeric_cols_present].apply(pd.to_numeric, errors='coerce').fillna(0).sum().to_frame().T
+            
+            aggregated_metadata = temp_results_df[metadata_cols].iloc[[0]].reset_index(drop=True)
+            aggregated_df = pd.concat([aggregated_metadata, aggregated_numeric], axis=1)
+            
+            present_parties_agg = [p for p in present_parties if p in aggregated_df.columns]
+            if present_parties_agg:
+                 # Ensure numeric before sum for sample size
+                aggregated_df['sample_size'] = aggregated_df[present_parties_agg].apply(pd.to_numeric, errors='coerce').fillna(0).sum(axis=1)
+            else:
+                 aggregated_df['sample_size'] = 0
+            
+            processed_df = aggregated_df
+
+        else: # Keep district level
+            if 'Circulo' not in temp_results_df.columns:
+                 print(f"ERROR: 'Circulo' column missing for district grouping in file {file}. Cannot produce district results.")
+                 processed_df = pd.DataFrame()
+            else:
+                # Group by Circulo and sum votes 
+                grouping_cols = [col for col in base_cols if col in temp_results_df.columns] # Use valid base cols
+                numeric_cols = present_parties + ['other']
+                numeric_cols_present = [col for col in numeric_cols if col in temp_results_df.columns]
+                
+                if not numeric_cols_present:
+                    processed_df = temp_results_df[grouping_cols].drop_duplicates().reset_index(drop=True)
+                    processed_df['sample_size'] = 0
+                else:
+                    # Ensure numeric before grouping sum
+                    for col in numeric_cols_present: 
+                         temp_results_df[col] = pd.to_numeric(temp_results_df[col], errors='coerce').fillna(0)
+                    processed_df = temp_results_df.groupby(grouping_cols, as_index=False)[numeric_cols_present].sum()
+                    
+                    present_parties_dist = [p for p in present_parties if p in processed_df.columns]
+                    if present_parties_dist:
+                        processed_df['sample_size'] = processed_df[present_parties_dist].sum(axis=1)
+                    else:
+                        processed_df['sample_size'] = 0
+            
+        # --- Final Processing (common to both) ---
+        if processed_df.empty:
+             print(f"Skipping final processing for {file} due to empty dataframe.")
+             continue 
+             
+        for party in political_families:
+            if party not in processed_df.columns:
+                processed_df[party] = 0
+
+        final_ordered_cols = base_cols + political_families + ['sample_size', 'other']
+        final_ordered_cols = [col for col in final_ordered_cols if col in processed_df.columns]
+        processed_df = processed_df[final_ordered_cols]
+
+        dfs.append(processed_df)
+
+    # --- Handle Unmatched Dates (Placeholder Creation) ---
     unmatched_dates = [date for date in election_dates if date not in matched_dates]
     if unmatched_dates:
         print(f"\nWARNING: Some election dates have no corresponding result files: {unmatched_dates}")
         print("Attempting to handle missing election data gracefully...")
-        
-        # For each unmatched date, create a placeholder result with zeros
         for missing_date in unmatched_dates:
             print(f"Creating placeholder for {missing_date}")
-            placeholder_df = pd.DataFrame({
+            placeholder_data = {
                 'date': [pd.to_datetime(missing_date)],
                 'election_date': [pd.to_datetime(missing_date)],
                 'pollster': ['result'],
-                'sample_size': [1000]  # Placeholder sample size
-            })
-            
-            # Add zero columns for each political family
+                'sample_size': [0],
+                'other': [0]
+            }
+            if not aggregate_national:
+                 placeholder_data['Circulo'] = ['Unknown District'] 
+
             for party in political_families:
-                placeholder_df[party] = 0
-                
-            placeholder_df['other'] = 0
+                placeholder_data[party] = 0
+
+            placeholder_df = pd.DataFrame(placeholder_data)
             dfs.append(placeholder_df)
-    
+
     if not dfs:
-        print("ERROR: No election results could be loaded!")
+        print("ERROR: No election results could be loaded or created!")
         return pd.DataFrame()
-        
-    # Debug: Print dates just before concatenation
-    print("\n--- Election dates in list before concat ---")
-    for temp_df in dfs:
-        if not temp_df.empty:
-            print(f"  - {temp_df['election_date'].iloc[0]}")
-    print("---------------------------------------------")
-    
-    df = pd.concat(dfs)
-    print(f"\nFinal combined dataframe shape: {df.shape}")
-    print(f"Final combined dataframe columns: {df.columns.tolist()}")
-    
-    # Check for any NaN values in the final df
-    nan_counts = df.isna().sum()
+
+    # --- Concatenate Final Results ---
+    try:
+        final_df = pd.concat(dfs, ignore_index=True)
+    except Exception as e:
+         print(f"Error during concatenation: {e}")
+         for i, item_df in enumerate(dfs):
+             print(f"DF {i} shape: {item_df.shape}, columns: {item_df.columns.tolist()}")
+         return pd.DataFrame()
+
+    # Check for NaN values
+    nan_counts = final_df.isna().sum()
     if nan_counts.sum() > 0:
-        print("WARNING: NaN values in final election results dataframe:")
+        print("WARNING: NaN values found in final election results dataframe:")
         print(nan_counts[nan_counts > 0])
-    
-    df.drop(columns=['other'], inplace=True)
-    
-    # Add countdown column with difference between election_date and date
-    df['countdown'] = (df['election_date'] - df['date']).dt.days
-    
-    return df
+        numeric_cols_final = political_families + ['sample_size', 'other']
+        for col in numeric_cols_final:
+            if col in final_df.columns and final_df[col].isna().any():
+                print(f"Filling NaNs in column '{col}' with 0.")
+                final_df[col] = final_df[col].fillna(0)
+
+    if 'other' in final_df.columns:
+        final_df = final_df.drop(columns=['other'])
+
+    if aggregate_national:
+        final_df['countdown'] = (final_df['election_date'] - final_df['date']).dt.days
+
+    # Convert vote counts to integers
+    vote_cols = [p for p in political_families if p in final_df.columns]
+    for col in vote_cols + ['sample_size']:
+         if col in final_df.columns:
+             final_df[col] = pd.to_numeric(final_df[col], errors='coerce').fillna(0).astype(int)
+
+    if not aggregate_national and 'Circulo' not in final_df.columns and not final_df.empty:
+         print("ERROR: Final district-level DataFrame is missing the 'Circulo' column.")
+
+    print(f"Finished loading election results. Final shape: {final_df.shape}")
+    return final_df
+
+
+def load_district_config() -> Dict[str, int]:
+    """
+    Loads the mapping between electoral districts (Circulos) and the number of seats (Deputados).
+
+    Reads data from 'data/legislativas_2024_circulos_deputados.csv'.
+
+    Returns:
+        Dict[str, int]: A dictionary where keys are district names and values are the number of seats.
+    """
+    file_path = os.path.join(DATA_DIR, 'legislativas_2024_circulos_deputados.csv')
+    try:
+        df = pd.read_csv(file_path)
+        # Use 'Circulo' for district name and 'Deputados' for seats
+        district_seats = df.set_index('Circulo')['Deputados'].to_dict()
+        print(f"Loaded district configuration for {len(district_seats)} districts from {file_path}")
+        return district_seats
+    except FileNotFoundError:
+        print(f"Error: District configuration file not found at {file_path}")
+        return {}
+    except KeyError:
+        print(f"Error: Required columns ('Circulo', 'Deputados') not found in {file_path}")
+        return {}
+    except Exception as e:
+        print(f"An error occurred while loading district config: {e}")
+        return {}
+
+
+def load_code_to_district_map() -> Dict[str, str]:
+    """
+    Loads the mapping between the two-digit territory code and the district name (Circulo).
+
+    Reads data from 'data/legislativas_2024_codigos_circulos.csv'.
+
+    Returns:
+        Dict[str, str]: A dictionary where keys are the territory codes (as strings, e.g., '01')
+                        and values are the district names (Circulo).
+    """
+    file_path = os.path.join(DATA_DIR, 'legislativas_2024_codigos_circulos.csv')
+    code_map = {}
+    try:
+        df = pd.read_csv(file_path, dtype={'Codigo': str})
+        # Remove duplicates, keeping the first occurrence of each code
+        df = df.drop_duplicates(subset='Codigo', keep='first')
+        # Ensure 'Codigo' is treated as string, potentially pad with 0 if needed (though dtype=str should handle)
+        df['Codigo'] = df['Codigo'].astype(str).str.zfill(2)
+        code_map = df.set_index('Codigo')['Circulo'].to_dict()
+        print(f"Loaded territory code to district map for {len(code_map)} unique codes from {file_path}")
+        return code_map
+    except FileNotFoundError:
+        print(f"Error: Territory code map file not found at {file_path}")
+        return {}
+    except KeyError:
+        print(f"Error: Required columns ('Codigo', 'Circulo') not found in {file_path}")
+        return {}
+    except Exception as e:
+        print(f"An error occurred while loading territory code map: {e}")
+        return {}
 
 
 def load_generic_predictor(file: str, name: str, freq: str, skiprows: int, sep: str = ";") -> pd.DataFrame:

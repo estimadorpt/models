@@ -842,3 +842,89 @@ class StaticBaselineElectionModel(BaseElectionModel):
              pred_history.posterior_predictive = pred_history.predictions.copy()
 
         return pred_history
+
+    def get_latent_popularity(self, idata: az.InferenceData, target_date: pd.Timestamp) -> xr.DataArray:
+        """
+        Extracts the posterior distribution of latent popularity from the Static model
+        at a specific target date.
+
+        Calculates the countdown days from the target_date to the last election cycle
+        defined in the model coordinates and extracts the trajectory at that point.
+
+        Args:
+            idata (az.InferenceData): The InferenceData object containing the posterior samples.
+            target_date (pd.Timestamp): The specific date for which to extract the popularity.
+
+        Returns:
+            xr.DataArray: Posterior samples of latent popularity at the target_date.
+                          Dimensions: (chain, draw, parties_complete).
+                          Returns None if the target date results in an invalid countdown,
+                          required variables/coords are missing, or other errors occur.
+        """
+        if idata is None or 'posterior' not in idata:
+            print("Error: Valid InferenceData with posterior samples required.")
+            return None
+        
+        latent_pop_var = "latent_popularity_trajectory"
+        if latent_pop_var not in idata.posterior:
+            print(f"Error: Variable '{latent_pop_var}' not found in posterior samples.")
+            return None
+            
+        # Check for necessary coordinates in the InferenceData object itself
+        if not hasattr(idata.posterior, 'coords') or \
+           'elections' not in idata.posterior.coords or \
+           'countdown' not in idata.posterior.coords or \
+           'parties_complete' not in idata.posterior.coords:
+             print("Error: Required coordinates ('elections', 'countdown', 'parties_complete') not found in posterior coordinates.")
+             return None
+
+        # Ensure target_date is a Timestamp and normalized
+        target_date = pd.to_datetime(target_date).normalize()
+        
+        # Determine the target election cycle (usually the last one for prediction)
+        election_cycle_dates = pd.to_datetime(idata.posterior['elections'].values)
+        if len(election_cycle_dates) == 0:
+             print("Error: No election cycles found in coordinates.")
+             return None
+        target_election_date = election_cycle_dates.max()
+        # Note: We select the trajectory for the *last* election cycle when predicting future dates.
+        # target_election_index = len(election_cycle_dates) - 1 # Index of the last election
+        print(f"Using last election cycle date ({target_election_date.date()}) as reference for trajectory selection.")
+
+        # Calculate countdown days for the target_date relative to the target_election_date
+        countdown_days = (target_election_date - target_date).days
+        print(f"Calculated countdown days for {target_date.date()}: {countdown_days}")
+        
+        # Check if the calculated countdown is within the model's countdown coordinate range
+        countdown_coords = idata.posterior['countdown'].values
+        min_countdown = countdown_coords.min()
+        max_countdown = countdown_coords.max()
+
+        if not (min_countdown <= countdown_days <= max_countdown):
+            print(f"Warning: Calculated countdown ({countdown_days}) for {target_date.date()} is outside the modeled countdown range \n                     ({min_countdown} to {max_countdown}). Returning None.")
+            return None
+            
+        try:
+            # Select the trajectory for the *last* election cycle at the calculated countdown day.
+            target_popularity = idata.posterior[latent_pop_var].sel(
+                elections=target_election_date, # Select the time series corresponding to the last election
+                countdown=countdown_days,      # Select the specific day within that time series
+                method="nearest"             # Find nearest countdown index if exact match fails (shouldn't happen if in range)
+            )
+            
+            # Verify the selected countdown is close enough
+            selected_countdown = target_popularity.countdown.item()
+            if abs(selected_countdown - countdown_days) > 0: # Allow 0 difference
+                print(f"Warning: Nearest countdown found ({selected_countdown}) does not exactly match calculated ({countdown_days}). Check coords.")
+                # return None # Decide if this mismatch is critical
+            
+            print(f"Successfully extracted popularity for target date {target_date.date()} (countdown {selected_countdown})")
+            # The result should have dims (chain, draw, parties_complete)
+            return target_popularity
+            
+        except KeyError as e:
+            print(f"Error selecting data: Could not find election '{target_election_date.date()}' or countdown '{countdown_days}'. Error: {e}")
+            return None
+        except Exception as e:
+            print(f"An unexpected error occurred during popularity extraction: {e}")
+            return None
