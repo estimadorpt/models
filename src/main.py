@@ -187,7 +187,15 @@ def fit_model(args):
                 # Ensure the trace object is available in the model instance if needed by methods
                 if not hasattr(model_instance, 'trace') or model_instance.trace is None:
                      model_instance.trace = elections_model.trace # Assign trace if needed
-                metrics_dict = model_instance.calculate_fit_metrics(elections_model.trace)
+                
+                # Capture both metrics and the potentially updated idata
+                metrics_dict, updated_idata = model_instance.calculate_fit_metrics(elections_model.trace)
+                
+                # Update the facade's trace object with the potentially updated one
+                if updated_idata is not None:
+                     elections_model.trace = updated_idata
+                     print("Updated facade trace with results from calculate_fit_metrics.")
+                
                 print("Fit Metrics:")
                 for key, value in metrics_dict.items():
                     # Check if value is a number (int, float, numpy number)
@@ -412,11 +420,26 @@ def load_model(args, directory, election_date=None, baseline_timescales=None, el
         # Load the saved trace
         elections_model.load_inference_results(directory)
         
+        # --- Debug loaded idata --- 
+        if elections_model.trace is not None and hasattr(elections_model.trace, 'coords') and elections_model.trace.coords is not None:
+            if 'calendar_time' in elections_model.trace.coords:
+                 loaded_cal_time = elections_model.trace.coords['calendar_time'].values
+                 print(f"DEBUG LOAD: Type of loaded calendar_time: {type(loaded_cal_time)}")
+                 if hasattr(loaded_cal_time, 'dtype'): print(f"DEBUG LOAD: Dtype of loaded calendar_time: {loaded_cal_time.dtype}")
+                 try:
+                      print(f"DEBUG LOAD: Last 5 loaded calendar_time coords: {loaded_cal_time[-5:]}")
+                 except Exception as e:
+                      print(f"DEBUG LOAD: Error printing loaded coords: {e}")
+            else:
+                 print("DEBUG LOAD: 'calendar_time' not found in loaded coords.")
+        else:
+             print("DEBUG LOAD: No trace or coords found after loading.")
+        # --- End debug --- 
+        
         # Rebuild the model structure (necessary for posterior predictive checks etc.)
-        # This uses the parameters passed to ElectionsFacade, ensuring consistency
-        print("Rebuilding model structure...")
-        elections_model.build_model()
-        print("Model structure rebuilt.")
+        # print("Rebuilding model structure...")
+        # elections_model.build_model() # <<< COMMENTED OUT: Should rely on loaded idata coords for prediction/viz
+        # print("Model structure rebuilt.")
         
         return elections_model
         
@@ -706,18 +729,18 @@ def predict(args):
         pred_dir = os.path.join(args.load_dir, "predictions")
         os.makedirs(pred_dir, exist_ok=True)
 
-        # --- Calculate Election Day Latent Popularity Prediction ---
-        print("\nCalculating Election Day Latent Popularity Prediction...")
-        election_day_pop_posterior = elections_model.get_election_day_latent_popularity()
+        # --- Calculate Latent Popularity Prediction (based on date mode) ---
+        print(f"\nCalculating Latent Popularity Prediction (mode: {args.prediction_date_mode})...")
+        target_pop_posterior = elections_model.get_latent_popularity(date_mode=args.prediction_date_mode)
 
-        if election_day_pop_posterior is None:
-             print("Could not retrieve election day latent popularity. Skipping vote share and seat predictions.")
+        if target_pop_posterior is None:
+             print("Could not retrieve latent popularity for the specified date mode. Skipping vote share and seat predictions.")
         else:
             # --- Display Vote Share Summary --- 
             hdi_prob = 0.94
             pred_summary = None # Initialize pred_summary before the try block
             try: # Start try block for summary calculation
-                pred_summary = az.summary(election_day_pop_posterior, hdi_prob=hdi_prob, kind='stats', round_to=None)
+                pred_summary = az.summary(target_pop_posterior, hdi_prob=hdi_prob, kind='stats', round_to=None)
                 pred_summary = pred_summary.rename(columns={
                     'mean': 'Mean', 'sd': 'SD',
                     f'hdi_{100*(1-hdi_prob)/2:.1f}%': f'HDI {100*(1-hdi_prob)/2:.0f}%',
@@ -728,10 +751,11 @@ def predict(args):
                 if output_cols_display:
                      pred_summary_display = pred_summary[output_cols_display]
                      pred_summary_pct = pred_summary_display.applymap(lambda x: f"{x*100:.1f}%" if pd.notnull(x) else "N/A")
-                     print("\n--- Election Day Latent Popularity Prediction (Vote Shares) ---")
+                     print(f"\n--- Latent Popularity Prediction ({args.prediction_date_mode}) --- (Vote Shares) ---")
                      print(pred_summary_pct.to_string())
                      print("----------------------------------------------------------------")
-                output_path = os.path.join(pred_dir, "election_day_prediction.csv")
+                # Use clear filename based on mode
+                output_path = os.path.join(pred_dir, f"vote_share_summary_{args.prediction_date_mode}.csv")
                 pred_summary.to_csv(output_path)
                 print(f"Vote share prediction summary saved to {output_path}")
             except Exception as summary_err:
@@ -807,10 +831,10 @@ def predict(args):
                     # --- Dynamically find party coordinate name --- 
                     party_dim_name = None
                     expected_num_parties = len(political_families)
-                    for dim_name, dim_size in election_day_pop_posterior.sizes.items():
+                    for dim_name, dim_size in target_pop_posterior.sizes.items():
                         if dim_name in ['party', 'parties', 'parties_complete'] or dim_size == expected_num_parties:
-                             if dim_name in election_day_pop_posterior.coords:
-                                 coord_values = election_day_pop_posterior[dim_name].values.tolist()
+                             if dim_name in target_pop_posterior.coords:
+                                 coord_values = target_pop_posterior[dim_name].values.tolist()
                                  if sorted(coord_values) == sorted(political_families):
                                      party_dim_name = dim_name
                                      print(f"Found party coordinate dimension: '{party_dim_name}'")
@@ -820,7 +844,7 @@ def predict(args):
                         print("Error: Could not determine party coordinate. Aborting simulation.")
                     else:
                         seat_allocation_samples = []
-                        stacked_posterior = election_day_pop_posterior.stack(sample=("chain", "draw"))
+                        stacked_posterior = target_pop_posterior.stack(sample=("chain", "draw"))
                         total_draws = len(stacked_posterior['sample'])
                         samples_to_process = min(num_samples_for_seats, total_draws)
                         print(f"Processing {samples_to_process} out of {total_draws} available posterior samples...")
@@ -888,16 +912,21 @@ def predict(args):
                             seat_summary = az.summary(seats_df[party_cols].to_dict(orient='list'), hdi_prob=hdi_prob, kind='stats', round_to=1)
                             print(seat_summary.to_string())
                             print("------------------------------------------")
-                            seats_samples_path = os.path.join(pred_dir, "predicted_seats_samples.csv")
+                            seats_samples_path = os.path.join(pred_dir, f"seat_samples_{args.prediction_date_mode}.csv")
                             seats_df.to_csv(seats_samples_path, index=False)
                             print(f"Full seat prediction samples saved to {seats_samples_path}")
-                            seat_summary_path = os.path.join(pred_dir, "predicted_seats_summary.csv")
+                            seat_summary_path = os.path.join(pred_dir, f"seat_summary_{args.prediction_date_mode}.csv")
                             seat_summary.to_csv(seat_summary_path)
                             print(f"Seat prediction summary saved to {seat_summary_path}")
                             
                             # --- Add Visualization Call (Correctly indented) --- 
                             try:
-                                plot_seat_distribution_histograms(seats_df, pred_dir)
+                                plot_seat_distribution_histograms(
+                                    seats_df,
+                                    pred_dir,
+                                    date_mode=args.prediction_date_mode,
+                                    filename=f"seat_histograms_{args.prediction_date_mode}.png"
+                                )
                             except Exception as plot_err:
                                 print(f"Warning: Failed to generate seat distribution histograms: {plot_err}")
                                 if args.debug: traceback.print_exc()
@@ -926,7 +955,14 @@ def predict(args):
         if hasattr(elections_model, 'model_instance') and elections_model.model_instance:
             try:
                  print("\nAttempting to generate forecast distribution plot...")
-                 plot_forecasted_election_distribution(elections_model, pred_dir)
+                 # Pass the date mode for title/filename consistency
+                 plot_forecasted_election_distribution(
+                     elections_model, 
+                     pred_dir, 
+                     date_mode=args.prediction_date_mode, 
+                     # Use clear filename based on mode
+                     filename=f"forecast_distribution_{args.prediction_date_mode}.png"
+                 )
             except Exception as plot_err:
                  print(f"Warning: Failed to generate forecast distribution plot: {plot_err}")
                  if args.debug:
@@ -1058,6 +1094,14 @@ def main(args=None):
         type=int, 
         default=1000, 
         help="Number of posterior samples to use for seat prediction simulation (0 to disable)"
+    )
+
+    # --- Prediction Date Mode Argument --- 
+    pred_group.add_argument(
+        "--prediction-date-mode",
+        choices=['election_day', 'last_poll', 'today'],
+        default='election_day',
+        help="Specify which date's latent popularity to use for prediction (election day, last poll, or today). Default: election_day"
     )
 
     # --- Cross-validation Specific Arguments ---

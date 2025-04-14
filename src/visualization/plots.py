@@ -670,93 +670,158 @@ def plot_house_effects_heatmap(elections_model, output_dir):
         import traceback
         traceback.print_exc()
 
-def plot_forecasted_election_distribution(elections_model: 'ElectionsFacade', output_dir: str):
+def plot_forecasted_election_distribution(
+    elections_model: 'ElectionsFacade',
+    output_dir: str,
+    date_mode: str = "election_day", # Added date_mode
+    filename: str = "forecast_distribution_forestplot.png" # Changed default filename
+):
     """
-    Generates and saves a plot visualizing the posterior distribution
-    of the inferred latent popularity on election day using boxenplots.
+    Generates a forest plot showing the posterior distribution of predicted vote shares.
+    Uses the date corresponding to the specified date_mode.
 
-    Parameters:
-    ----------
-    elections_model : ElectionsFacade
-        The facade object containing the dataset and inference trace.
-    output_dir : str
-        The directory where the plot will be saved.
+    Args:
+        elections_model (ElectionsFacade): The facade instance.
+        output_dir (str): Directory to save the plot.
+        date_mode (str): Mode used for popularity extraction ('election_day', 'last_poll', 'today').
+        filename (str): Filename for saving the plot.
     """
-    print(f"Generating election day latent popularity distribution plot in: {output_dir}")
-    os.makedirs(output_dir, exist_ok=True)
-
-    # 1. Get posterior samples of latent popularity at election day
-    # This now calls the Facade method, which handles trace passing correctly
-    latent_pop_samples = elections_model.get_election_day_latent_popularity()
-
-    if latent_pop_samples is None:
-        print("Error: Failed to get latent popularity samples for election day. Skipping plot.")
+    if elections_model is None or elections_model.trace is None:
+        print("Model or trace not available. Cannot generate forecast distribution plot.")
         return
 
-    # 2. Convert to DataFrame for easier plotting with Seaborn
-    # Ensure latent_pop_samples is an xarray.DataArray
-    if not isinstance(latent_pop_samples, xr.DataArray):
-         print(f"Error: Expected DataArray from get_election_day_latent_popularity, got {type(latent_pop_samples)}. Skipping plot.")
-         return
-
-    # Use the name of the DataArray for the value column
-    value_col_name = latent_pop_samples.name if latent_pop_samples.name else 'latent_popularity'
-    latent_pop_df = latent_pop_samples.to_dataframe(name=value_col_name).reset_index()
-
-    # Rename the value column for clarity if it was the default
-    if value_col_name == 'latent_popularity' and 'latent_popularity' in latent_pop_df.columns:
-        latent_pop_df = latent_pop_df.rename(columns={'latent_popularity': 'latent_proportion'})
-        value_col_name = 'latent_proportion' # Update var name if renamed
-    elif value_col_name not in latent_pop_df.columns:
-         print(f"Error: Value column '{value_col_name}' not found after converting to DataFrame. Columns: {latent_pop_df.columns}")
-         return
-
-    # Check for NaNs (unlikely for latent pop, but good practice)
-    nan_count = latent_pop_df[value_col_name].isna().sum()
-    if nan_count > 0:
-        print(f"Warning: Plotting data contains {nan_count} NaN values. These will be excluded.")
-        latent_pop_df = latent_pop_df.dropna(subset=[value_col_name])
-        if latent_pop_df.empty:
-             print("Error: All latent popularity samples were NaN. Cannot generate plot.")
-             return
-
-    # 3. Create the plot using Seaborn boxenplot
-    plt.figure(figsize=(12, 7))
-
-    # Order parties by median latent proportion (descending)
-    # Use the correct value column name for grouping
-    party_order = latent_pop_df.groupby('parties_complete')[value_col_name].median().sort_values(ascending=False).index
-
-    # Use defined party colors
-    palette = {party: _get_party_color(party) for party in party_order}
-
-    sns.boxenplot(
-        data=latent_pop_df,
-        x='parties_complete',
-        y=value_col_name, # Use the correct value column name
-        order=party_order,
-        palette=palette,
-    )
-
-    plt.title(f'Distribution of Inferred Latent Popularity on Election Day ({elections_model.election_date})')
-    plt.xlabel('Political Party / Alliance')
-    plt.ylabel('Inferred Latent Proportion')
-    plt.xticks(rotation=45, ha='right')
-    plt.ylim(0, None)
-    plt.grid(True, which='major', axis='y', linestyle='--', linewidth=0.5, alpha=0.7)
-    plt.tight_layout()
-
-    # 4. Save the plot
-    plot_filename = os.path.join(output_dir, f"election_day_latent_distribution_{elections_model.election_date}.png")
+    fig_obj = None # Initialize fig_obj
     try:
-        plt.savefig(plot_filename, dpi=150)
-        print(f"Saved plot: {plot_filename}")
-    except Exception as e:
-        print(f"Error saving latent distribution plot: {e}")
-    finally:
-        plt.close()
+        print(f"Generating latent popularity distribution plot ({date_mode}) in: {output_dir}")
+        os.makedirs(output_dir, exist_ok=True)
 
-    print("Finished generating election day latent distribution plot.")
+        # Use the NEW method, specifying the desired date_mode
+        target_pop_dist = elections_model.get_latent_popularity(date_mode=date_mode)
+
+        # Determine the actual date used for the title
+        plot_date = None
+        if target_pop_dist is not None and 'calendar_time' in target_pop_dist.coords:
+             try:
+                 # Extract the actual date selected by get_latent_popularity
+                 plot_date = pd.Timestamp(target_pop_dist['calendar_time'].item()).normalize()
+             except Exception as e:
+                 print(f"Warning: Could not extract exact date from popularity data, using mode logic. Error: {e}")
+
+        # Fallback or explicit date determination based on mode if extraction failed
+        if plot_date is None:
+            if date_mode == 'election_day':
+                plot_date = pd.Timestamp(elections_model.election_date).normalize()
+            elif date_mode == 'last_poll' and elections_model.dataset is not None:
+                try:
+                    plot_date = elections_model.dataset.polls_train['date'].max().normalize()
+                except Exception: # Handle case where polls_train might be empty or date column missing
+                    print("Warning: Could not determine last poll date from dataset.")
+                    plot_date = pd.Timestamp("today").normalize() # Fallback
+            else: # Default to today if mode is 'today' or last_poll failed
+                plot_date = pd.Timestamp("today").normalize()
+
+        if target_pop_dist is None:
+            print(f"Error: Could not retrieve latent popularity from the model for mode '{date_mode}'.")
+            # Create an empty placeholder plot
+            fig, ax = plt.subplots(figsize=(10, 6))
+            ax.text(0.5, 0.5, f"Could not retrieve latent popularity data for '{date_mode}'.",
+                    ha='center', va='center', fontsize=12, transform=ax.transAxes)
+            # Use determined plot_date in title if available
+            title_date_str = plot_date.strftime('%Y-%m-%d') if plot_date else date_mode
+            ax.set_title(f"Forecast Distribution Unavailable ({title_date_str})")
+            plot_filename = os.path.join(output_dir, filename.replace(".png", "_unavailable.png"))
+            plt.savefig(plot_filename)
+            plt.close(fig)
+            return
+
+        # Determine party colors
+        # Use coordinate directly, assuming it's clean now. If not, needs preprocessing.
+        party_coord_name = next((name for name in ['parties_complete', 'party', 'parties'] if name in target_pop_dist.coords), None)
+        if party_coord_name is None:
+             print("Error: Could not find party coordinate in popularity data.")
+             # Handle error appropriately, maybe create error plot as below
+             return
+             
+        parties = target_pop_dist[party_coord_name].values
+        colors = [_get_party_color(p) for p in parties] # Assuming _get_party_color exists
+
+        # --- Prepare data dictionary for plotting --- 
+        # Re-implementing dictionary creation
+        plot_data_dict = {}
+        try:
+            # Reshape data to have samples dimension
+            reshaped_data = target_pop_dist.stack(sample=("chain", "draw"))
+            for party in parties:
+                 # Extract samples as numpy array
+                 party_data = reshaped_data.sel({party_coord_name: party}).values
+                 plot_data_dict[str(party)] = party_data # Key = party name, Value = samples array
+            
+            # Removed the conversion to Dataset step
+            # plot_dataset = az.convert_to_dataset(plot_data_dict)
+
+        except Exception as data_prep_err:
+             print(f"Error preparing data dictionary for plot_forest: {data_prep_err}")
+             return # Exit if data prep fails
+             
+        # --- Plotting ---
+        # Pass the dictionary and explicitly specify var_names using dict keys
+        fig = az.plot_forest(
+            plot_data_dict, # Pass the dictionary
+            var_names=list(plot_data_dict.keys()), # Explicitly use dict keys as var_names
+            hdi_prob=0.94,
+            figsize=(10, max(6, len(parties)*0.6)), # Adjusted height based on num parties
+            model_names=[""], # Prevent default model name prefix
+            combined=True # Combine chains for cleaner plot
+        )
+
+        # Enhance the plot
+        if isinstance(fig, np.ndarray):
+            main_ax = fig.ravel()[0]
+            fig_obj = main_ax.figure
+        else:
+            fig_obj = fig # az.plot_forest returns a Figure object directly now
+            main_ax = fig_obj.axes[0]
+
+        # Use determined plot_date in the title
+        title_date_str = plot_date.strftime('%Y-%m-%d')
+        mode_str = date_mode.replace("_", " ").title()
+        fig_obj.suptitle(f'Posterior Vote Shares ({mode_str}: {title_date_str})', fontsize=16)
+        main_ax.set_xlabel("Predicted Vote Share", fontsize=12)
+        main_ax.xaxis.set_major_formatter(mtick.PercentFormatter(xmax=1.0))
+        # Remove manual y-axis label setting - let plot_forest handle it
+        # try:
+        #      main_ax.set_yticks(np.arange(len(parties)))
+        #      main_ax.set_yticklabels(parties)
+        # except Exception as e:
+        #      print(f"Warning: Could not manually set y-tick labels: {e}")
+             
+        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+
+        # Save the plot using the provided filename
+        plot_filename = os.path.join(output_dir, filename)
+        plt.savefig(plot_filename)
+        print(f"Forecast distribution plot saved to {plot_filename}")
+        plt.close(fig_obj)
+
+    except Exception as e:
+        print(f"Error generating forecast distribution plot: {e}")
+        import traceback
+        traceback.print_exc()
+        # Optionally create an error plot
+        if fig_obj is not None: plt.close(fig_obj) # Close if figure exists
+        try:
+            fig, ax = plt.subplots(figsize=(10, 6))
+            ax.text(0.5, 0.5, f"Error generating plot:\n{e}", 
+                    ha='center', va='center', fontsize=10, wrap=True)
+            ax.set_title(f"Forecast Distribution Error ({date_mode.replace('_',' ').title()})") # Use date_mode in error title
+            plot_filename = os.path.join(output_dir, filename.replace(".png", "_error.png")) # Use provided filename base
+            plt.savefig(plot_filename)
+            plt.close(fig)
+        except Exception as inner_e:
+             print(f"Error creating error placeholder plot: {inner_e}")
+
+    finally:
+        if fig_obj is not None: plt.close(fig_obj)
 
 def plot_reliability_diagram(calibration_data: Dict[str, np.ndarray], title: str, filename: str):
     """
@@ -996,80 +1061,98 @@ def plot_latent_trend_since_last_election(elections_model: 'ElectionsFacade', ou
     print(f"Latent trend plot saved to {filename}")
     plt.close(fig) 
 
-def plot_seat_distribution_histograms(seats_df: pd.DataFrame, output_dir: str, filename="seat_distribution_histograms.png"):
+def plot_seat_distribution_histograms(seats_df: pd.DataFrame, output_dir: str, 
+                                  date_mode: str = "election_day", 
+                                  filename="seat_distribution_histograms.png"):
     """
-    Plots histograms of the predicted seat distribution for each party.
-
-    Args:
-        seats_df (pd.DataFrame): DataFrame where rows are samples and columns are parties 
-                                 (plus potentially 'sample_index').
-        output_dir (str): Directory to save the plot.
-        filename (str): Name for the output image file.
-    """
-    if seats_df is None or seats_df.empty:
-        print("Seat distribution DataFrame is empty, skipping histogram plot.")
-        return
-
-    # Identify party columns (exclude 'sample_index' if present)
-    party_cols = [col for col in seats_df.columns if col != 'sample_index']
-    if not party_cols:
-        print("No party columns found in DataFrame, skipping histogram plot.")
-        return
-
-    num_parties = len(party_cols)
-    # Determine grid size (prefer wider than tall)
-    ncols = int(np.ceil(np.sqrt(num_parties * 1.5))) # Heuristic for wider grid
-    nrows = int(np.ceil(num_parties / ncols))
-
-    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(ncols * 4, nrows * 3), squeeze=False)
-    axes = axes.flatten() # Flatten to easily iterate
-
-    plot_count = 0
-    for i, party in enumerate(sorted(party_cols)): # Plot alphabetically
-        ax = axes[i]
-        party_seats = seats_df[party]
-        
-        # Determine reasonable bins - max observed seats + 1 edge
-        max_seats = party_seats.max()
-        if max_seats < 1:
-             # Handle case where a party got 0 seats in all samples
-             bins = [0, 1]
-             ax.hist(party_seats, bins=bins, density=True, alpha=0.7, label=f'Mean: {party_seats.mean():.1f}')
-        else:
-             bins = range(int(max_seats) + 2) # Bins 0, 1, ..., max_seats+1
-             # Plot histogram
-             ax.hist(party_seats, bins=bins, density=True, alpha=0.7, align='left', label=f'Mean: {party_seats.mean():.1f}')
-
-        # Optional: Overlay Kernel Density Estimate (KDE)
-        # try:
-        #     sns.kdeplot(party_seats, ax=ax, warn_singular=False) # warn_singular handles cases with no variance
-        # except Exception as kde_err:
-        #     print(f"Note: Could not generate KDE for {party}: {kde_err}") # Non-critical
-
-        ax.set_title(party)
-        ax.set_xlabel("Seats")
-        ax.set_ylabel("Density")
-        ax.legend()
-        ax.grid(axis='y', linestyle='--', alpha=0.7)
-        # Ensure x-axis ticks are integers
-        ax.xaxis.set_major_locator(plt.MaxNLocator(integer=True))
-        # Set x-limits for better comparison, maybe 0 to max+1?
-        if max_seats >= 0:
-             ax.set_xlim(-0.5, max_seats + 1.5)
-
-        plot_count += 1
-
-    # Hide unused subplots
-    for j in range(plot_count, len(axes)):
-        axes[j].set_visible(False)
-
-    fig.suptitle('Distribution of Predicted Seats per Party (Posterior Samples)', fontsize=16)
-    plt.tight_layout(rect=[0, 0.03, 1, 0.95]) # Adjust layout to prevent title overlap
+    Plots histograms for the predicted seat distribution of each party.
     
-    output_path = os.path.join(output_dir, filename)
+    Args:
+        seats_df (pd.DataFrame): DataFrame with posterior samples of predicted seats for each party.
+                                Should contain columns for each party and optionally 'sample_index'.
+        output_dir (str): Directory to save the plot.
+        date_mode (str): The mode used for popularity prediction (e.g., 'election_day', 'last_poll'), 
+                         used for the plot title.
+        filename (str): The name of the file to save the plot as.
+    """
+    fig = None # Initialize fig to None
     try:
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Identify party columns (excluding potential sample_index)
+        party_cols = [col for col in seats_df.columns if col != 'sample_index']
+        if not party_cols:
+            print("Warning: No party columns found in seats_df. Cannot plot seat histograms.")
+            return
+            
+        # Sort parties by median seats (descending) for consistent plotting order
+        median_seats = seats_df[party_cols].median().sort_values(ascending=False)
+        ordered_parties = median_seats.index.tolist()
+        
+        # Determine number of rows/cols for subplot grid
+        n_parties = len(ordered_parties)
+        n_cols = 3 
+        n_rows = int(np.ceil(n_parties / n_cols))
+        
+        # Create subplots
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 4 * n_rows), sharey=False)
+        axes = axes.flatten() # Flatten for easy iteration
+        
+        for i, party in enumerate(ordered_parties):
+            if i >= len(axes):
+                break # Avoid index error if more parties than subplots (shouldn't happen with ceil)
+                
+            ax = axes[i]
+            party_seats = seats_df[party]
+            
+            # Determine appropriate bins based on data range
+            min_seats = int(party_seats.min())
+            max_seats = int(party_seats.max())
+            # Use discrete bins for integer seat counts
+            bins = np.arange(min_seats, max_seats + 2) - 0.5 # Center bins on integers
+            
+            # Plot histogram
+            sns.histplot(party_seats, bins=bins, ax=ax, kde=False, color=_get_party_color(party))
+            
+            # Add median line
+            median_val = median_seats[party]
+            ax.axvline(median_val, color='black', linestyle='--', label=f'Median: {median_val:.0f}')
+            
+            ax.set_title(party)
+            ax.set_xlabel("Predicted Seats")
+            ax.set_ylabel("Frequency")
+            ax.legend()
+            ax.grid(axis='y', linestyle='--', alpha=0.7)
+            # Ensure x-axis shows integer ticks if range is reasonable
+            if max_seats - min_seats < 20: # Arbitrary threshold for showing all int ticks
+                 ax.xaxis.set_major_locator(mtick.MaxNLocator(integer=True))
+
+        # Hide unused subplots
+        for j in range(i + 1, len(axes)):
+            fig.delaxes(axes[j])
+        
+        # Add overall title
+        fig.suptitle(
+            f'Posterior Distribution of Predicted Seats (Based on {date_mode.replace("_", " ").title()} Popularity)',
+            fontsize=16
+        )
+        plt.tight_layout(rect=[0, 0.03, 1, 0.95]) # Adjust layout for suptitle
+        
+        # Save the figure
+        output_path = os.path.join(output_dir, filename)
         plt.savefig(output_path)
         print(f"Saved seat distribution histograms to {output_path}")
+        plt.close(fig)
+
     except Exception as e:
-        print(f"Error saving seat distribution histogram plot: {e}")
-    plt.close(fig) 
+        print(f"Error generating seat distribution histograms: {e}")
+        if fig is not None: plt.close(fig)
+        # Optionally create a placeholder error plot
+        try:
+            fig_err, ax_err = plt.subplots()
+            ax_err.text(0.5, 0.5, f"Error generating histograms:\n{e}", ha='center', va='center')
+            output_path = os.path.join(output_dir, filename.replace(".png", "_error.png"))
+            plt.savefig(output_path)
+            plt.close(fig_err)
+        except Exception as inner_e:
+            print(f"Failed to create error placeholder plot: {inner_e}") 

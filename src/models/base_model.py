@@ -1,4 +1,5 @@
 import abc
+from abc import abstractmethod
 from typing import Dict, List, Tuple, Optional
 
 import arviz
@@ -6,6 +7,7 @@ import arviz as az
 import pandas as pd
 import pymc as pm
 import numpy as np
+import xarray as xr
 
 from src.data.dataset import ElectionDataset
 
@@ -237,16 +239,16 @@ class BaseElectionModel(abc.ABC):
                     trace = pm.sample(
                         **sampler_kwargs
                     )
-                    print(f"DEBUG (BaseModel): Sampling attempted.")
+                    # print(f"DEBUG (BaseModel): Sampling attempted.")
                 except Exception as e:
                     # Keep general exception handling
                     print(f"ERROR: Exception during posterior sampling: {e}")
                     self.trace = None
                     trace = None
-                    print(f"DEBUG (BaseModel): Returning None trace due to exception.")
+                    # print(f"DEBUG (BaseModel): Returning None trace due to exception.")
                     return prior_checks, None, None
 
-                print(f"DEBUG (BaseModel): Type of trace returned by pm.sample: {type(trace)}")
+                # print(f"DEBUG (BaseModel): Type of trace returned by pm.sample: {type(trace)}")
                 if not isinstance(trace, az.InferenceData):
                     print("Error: pm.sample did not return InferenceData as expected.")
                     return prior_checks, None, None # Return None trace
@@ -254,7 +256,7 @@ class BaseElectionModel(abc.ABC):
                 # Check if variables were actually saved
                 if "posterior" in trace:
                     saved_vars = list(trace.posterior.data_vars)
-                    print(f"DEBUG (BaseModel): Variables actually saved in posterior: {sorted(saved_vars)}")
+                    # print(f"DEBUG (BaseModel): Variables actually saved in posterior: {sorted(saved_vars)}")
                     missing_vars = set(vars_actually_in_model) - set(saved_vars)
                     if missing_vars:
                          print(f"Warning: The following requested deterministics were NOT saved in posterior: {missing_vars}")
@@ -278,7 +280,7 @@ class BaseElectionModel(abc.ABC):
                             print(f"WARNING: {max_depths} samples ({pct_max_depth:.1%}) reached maximum tree depth")
 
                 # Debug print before returning
-                print(f"DEBUG (BaseModel): Returning trace of type: {type(trace)}")
+                # print(f"DEBUG (BaseModel): Returning trace of type: {type(trace)}")
                 return prior_checks, trace, None # Post checks TBD / maybe sampled later
 
             except Exception as e:
@@ -286,7 +288,7 @@ class BaseElectionModel(abc.ABC):
                 print(f"ERROR: Exception during posterior sampling: {e}")
                 self.trace = None
                 trace = None
-                print(f"DEBUG (BaseModel): Returning None trace due to exception.")
+                # print(f"DEBUG (BaseModel): Returning None trace due to exception.")
                 return prior_checks, None, None
 
     # --- Prediction/Nowcasting methods might be specific to models ---
@@ -305,3 +307,19 @@ class BaseElectionModel(abc.ABC):
 
     # def predict_latent_trajectory(self, idata, start_date, end_date):
     #     raise NotImplementedError("Latent trajectory prediction needs to be implemented by the specific model subclass.") 
+
+    @abstractmethod
+    def get_latent_popularity(self, idata: az.InferenceData, target_date: pd.Timestamp) -> xr.DataArray:
+        """
+        Abstract method to extract the posterior distribution of latent popularity
+        at a specific target date.
+
+        Args:
+            idata (az.InferenceData): The InferenceData object containing the posterior samples.
+            target_date (pd.Timestamp): The specific date for which to extract the popularity.
+
+        Returns:
+            xr.DataArray: Posterior samples of latent popularity at the target_date.
+                          Dimensions should typically include (chain, draw, parties).
+        """
+        pass 

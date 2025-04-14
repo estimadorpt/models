@@ -57,6 +57,14 @@ def _consolidate_tracking_polls(df, party_cols, rolling_window_days=3):
     tracking_polls = df[is_tracking].copy()
     non_tracking_polls = df[~is_tracking].copy()
 
+    # --- DEBUG: Dates Before Consolidation ---
+    if not tracking_polls.empty:
+        unique_dates_before = pd.to_datetime(tracking_polls['date']).dt.date.unique()
+        print(f"DEBUG LOADER: Unique tracking poll dates BEFORE consolidation (count={len(unique_dates_before)}):\n{sorted(unique_dates_before)}")
+    else:
+        print("DEBUG LOADER: No tracking polls found before consolidation step.")
+    # --- END DEBUG ---
+
     if tracking_polls.empty:
         print("No tracking polls identified based on 'Stratification' column.")
         return df # Return original df if no tracking polls
@@ -164,6 +172,22 @@ def _consolidate_tracking_polls(df, party_cols, rolling_window_days=3):
 
     # Re-sort by date
     final_df = final_df.sort_values('date').reset_index(drop=True)
+
+    # --- DEBUG: Dates After Consolidation ---
+    if not final_df.empty:
+        # Identify which rows were originally tracking polls (either consolidated or kept as is)
+        # This requires checking if the poll was in the original tracking_polls DataFrame index or if it's a new consolidated row
+        # A simpler proxy: check if the final_df row came from consolidated_df or the original tracking_polls if group size was 1
+        
+        # Let's just print unique dates of the tracking poll subset in the final dataframe for simplicity
+        final_tracking_mask = final_df['Stratification'].astype(str).str.contains("Tracking poll", na=False, case=False) | \
+                              final_df['Stratification'].astype(str).str.contains("Consolidated", na=False, case=False)
+        final_tracking_dates = final_df.loc[final_tracking_mask, 'date']
+        unique_dates_after = pd.to_datetime(final_tracking_dates).dt.date.unique()
+        print(f"DEBUG LOADER: Unique tracking poll dates AFTER consolidation (count={len(unique_dates_after)}):\n{sorted(unique_dates_after)}")
+    else:
+        print("DEBUG LOADER: Final dataframe is empty after consolidation step.")
+    # --- END DEBUG ---
 
     # Drop the Stratification column now if it's no longer needed downstream
     # final_df = final_df.drop(columns=['Stratification'])

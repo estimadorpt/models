@@ -217,6 +217,39 @@ class ElectionsFacade:
         # Initialize self.trace to None before potentially assigning the enhanced version
         self.trace = None 
         
+        # print(f"DEBUG (BaseModel): Returning trace of type: {type(trace_from_sample)}")
+
+        # --- Debug trace_from_sample --- 
+        if trace_from_sample is not None:
+            # print("DEBUG SAMPLE: Inspecting trace_from_sample coordinates...")
+            if hasattr(trace_from_sample, 'posterior') and hasattr(trace_from_sample.posterior, 'coords'):
+                 # print(f"DEBUG SAMPLE: Coords in trace_from_sample.posterior: {list(trace_from_sample.posterior.coords.keys())}")
+                 if 'calendar_time' in trace_from_sample.posterior.coords:
+                      # print("DEBUG SAMPLE: 'calendar_time' FOUND in posterior coords.")
+                      pass
+                 else:
+                      # print("DEBUG SAMPLE: 'calendar_time' NOT found in posterior coords.")
+                      pass
+            else:
+                 # print("DEBUG SAMPLE: No posterior or coords found in trace_from_sample.")
+                 pass
+                 
+            if hasattr(trace_from_sample, 'constant_data') and hasattr(trace_from_sample.constant_data, 'coords'):
+                 # print(f"DEBUG SAMPLE: Coords in trace_from_sample.constant_data: {list(trace_from_sample.constant_data.coords.keys())}")
+                 if 'calendar_time' in trace_from_sample.constant_data.coords:
+                      # print("DEBUG SAMPLE: 'calendar_time' FOUND in constant_data coords.")
+                      pass
+                 else:
+                      # print("DEBUG SAMPLE: 'calendar_time' NOT found in constant_data coords.")
+                      pass
+            else:
+                 # print("DEBUG SAMPLE: No constant_data or coords found in trace_from_sample.")
+                 pass
+        else:
+             # print("DEBUG SAMPLE: trace_from_sample is None.")
+             pass
+        # --- End Debug trace_from_sample --- 
+
         # --- Explicitly construct InferenceData with observed_data --- #
         # Check if trace_from_sample was generated and has posterior
         if trace_from_sample is not None and hasattr(trace_from_sample, 'posterior'):
@@ -255,6 +288,7 @@ class ElectionsFacade:
                          observed_data=observed_data_group,
                          sample_stats=getattr(trace_from_sample, 'sample_stats', None),
                          prior=getattr(trace_from_sample, 'prior', None), 
+                         constant_data=getattr(trace_from_sample, 'constant_data', None)
                      )
                      self.trace = final_idata # Assign the final, enhanced object to self.trace
                      print("Final InferenceData constructed successfully.")
@@ -272,6 +306,24 @@ class ElectionsFacade:
              print("Warning: No trace or posterior found after sampling. Cannot add observed_data.")
              self.trace = trace_from_sample # Assign whatever was returned
         # --- End Construct InferenceData --- #
+        
+        # --- Debug loaded idata --- 
+        if self.trace is not None and hasattr(self.trace, 'coords') and self.trace.coords is not None:
+            if 'calendar_time' in self.trace.coords:
+                 loaded_cal_time = self.trace.coords['calendar_time'].values
+                 # print(f"DEBUG LOAD: Type of loaded calendar_time: {type(loaded_cal_time)}")
+                 # if hasattr(loaded_cal_time, 'dtype'): print(f"DEBUG LOAD: Dtype of loaded calendar_time: {loaded_cal_time.dtype}")
+                 # try:
+                 #      print(f"DEBUG LOAD: Last 5 loaded calendar_time coords: {loaded_cal_time[-5:]}")
+                 # except Exception as e:
+                 #      print(f"DEBUG LOAD: Error printing loaded coords: {e}")
+            else:
+                 # print("DEBUG LOAD: 'calendar_time' not found in loaded coords.")
+                 pass
+        else:
+             # print("DEBUG LOAD: No trace or coords found after loading.")
+             pass
+        # --- End debug --- 
         
         # Return the objects stored in the facade instance attributes
         return self.prior, self.trace, self.posterior
@@ -324,6 +376,30 @@ class ElectionsFacade:
 
             if hasattr(self, "trace") and self.trace is not None:
                 print(f"Saving trace (posterior) to: {trace_path}") # Removed flush
+                
+                # --- Debug coordinates before saving (Checking specific groups) --- 
+                print("DEBUG SAVE: Inspecting trace coords before saving...")
+                coord_found_save = False
+                if hasattr(self.trace, 'posterior') and hasattr(self.trace.posterior, 'coords') and 'calendar_time' in self.trace.posterior.coords:
+                     print("  DEBUG SAVE: calendar_time FOUND in posterior.coords")
+                     coord_found_save = True
+                     # Optionally print type/value again if needed
+                     # pre_save_coords = self.trace.posterior.coords['calendar_time'].values
+                     # print(f"  DEBUG SAVE: Dtype: {pre_save_coords.dtype}")
+                else:
+                     print("  DEBUG SAVE: calendar_time NOT found in posterior.coords")
+                     
+                if hasattr(self.trace, 'constant_data') and hasattr(self.trace.constant_data, 'coords') and 'calendar_time' in self.trace.constant_data.coords:
+                     print("  DEBUG SAVE: calendar_time FOUND in constant_data.coords")
+                     coord_found_save = True
+                     # Optionally print type/value again if needed
+                else:
+                     print("  DEBUG SAVE: calendar_time NOT found in constant_data.coords")
+                     
+                if not coord_found_save:
+                     print("  DEBUG SAVE: calendar_time NOT found in posterior or constant_data coords before saving.")
+                # --- End debug --- 
+                
                 arviz.to_zarr(self.trace, trace_path, mode='w')
                 results_saved = True
             else:
@@ -1182,26 +1258,82 @@ class ElectionsFacade:
 
         print("Diagnostic plot and summary generation complete.")
 
-    def get_election_day_latent_popularity(self):
+    def get_latent_popularity(self, date_mode: str = 'election_day'):
         """
         Extracts the posterior distribution of the latent popularity 
-        specifically at the target election day (countdown=0).
+        at a specified date (election day, last poll date, or today).
+
+        Args:
+            date_mode (str): Determines the target date for popularity extraction.
+                             Options: 'election_day', 'last_poll', 'today'.
+                             Defaults to 'election_day'.
 
         Returns:
-        --------
-        xr.DataArray or None:
+            xr.DataArray or None:
             An xarray DataArray containing the posterior samples of latent popularity
-            at countdown=0 for the target election. 
+            at the specified date. 
             Dimensions: (chain, draw, parties_complete).
-            Returns None if the necessary data is not available in the trace.
+            Returns None if the necessary data is not available in the trace or
+            the target date cannot be determined.
         """
         if self.trace is None:
             print("Error: Trace object not found. Cannot extract latent popularity.")
             return None
-        
-        # Delegate to the model instance if the method exists
-        # Pass the Facade's loaded trace (self.trace) to the instance method
-        return self.model_instance.get_election_day_latent_popularity(idata=self.trace)
+        if self.dataset is None:
+            print("Error: Dataset not found. Cannot determine target date.")
+            return None
+
+        # Determine the target date based on date_mode
+        target_date = None
+        today = pd.Timestamp.now().normalize() # Get today's date at midnight
+
+        if date_mode == 'election_day':
+            target_date = pd.to_datetime(self.election_date)
+            print(f"Extracting latent popularity for target election date: {target_date.date()}")
+        elif date_mode == 'last_poll':
+            last_poll_date = None
+            # Check polls_train
+            last_poll_date_train = None
+            if self.dataset.polls_train is not None and not self.dataset.polls_train.empty:
+                last_poll_date_train = self.dataset.polls_train['date'].max()
+            
+            # Check polls_test
+            last_poll_date_test = None
+            if self.dataset.polls_test is not None and not self.dataset.polls_test.empty:
+                last_poll_date_test = self.dataset.polls_test['date'].max()
+
+            # Determine the overall last poll date
+            if last_poll_date_train and last_poll_date_test:
+                last_poll_date = max(last_poll_date_train, last_poll_date_test)
+            elif last_poll_date_train:
+                last_poll_date = last_poll_date_train
+            elif last_poll_date_test:
+                last_poll_date = last_poll_date_test
+            
+            # Set the target date if a last poll date was found
+            if last_poll_date:
+                target_date = last_poll_date
+                print(f"Extracting latent popularity for last poll date: {target_date.date()}")
+            else:
+                print("Error: Could not determine last poll date from polls_train or polls_test.")
+                return None
+        elif date_mode == 'today':
+            target_date = today
+            print(f"Extracting latent popularity for current date (today): {target_date.date()}")
+        else:
+            print(f"Error: Invalid date_mode '{date_mode}'. Choose 'election_day', 'last_poll', or 'today'.")
+            return None
+
+        if target_date is None:
+            print("Error: Target date could not be determined.")
+            return None
+
+        # Delegate to the model instance, passing the determined target_date
+        if self.model_instance is None or not hasattr(self.model_instance, 'get_latent_popularity'):
+             print("Error: Model instance does not have the 'get_latent_popularity' method.")
+             return None
+
+        return self.model_instance.get_latent_popularity(idata=self.trace, target_date=target_date)
 
     # TODO: Implement post-hoc adjustment for Blank/Null votes 
     #       when generating final forecasts (e.g., for seat projections). 

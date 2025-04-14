@@ -105,6 +105,9 @@ class DynamicGPElectionModel(BaseElectionModel):
         ).unique().sort_values()
 
         min_date = unique_dates.min()
+        # --- DEBUG: Final Calendar Time Coordinate Dates ---
+        # print(f"DEBUG MODEL: Final unique dates for calendar_time coordinate (count={len(unique_dates)}):\n{sorted(unique_dates.date)}")
+        # --- END DEBUG ---
         calendar_time_numeric = (unique_dates - min_date).days.values
         self.calendar_time_numeric = calendar_time_numeric
         date_to_calendar_index = {date: i for i, date in enumerate(unique_dates)}
@@ -179,8 +182,8 @@ class DynamicGPElectionModel(BaseElectionModel):
         print("\n=== MODEL COORDINATES ===")
         for key, value in COORDS.items():
             print(f"{key}: length={len(value)}")
-        print(f"Calendar time range: {COORDS['calendar_time'][0]} to {COORDS['calendar_time'][-1]}")
-        print(f"Number of election cycles: {len(COORDS['election_cycles'])}")
+        # print(f"Calendar time range: {COORDS['calendar_time'][0]} to {COORDS['calendar_time'][-1]}") # Keep basic info
+        # print(f"Number of election cycles: {len(COORDS['election_cycles'])}")
 
         # Return only 10 values, excluding days_to_election_numeric_coord
         return (pollster_id, calendar_time_poll_id, self.calendar_time_result_id,
@@ -535,8 +538,38 @@ class DynamicGPElectionModel(BaseElectionModel):
         # 1. Ensure Posterior Predictive samples exist
         if "posterior_predictive" not in idata:
             print("Posterior predictive samples not found in idata. Running posterior_predictive_check...")
+            
+            # --- Debug before PPC --- 
+            print("DEBUG PPC (Before): Inspecting idata coords...")
+            if hasattr(idata, 'posterior') and hasattr(idata.posterior, 'coords'):
+                 print(f"  Posterior coords: {list(idata.posterior.coords.keys())}")
+                 if 'calendar_time' in idata.posterior.coords: print("    calendar_time FOUND in posterior")
+                 else: print("    calendar_time NOT found in posterior")
+            else: print("  No posterior or coords found.")
+            if hasattr(idata, 'constant_data') and hasattr(idata.constant_data, 'coords'):
+                 print(f"  Constant data coords: {list(idata.constant_data.coords.keys())}")
+                 if 'calendar_time' in idata.constant_data.coords: print("    calendar_time FOUND in constant_data")
+                 else: print("    calendar_time NOT found in constant_data")
+            else: print("  No constant_data or coords found.")
+            # --- End Debug --- 
+            
             try:
                 self.posterior_predictive_check(idata, extend_idata=True) # Modifies idata in-place
+                
+                # --- Debug after PPC --- 
+                print("DEBUG PPC (After): Inspecting idata coords...")
+                if hasattr(idata, 'posterior') and hasattr(idata.posterior, 'coords'):
+                     print(f"  Posterior coords: {list(idata.posterior.coords.keys())}")
+                     if 'calendar_time' in idata.posterior.coords: print("    calendar_time FOUND in posterior")
+                     else: print("    calendar_time NOT found in posterior")
+                else: print("  No posterior or coords found.")
+                if hasattr(idata, 'constant_data') and hasattr(idata.constant_data, 'coords'):
+                     print(f"  Constant data coords: {list(idata.constant_data.coords.keys())}")
+                     if 'calendar_time' in idata.constant_data.coords: print("    calendar_time FOUND in constant_data")
+                     else: print("    calendar_time NOT found in constant_data")
+                else: print("  No constant_data or coords found.")
+                # --- End Debug --- 
+                
             except Exception as e:
                  raise ValueError(f"Failed to generate posterior predictive samples: {e}")
 
@@ -647,7 +680,8 @@ class DynamicGPElectionModel(BaseElectionModel):
             metrics["result_rps"] = np.nan
 
         print("--- End Debugging Metric Calculation Inputs ---") # DEBUG
-        return metrics
+        # Return both metrics and the potentially modified idata object
+        return metrics, idata
 
 
     def predict_latent_trajectory(self, idata: az.InferenceData, start_date: pd.Timestamp, end_date: pd.Timestamp) -> az.InferenceData:
@@ -662,80 +696,126 @@ class DynamicGPElectionModel(BaseElectionModel):
         print("Warning: predict_history not yet implemented.")
         return az.InferenceData()
 
-    def get_election_day_latent_popularity(self, idata: Optional[az.InferenceData] = None):
+    def get_latent_popularity(self, idata: az.InferenceData, target_date: pd.Timestamp) -> xr.DataArray:
         """
-        Extracts the posterior distribution of the latent popularity 
-        specifically at the target election day.
+        Extracts the posterior distribution of latent popularity from the Dynamic GP model
+        at a specific target date.
 
-        Parameters:
-        -----------
-        idata : arviz.InferenceData, optional
-            The inference data object containing the posterior trace. 
-            If None, uses self.trace.
+        Args:
+            idata (az.InferenceData): The InferenceData object containing the posterior samples.
+            target_date (pd.Timestamp): The specific date for which to extract the popularity.
 
         Returns:
-        --------
-        xr.DataArray or None:
-            An xarray DataArray containing the posterior samples of latent popularity
-            at the target election date. 
-            Dimensions: (chain, draw, parties_complete).
-            Returns None if the necessary data or coordinates are not available.
+            xr.DataArray: Posterior samples of latent popularity at the target_date.
+                          Dimensions: (chain, draw, parties_complete).
+                          Returns None if the target date is outside the model's time range 
+                          or if the trajectory variable is missing.
         """
-        trace_to_use = idata if idata is not None else self.trace
-        
-        if trace_to_use is None or "posterior" not in trace_to_use:
-            print("Error: Posterior trace not found. Cannot extract election day latent popularity.")
-            return None
-        
-        posterior = trace_to_use.posterior
-
-        # Variable name in the Dynamic GP model
-        latent_pop_var = "latent_popularity_calendar_trajectory" 
-
-        if latent_pop_var not in posterior:
-            print(f"Error: Variable '{latent_pop_var}' not found in posterior.")
+        if idata is None or 'posterior' not in idata:
+            print("Error: Valid InferenceData with posterior samples required.")
             return None
             
-        if "calendar_time" not in posterior.coords:
-            print("Error: Coordinate 'calendar_time' not found in posterior.")
+        latent_pop_var = "latent_popularity_calendar_trajectory"
+        if latent_pop_var not in idata.posterior:
+            print(f"Error: Variable '{latent_pop_var}' not found in posterior samples.")
             return None
             
-        # Ensure the target election date is in datetime64 format
+        if not hasattr(idata.posterior, 'coords') or 'calendar_time' not in idata.posterior.coords:
+             print("Error: Coordinate 'calendar_time' not found in posterior coordinates.")
+             return None
+
+        # Ensure target_date is a Timestamp and normalized (UTC timezone naive)
+        target_date = pd.Timestamp(target_date).normalize()
+        
+        # Get calendar time coordinate values and ensure they are Timestamps
         try:
-            target_date_dt = np.datetime64(self.dataset.election_date)
-        except ValueError:
-            print(f"Error: Invalid election date format: {self.dataset.election_date}")
+            calendar_coords = idata.posterior['calendar_time']
+            # Convert to DatetimeIndex, handling potential errors
+            calendar_dates_values = pd.to_datetime(calendar_coords.values, errors='coerce').normalize()
+            # Check for conversion errors (NaT)
+            if pd.isna(calendar_dates_values).any():
+                print("Warning: Found NaT (Not a Time) values after converting calendar_time coordinate. Check coordinate data.")
+                # Optionally filter out NaT values or return error
+                # calendar_dates_values = calendar_dates_values.dropna()
+                # if calendar_dates_values.empty:
+                #     print("Error: All calendar_time values failed conversion.")
+                #     return None
+        except Exception as e:
+            print(f"Error processing calendar_time coordinate: {e}")
             return None
 
-        # Find the index of the target election date in the calendar_time coordinate
-        calendar_times = posterior["calendar_time"].values
+        # Check if target_date is within the modeled range
         try:
-            # Use np.where for robust matching, converting both to ns precision if needed
-            target_index_arr = np.where(calendar_times.astype('datetime64[ns]') == target_date_dt.astype('datetime64[ns]'))[0]
-            if len(target_index_arr) == 0:
-                 # If exact match fails, try finding the closest date (within a tolerance)
-                 time_diffs = np.abs(calendar_times - target_date_dt)
-                 closest_index = np.argmin(time_diffs)
-                 # Check if the closest date is reasonably close (e.g., within 1 day)
-                 if time_diffs[closest_index] <= np.timedelta64(1, 'D'):
-                      target_index = closest_index
-                      print(f"Warning: Exact election date {target_date_dt} not found in calendar_time. Using closest date: {calendar_times[target_index]}")
-                 else:
-                      print(f"Error: Target election date {target_date_dt} not found in calendar_time coordinate, and no close date found.")
-                      return None
-            else:
-                 target_index = target_index_arr[0] # Take the first match if multiple
-                 
-        except Exception as e:
-            print(f"Error finding election date index in calendar_time: {e}")
+            min_date = pd.Timestamp(calendar_dates_values.min()) # Ensure Timestamp type
+            max_date = pd.Timestamp(calendar_dates_values.max()) # Ensure Timestamp type
+            
+            # Perform comparison using numerical values (.value gives nanoseconds since epoch)
+            min_val = min_date.value
+            max_val = max_date.value
+            target_val = target_date.value
+            print(f"DEBUG: Comparing numerical values: min={min_val}, target={target_val}, max={max_val}")
+            if not (min_val <= target_val <= max_val):
+                print(f"Warning: Target date {target_date.date()} is outside the modeled time range \n                      ({min_date.date()} to {max_date.date()}). Returning None.")
+                return None
+        except TypeError as te:
+            print(f"TypeError during date range check: {te}. Check types of min/max/target dates.")
+            print(f"  min_date type: {type(min_date)}, max_date type: {type(max_date)}, target_date type: {type(target_date)}")
             return None
-
-        # Select the latent popularity at the target date index
-        try:
-            election_day_pop = posterior[latent_pop_var].isel(calendar_time=target_index)
-            # Ensure the output has the correct dimensions ('chain', 'draw', 'parties_complete')
-            # The isel operation should preserve these dimensions
-            return election_day_pop
         except Exception as e:
-            print(f"Error selecting data at target index {target_index}: {e}")
+             print(f"Error during date range check: {e}")
+             return None
+            
+        # Removed old manual index finding logic and associated debug/warning prints.
+ 
+        try:
+            # Ensure the coordinate is in datetime format for .sel()
+            data_array = idata.posterior[latent_pop_var]
+            
+            # --- Debug coordinate loading --- 
+            # raw_coords = data_array["calendar_time"].values
+            # print(f"DEBUG COORDS: Type of raw loaded coords: {type(raw_coords)}")
+            # if hasattr(raw_coords, 'dtype'): print(f"DEBUG COORDS: Dtype of raw loaded coords: {raw_coords.dtype}")
+            # try: 
+            #     print(f"DEBUG COORDS: Last 5 raw loaded coords: {raw_coords[-5:]}")
+            # except Exception as e:
+            #      print(f"DEBUG COORDS: Error printing raw coords: {e}")
+            # --- End debug --- 
+            
+            # Convert coordinate values to datetime64[ns] for reliable comparison
+            converted_coords = pd.to_datetime(data_array["calendar_time"].values)
+            data_array["calendar_time"] = converted_coords
+            
+            # --- Debugging .sel() --- 
+            # print(f"DEBUG SEL: Target date for .sel(): {target_date} (Type: {type(target_date)})")
+            # Check if the exact target date exists in the converted coordinates
+            target_exists = target_date in converted_coords
+            # print(f"DEBUG SEL: Does target_date exist in converted_coords? {target_exists}")
+            # if not target_exists:
+                 # Find the actual nearest date in the coordinates to understand the gap
+                 # time_diffs_debug = np.abs(converted_coords.values.astype('int64') - target_date.value)
+                 # nearest_idx_debug = np.argmin(time_diffs_debug)
+                 # actual_nearest_coord = converted_coords[nearest_idx_debug]
+                 # print(f"DEBUG SEL: Nearest coordinate found by manual check: {actual_nearest_coord}")
+            # --- End Debugging .sel() ---
+            
+            # Select data using the target date directly with nearest neighbor selection
+            target_popularity = data_array.sel(
+                calendar_time=target_date, 
+                method="nearest", 
+                tolerance=pd.Timedelta(days=1)
+            )
+            
+            # Get the actual selected coordinate value for logging
+            selected_date = pd.Timestamp(target_popularity.calendar_time.item()).normalize()
+            
+            print(f"Successfully extracted popularity for nearest date: {selected_date.date()} (target: {target_date.date()})")
+            return target_popularity
+            
+        except KeyError as e:
+            # This might happen if the target date is outside the range even with 'nearest'
+            # or if the variable name is somehow incorrect (though checked earlier)
+            print(f"Error selecting data for target date {target_date.date()}: {e}. Check if date is within range or variable exists.")
+            return None
+        except Exception as e:
+            print(f"An unexpected error occurred during popularity extraction with .sel(): {e}")
             return None 
