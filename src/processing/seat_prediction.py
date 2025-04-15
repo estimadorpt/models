@@ -7,6 +7,7 @@ import time
 import traceback
 import numpy as np
 import arviz as az
+import xarray as xr
 
 # Assuming the project structure allows these imports
 # Adjust paths if necessary based on final structure
@@ -120,7 +121,7 @@ def calculate_seat_predictions(
     return total_seats_allocation 
 
 def simulate_seat_allocation(
-    target_pop_posterior: XarrayDataset, # Changed hint to reflect it's likely Dataset
+    target_pop_posterior: xr.DataArray, # Changed hint to reflect it's likely Dataset
     dataset: ElectionDataset,
     num_samples_for_seats: int,
     pred_dir: str,
@@ -197,7 +198,7 @@ def simulate_seat_allocation(
         if debug: print(f"Loaded config for {len(all_district_names)} districts.")
 
         # 3. Load National Results for Baseline Election
-        national_results_df_all = load_election_results(election_dates, political_families, aggregate_national=True, verbose=debug)
+        national_results_df_all = load_election_results(election_dates, political_families, aggregate_national=True)
         last_election_national_row = national_results_df_all[national_results_df_all['date'] == pd.to_datetime(last_election_date_for_swing)]
         if last_election_national_row.empty: raise ValueError(f"Could not find national results for baseline date {last_election_date_for_swing}")
         last_election_national_row = last_election_national_row.iloc[0]
@@ -210,7 +211,7 @@ def simulate_seat_allocation(
         if debug: print("Loaded baseline national shares.")
 
         # 4. Load District Results for Baseline Election
-        district_results_df_all = load_election_results(election_dates, political_families, aggregate_national=False, verbose=debug)
+        district_results_df_all = load_election_results(election_dates, political_families, aggregate_national=False)
         last_election_district_df = district_results_df_all[district_results_df_all['date'] == pd.to_datetime(last_election_date_for_swing)].copy()
         if last_election_district_df.empty: raise ValueError(f"Could not find district results for baseline date {last_election_date_for_swing}")
         if 'Circulo' not in last_election_district_df.columns: raise ValueError("'Circulo' column missing in loaded district results.")
@@ -219,8 +220,8 @@ def simulate_seat_allocation(
         last_election_district_df = last_election_district_df.set_index('Circulo')
         # Ensure 'sample_size' is numeric
         district_total_votes_baseline = pd.to_numeric(last_election_district_df['sample_size'], errors='coerce').fillna(0)
-        # Ensure party columns are numeric
-        party_cols_numeric = pd.to_numeric(last_election_district_df[political_families], errors='coerce').fillna(0)
+        # Ensure party columns are numeric by applying to_numeric to each column
+        party_cols_numeric = last_election_district_df[political_families].apply(pd.to_numeric, errors='coerce').fillna(0)
         last_election_district_shares = party_cols_numeric.copy()
         valid_districts_baseline = district_total_votes_baseline[district_total_votes_baseline > 0].index
         # Perform division only for valid districts
@@ -277,10 +278,20 @@ def simulate_seat_allocation(
         seat_allocation_samples = []
         try:
             # Stack chain and draw dimensions for easier iteration
-            # Need to select the actual data variable (e.g., 'latent_popularity') if it's a Dataset
-            data_var_name = list(target_pop_posterior.data_vars)[0] # Assume first data var is the one
-            if debug: print(f"Using data variable '{data_var_name}' from posterior Dataset.")
-            stacked_posterior = target_pop_posterior[data_var_name].stack(sample=("chain", "draw"))
+            # Check if input is Dataset or DataArray
+            if isinstance(target_pop_posterior, xr.Dataset):
+                # If Dataset, assume first data var is the one (or add logic to find it)
+                data_var_name = list(target_pop_posterior.data_vars)[0]
+                if debug: print(f"Using data variable '{data_var_name}' from posterior Dataset.")
+                target_data_array = target_pop_posterior[data_var_name]
+            elif isinstance(target_pop_posterior, xr.DataArray):
+                # If DataArray, use it directly
+                if debug: print(f"Using input DataArray directly for posterior samples.")
+                target_data_array = target_pop_posterior
+            else:
+                raise TypeError(f"Unsupported type for target_pop_posterior: {type(target_pop_posterior)}")
+
+            stacked_posterior = target_data_array.stack(sample=("chain", "draw"))
             total_draws = len(stacked_posterior['sample'])
             samples_to_process = min(num_samples_for_seats, total_draws)
             print(f"Processing {samples_to_process} out of {total_draws} available posterior samples...")
