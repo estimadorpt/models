@@ -33,6 +33,7 @@ from src.config import DEFAULT_BASELINE_TIMESCALE, DEFAULT_ELECTION_TIMESCALES
 from src.data.dataset import ElectionDataset
 from src.data.loaders import load_election_results, load_district_config
 from src.processing.electoral_systems import calculate_dhondt
+from src.processing.seat_prediction import simulate_seat_allocation
 
 def get_model_class(model_type_str: str):
     if model_type_str == "static":
@@ -750,7 +751,8 @@ def predict(args):
                 output_cols_display = [col for col in output_cols_display if col in pred_summary.columns]
                 if output_cols_display:
                      pred_summary_display = pred_summary[output_cols_display]
-                     pred_summary_pct = pred_summary_display.applymap(lambda x: f"{x*100:.1f}%" if pd.notnull(x) else "N/A")
+                     # Ensure formatting handles potential non-numeric gracefully if needed
+                     pred_summary_pct = pred_summary_display.applymap(lambda x: f"{x*100:.1f}%" if pd.notnull(x) and isinstance(x, numbers.Number) else "N/A")
                      print(f"\n--- Latent Popularity Prediction ({args.prediction_date_mode}) --- (Vote Shares) ---")
                      print(pred_summary_pct.to_string())
                      print("----------------------------------------------------------------")
@@ -762,188 +764,59 @@ def predict(args):
                 print(f"Warning: Failed to calculate or display vote share summary statistics: {summary_err}")
             # --- End Display Vote Share Summary ---
 
-            # --- SEAT PREDICTION SIMULATION (REFACTORED) --- 
+            # --- Call SEAT PREDICTION SIMULATION --- 
+            seats_df = None
+            seat_summary = None
             if num_samples_for_seats > 0 and elections_model.dataset:
-                print(f"\nStarting seat prediction simulation using {num_samples_for_seats} samples...")
-                political_families = elections_model.dataset.political_families
-                election_dates = elections_model.dataset.election_dates
-                last_election_date_for_swing = None
-                
-                # --- Pre-load Data and Calculate Baselines --- 
-                pre_load_successful = False # Initialize flag
-                try:
-                     print("Pre-loading data for seat simulation...")
-                     # 1. Find latest election date string
-                     if election_dates:
-                         parsed_dates = [pd.to_datetime(d, errors='coerce') for d in election_dates]
-                         valid_dates = [d for d in parsed_dates if pd.notna(d)]
-                         if valid_dates:
-                              last_election_date_dt = max(valid_dates)
-                              original_indices = [i for i, dt in enumerate(parsed_dates) if dt == last_election_date_dt]
-                              if original_indices:
-                                   original_index = original_indices[0]
-                                   if isinstance(election_dates[original_index], str): last_election_date_for_swing = election_dates[original_index]
-                                   else: last_election_date_for_swing = last_election_date_dt.strftime('%Y-%m-%d')
-                              else: last_election_date_for_swing = last_election_date_dt.strftime('%Y-%m-%d')
-                    
-                     if not last_election_date_for_swing:
-                          raise ValueError("Could not determine last election date for swing calculation.")
-                     print(f"(Using {last_election_date_for_swing} as baseline election)")
+                 try:
+                     # Call the refactored function
+                     seats_df, seat_summary = simulate_seat_allocation(
+                         target_pop_posterior=target_pop_posterior,
+                         dataset=elections_model.dataset,
+                         num_samples_for_seats=num_samples_for_seats,
+                         pred_dir=pred_dir,
+                         prediction_date_mode=args.prediction_date_mode,
+                         hdi_prob=hdi_prob,
+                         debug=args.debug
+                     )
 
-                     # 2. Load District Config
-                     district_config = load_district_config()
-                     if not district_config: raise ValueError("Failed to load district configuration.")
+                     # --- Plot Seat Distribution Histograms (if simulation succeeded) --- 
+                     if seats_df is not None:
+                         try:
+                             print("\nGenerating seat distribution histograms...")
+                             plot_seat_distribution_histograms(
+                                 seats_df,
+                                 pred_dir,
+                                 date_mode=args.prediction_date_mode,
+                                 filename=f"seat_histograms_{args.prediction_date_mode}.png"
+                             )
+                         except Exception as plot_err:
+                             print(f"Warning: Failed to generate seat distribution histograms: {plot_err}")
+                             if args.debug: traceback.print_exc()
+                     else:
+                         print("\nSkipping seat histogram plot as simulation did not produce results.")
 
-                     # 3. Load National Results for Baseline Election
-                     # Use verbose=False to suppress prints from loader
-                     national_results_df_all = load_election_results(election_dates, political_families, aggregate_national=True)
-                     last_election_national_row = national_results_df_all[national_results_df_all['date'] == pd.to_datetime(last_election_date_for_swing)]
-                     if last_election_national_row.empty: raise ValueError(f"Could not find national results for baseline date {last_election_date_for_swing}")
-                     last_election_national_row = last_election_national_row.iloc[0]
-                     national_total_votes_baseline = last_election_national_row[political_families].sum()
-                     if national_total_votes_baseline <= 0: raise ValueError("Baseline national total votes are zero.")
-                     last_election_national_shares = last_election_national_row[political_families].astype(float) / national_total_votes_baseline
-                     last_election_national_shares = last_election_national_shares.reindex(political_families, fill_value=0.0)
+                 except Exception as simulation_err:
+                     print(f"Error during seat prediction simulation call: {simulation_err}")
+                     if args.debug: traceback.print_exc()
 
-                     # 4. Load District Results for Baseline Election
-                     district_results_df_all = load_election_results(election_dates, political_families, aggregate_national=False)
-                     last_election_district_df = district_results_df_all[district_results_df_all['date'] == pd.to_datetime(last_election_date_for_swing)].copy()
-                     if last_election_district_df.empty: raise ValueError(f"Could not find district results for baseline date {last_election_date_for_swing}")
-                     if 'Circulo' not in last_election_district_df.columns: raise ValueError("'Circulo' column missing in loaded district results.")
-                     last_election_district_df = last_election_district_df.set_index('Circulo')
-                     district_total_votes_baseline = last_election_district_df['sample_size']
-                     last_election_district_shares = last_election_district_df[political_families].copy()
-                     valid_districts_baseline = district_total_votes_baseline[district_total_votes_baseline > 0].index
-                     last_election_district_shares = last_election_district_shares.loc[valid_districts_baseline].astype(float).div(district_total_votes_baseline.loc[valid_districts_baseline], axis=0)
-                     last_election_district_shares = last_election_district_shares.reindex(columns=political_families, fill_value=0.0)
-                     all_district_names = district_config.keys()
-                     district_total_votes_baseline = district_total_votes_baseline.reindex(all_district_names, fill_value=0)
-                     
-                     print("Pre-loading complete.")
-                     pre_load_successful = True
-                     
-                except Exception as preload_err:
-                     print(f"Error pre-loading data for seat simulation: {preload_err}")
-                     # pre_load_successful remains False
-                # --- End Pre-load Data --- 
+            elif num_samples_for_seats <= 0:
+                 print("\nSeat prediction simulation skipped (num_samples_for_seats <= 0).")
+            else: # elections_model.dataset is None
+                 print("\nSeat prediction simulation skipped (dataset not available).")
+            # --- END SEAT PREDICTION SIMULATION CALL ---
 
-                if pre_load_successful:
-                    # --- Dynamically find party coordinate name --- 
-                    party_dim_name = None
-                    expected_num_parties = len(political_families)
-                    for dim_name, dim_size in target_pop_posterior.sizes.items():
-                        if dim_name in ['party', 'parties', 'parties_complete'] or dim_size == expected_num_parties:
-                             if dim_name in target_pop_posterior.coords:
-                                 coord_values = target_pop_posterior[dim_name].values.tolist()
-                                 if sorted(coord_values) == sorted(political_families):
-                                     party_dim_name = dim_name
-                                     print(f"Found party coordinate dimension: '{party_dim_name}'")
-                                     break
-                    
-                    if not party_dim_name: 
-                        print("Error: Could not determine party coordinate. Aborting simulation.")
-                    else:
-                        seat_allocation_samples = []
-                        stacked_posterior = target_pop_posterior.stack(sample=("chain", "draw"))
-                        total_draws = len(stacked_posterior['sample'])
-                        samples_to_process = min(num_samples_for_seats, total_draws)
-                        print(f"Processing {samples_to_process} out of {total_draws} available posterior samples...")
-                        loop_start_time = time.time()
-
-                        for i in range(samples_to_process):
-                            if (i + 1) % 100 == 0: print(f"  Processed {i+1}/{samples_to_process} samples...")
-                            sample_shares_xr = stacked_posterior.isel(sample=i)
-                            sample_shares_dict = {party.item(): sample_shares_xr.sel(**{party_dim_name: party}).item()
-                                                    for party in sample_shares_xr[party_dim_name]}
-                            
-                            total_share = sum(sample_shares_dict.values())
-                            if total_share > 0: normalized_shares = {p: s / total_share for p, s in sample_shares_dict.items()}
-                            else: normalized_shares = {p: 0.0 for p in sample_shares_dict}
-                            sample_shares_series = pd.Series(normalized_shares).reindex(political_families, fill_value=0.0)
-
-                            # Calculate Swing for this sample
-                            national_swing = sample_shares_series - last_election_national_shares
-                            
-                            # Apply Swing to District Shares
-                            forecasted_district_shares = last_election_district_shares.add(national_swing, axis=1)
-                            
-                            # Adjust and Re-normalize District Shares
-                            forecasted_district_shares = forecasted_district_shares.clip(lower=0)
-                            row_sums = forecasted_district_shares.sum(axis=1)
-                            valid_rows = row_sums[row_sums > 0].index
-                            if not valid_rows.empty:
-                                forecasted_district_shares.loc[valid_rows] = forecasted_district_shares.loc[valid_rows].div(row_sums.loc[valid_rows], axis=0)
-                            zero_sum_districts = row_sums[row_sums <= 0].index
-                            if not zero_sum_districts.empty:
-                                 forecasted_district_shares.loc[zero_sum_districts, :] = 0.0
-                                 
-                            # Convert back to Counts using baseline district totals
-                            forecasted_district_counts_df = forecasted_district_shares.mul(district_total_votes_baseline, axis=0)
-                            forecasted_district_counts_df = forecasted_district_counts_df.reindex(all_district_names, fill_value=0).round().astype(int)
-
-                            # Allocate Seats district by district
-                            sample_total_seats = {party: 0 for party in political_families}
-                            try:
-                                for circulo_name, num_seats in district_config.items():
-                                    votes_dict = forecasted_district_counts_df.loc[circulo_name].to_dict()
-                                    district_seat_allocation = calculate_dhondt(votes_dict, num_seats)
-                                    for party, seats in district_seat_allocation.items():
-                                        if party in sample_total_seats: sample_total_seats[party] += seats
-                                
-                                sample_total_seats['sample_index'] = i
-                                seat_allocation_samples.append(sample_total_seats)
-                            except Exception as dhondt_err:
-                                 print(f"Error during D'Hondt allocation for sample {i}, district {circulo_name}: {dhondt_err}")
-                                 continue
-                        
-                        loop_end_time = time.time()
-                        print(f"Seat simulation loop finished in {loop_end_time - loop_start_time:.2f} seconds.")
-                        # --- Process Seat Simulation Results --- 
-                        if seat_allocation_samples:
-                            seats_df = pd.DataFrame(seat_allocation_samples).fillna(0)
-                            for party in political_families: # Ensure all columns exist
-                                if party not in seats_df.columns: seats_df[party] = 0
-                            cols_order = ['sample_index'] + sorted(political_families)
-                            cols_order = [c for c in cols_order if c in seats_df.columns]
-                            seats_df = seats_df[cols_order]
-                            party_cols = [p for p in political_families if p in seats_df.columns]
-                            seats_df[party_cols] = seats_df[party_cols].astype(int)
-                            print("\n--- Seat Prediction Simulation Summary ---")
-                            seat_summary = az.summary(seats_df[party_cols].to_dict(orient='list'), hdi_prob=hdi_prob, kind='stats', round_to=1)
-                            print(seat_summary.to_string())
-                            print("------------------------------------------")
-                            seats_samples_path = os.path.join(pred_dir, f"seat_samples_{args.prediction_date_mode}.csv")
-                            seats_df.to_csv(seats_samples_path, index=False)
-                            print(f"Full seat prediction samples saved to {seats_samples_path}")
-                            seat_summary_path = os.path.join(pred_dir, f"seat_summary_{args.prediction_date_mode}.csv")
-                            seat_summary.to_csv(seat_summary_path)
-                            print(f"Seat prediction summary saved to {seat_summary_path}")
-                            
-                            # --- Add Visualization Call (Correctly indented) --- 
-                            try:
-                                plot_seat_distribution_histograms(
-                                    seats_df,
-                                    pred_dir,
-                                    date_mode=args.prediction_date_mode,
-                                    filename=f"seat_histograms_{args.prediction_date_mode}.png"
-                                )
-                            except Exception as plot_err:
-                                print(f"Warning: Failed to generate seat distribution histograms: {plot_err}")
-                                if args.debug: traceback.print_exc()
-                        # This else corresponds to 'if seat_allocation_samples:'
-                        else:
-                             print("\nSeat prediction simulation did not produce any results.")
-            else:
-                 print("Skipping seat simulation due to pre-load failure.")
-
-        # --- END SEAT PREDICTION SIMULATION (REFACTORED) --- 
-
-        # --- Generate Latent Trend Plot ---
+        # --- Generate Latent Trend Plot --- # Moved outside the 'else' block to run even if popularity fails
         try:
              print("\nGenerating plot for latent trend since last election...")
-             plot_dir = os.path.join(args.load_dir, "predictions") 
+             # Define plot_dir robustly (might be same as pred_dir)
+             plot_dir = os.path.join(args.load_dir, "visualizations") 
              os.makedirs(plot_dir, exist_ok=True) 
-             plot_latent_trend_since_last_election(elections_model, plot_dir)
+             # Assuming the plot function can handle None trace gracefully or we check before calling
+             if elections_model and elections_model.trace is not None:
+                  plot_latent_trend_since_last_election(elections_model, plot_dir)
+             else:
+                  print("Skipping latent trend plot: model or trace not available.")
         except Exception as trend_plot_err:
              print(f"Warning: Failed to generate latent trend plot: {trend_plot_err}")
              if args.debug:
@@ -951,22 +824,26 @@ def predict(args):
                   traceback.print_exc()
         # --- End Latent Trend Plot ---
 
-        # --- Forecast Distribution Plotting --- 
-        if hasattr(elections_model, 'model_instance') and elections_model.model_instance:
-            try:
-                 print("\nAttempting to generate forecast distribution plot...")
-                 # Pass the date mode for title/filename consistency
-                 plot_forecasted_election_distribution(
-                     elections_model, 
-                     pred_dir, 
-                     date_mode=args.prediction_date_mode, 
-                     # Use clear filename based on mode
-                     filename=f"forecast_distribution_{args.prediction_date_mode}.png"
-                 )
-            except Exception as plot_err:
-                 print(f"Warning: Failed to generate forecast distribution plot: {plot_err}")
-                 if args.debug:
-                      traceback.print_exc()
+        # --- Forecast Distribution Plotting --- # Moved outside the 'else' block
+        if elections_model and hasattr(elections_model, 'model_instance') and elections_model.model_instance:
+            # Check if the necessary posterior exists before plotting
+            if target_pop_posterior is not None:
+                try:
+                     print("\nAttempting to generate forecast distribution plot...")
+                     # Ensure pred_dir exists
+                     os.makedirs(pred_dir, exist_ok=True)
+                     plot_forecasted_election_distribution(
+                         elections_model, 
+                         pred_dir, 
+                         date_mode=args.prediction_date_mode, 
+                         filename=f"forecast_distribution_{args.prediction_date_mode}.png"
+                     )
+                except Exception as plot_err:
+                     print(f"Warning: Failed to generate forecast distribution plot: {plot_err}")
+                     if args.debug:
+                          traceback.print_exc()
+            else:
+                 print("Skipping forecast distribution plot: target popularity not calculated.")
         else:
              print("Warning: Model instance not available for plotting forecast distribution.")
 
