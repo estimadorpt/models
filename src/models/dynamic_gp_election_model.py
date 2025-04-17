@@ -401,10 +401,18 @@ class DynamicGPElectionModel(BaseElectionModel):
                 dims=("calendar_time", "parties_complete")
             )
 
-            # --- Combine GPs for National Trend --- 
-            national_trend_pt = pm.Deterministic("national_trend_pt", 
+            # --- Combine GPs for National Trend ---
+            national_trend_pt = pm.Deterministic("national_trend_pt",
                                                   baseline_effect_calendar + short_term_effect_calendar,
                                                   dims=("calendar_time", "parties_complete"))
+
+            # --- Calculate Softmax Probabilities (National) ---
+            latent_popularity_national = pm.Deterministic(
+                "latent_popularity_national",
+                pm.math.softmax(national_trend_pt, axis=1), # Apply softmax along party axis (axis=1)
+                dims=("calendar_time", "parties_complete")
+            )
+            # --- End Softmax Calculation ---
 
             # Calculate average national trend per party (across calendar time)
             national_avg_trend_p = national_trend_pt.mean(axis=0, keepdims=True) # Keep dims for broadcasting
@@ -578,6 +586,7 @@ class DynamicGPElectionModel(BaseElectionModel):
              vars_to_sample_observed.append("observed_district")
         if "p_results_district" in self.model.deterministics:
              vars_to_sample_predictions.append("p_results_district")
+             print("DEBUG PPC: Added 'p_results_district' to prediction sampling list.") # Debug print
 
         print(f"DEBUG PPC: Observed RVs to sample: {vars_to_sample_observed}")
         print(f"DEBUG PPC: Prediction RVs to sample: {vars_to_sample_predictions}")
@@ -626,41 +635,43 @@ class DynamicGPElectionModel(BaseElectionModel):
 
     def calculate_fit_metrics(self, idata: az.InferenceData) -> Tuple[Dict[str, float], az.InferenceData]:
         """
-        Calculates various goodness-of-fit metrics using posterior predictive samples.
-
+        Calculates various goodness-of-fit metrics using posterior samples.
         Compares model predictions against observed poll and district election result data.
-
         Args:
-            idata: InferenceData object containing posterior and ideally
-                   posterior_predictive and observed_data groups.
-
+            idata: InferenceData object containing posterior and observed_data groups.
         Returns:
             A tuple containing:
             - A dictionary with calculated metrics (poll_mae, poll_rmse, ..., result_district_mae, ...)
-            - The potentially updated idata object (if PPC was run).
-
+            - The input idata object (unchanged in this version).
         Raises:
             ValueError: If required data groups or variables are missing from idata.
         """
-        # 1. Ensure Posterior Predictive samples exist
-        if "posterior_predictive" not in idata:
-            print("Posterior predictive samples not found in idata. Running posterior_predictive_check...")
-            try:
-                idata = self.posterior_predictive_check(idata, extend_idata=True) # Modifies idata in-place
-            except Exception as e:
-                 raise ValueError(f"Failed to generate posterior predictive samples: {e}")
+        # 1. Check for required groups
+        # REMOVED Check/call for posterior_predictive_check
+        # if "posterior_predictive" not in idata:
+        #    print("Posterior predictive samples not found in idata. Running posterior_predictive_check...")
+        #    try:
+        #        idata = self.posterior_predictive_check(idata, extend_idata=True) # Modifies idata in-place
+        #    except Exception as e:
+        #         raise ValueError(f"Failed to generate posterior predictive samples: {e}")
 
+        if "posterior" not in idata:
+            raise ValueError("posterior group is required in InferenceData to calculate metrics.")
         if "observed_data" not in idata:
             raise ValueError("observed_data group is required in InferenceData to calculate metrics.")
-        if "posterior_predictive" not in idata: # Double check after PPC run
-            raise ValueError("posterior_predictive group still missing after running check.")
+        # if "posterior_predictive" not in idata: # Double check after PPC run
+        #    raise ValueError("posterior_predictive group still missing after running check.")
 
-        # --- START DEBUG ---
+        # --- START DEBUG --- 
         print("\nDEBUG METRICS: Checking idata contents...")
-        if hasattr(idata, 'posterior_predictive'):
-            print(f"  idata.posterior_predictive keys: {list(idata.posterior_predictive.keys())}")
+        # if hasattr(idata, 'posterior_predictive'):
+        #    print(f"  idata.posterior_predictive keys: {list(idata.posterior_predictive.keys())}")
+        # else:
+        #    print("  idata.posterior_predictive group not found.")
+        if hasattr(idata, 'posterior'):
+            print(f"  idata.posterior keys: {list(idata.posterior.keys())}")
         else:
-            print("  idata.posterior_predictive group not found.")
+             print("  idata.posterior group not found.")
         if hasattr(idata, 'observed_data'):
             print(f"  idata.observed_data keys: {list(idata.observed_data.keys())}")
         else:
@@ -671,133 +682,127 @@ class DynamicGPElectionModel(BaseElectionModel):
         metrics = {}
         print("\n--- Debugging Metric Calculation Inputs (District Model) ---")
 
-            # --- Polls --- 
+        # --- Polls --- 
         try:
-            # Use predicted probabilities (p_polls) if available
-            if "p_polls" not in idata.posterior_predictive:
-                 raise KeyError("'p_polls' missing from posterior_predictive. Cannot calculate probability-based metrics.")
-            pp_poll_da = idata.posterior_predictive["p_polls"]
-            pred_poll_probs = pp_poll_da.mean(dim=["chain", "draw"]).values
+            # Get predicted probabilities directly from posterior
+            if "p_polls" not in idata.posterior:
+                 raise KeyError("'p_polls' missing from posterior. Cannot calculate probability-based metrics.")
+            posterior_poll_prob_da = idata.posterior["p_polls"] # Shape (chain, draw, obs, party)
+            # Calculate mean probability for MAE, RMSE etc.
+            pred_poll_probs = posterior_poll_prob_da.mean(dim=["chain", "draw"]).values
 
             # Use observed data name 'observed_polls' for counts
-            if "observed_polls" not in idata.observed_data:
-                 raise KeyError("'observed_polls' missing from observed_data.")
-            obs_poll_counts = idata.observed_data["observed_polls"].values
+            if "poll_likelihood" not in idata.observed_data:
+                 raise KeyError("'poll_likelihood' missing from observed_data.")
+            obs_poll_counts = idata.observed_data["poll_likelihood"].values
+            # Ensure counts are integer for log_score
+            obs_poll_counts_int = obs_poll_counts.astype(int)
+
             # Get total poll counts directly from model's data containers
             if "observed_N_polls" not in self.data_containers:
                  raise KeyError("'observed_N_polls' not found in self.data_containers")
-            obs_poll_n = self.data_containers["observed_N_polls"].eval()
-            with np.errstate(divide='ignore', invalid='ignore'):
-                obs_poll_probs = obs_poll_counts / obs_poll_n[:, np.newaxis]
-            obs_poll_probs = np.nan_to_num(obs_poll_probs)
+            # Ensure obs_poll_n is a numpy array and float for division
+            obs_poll_n = self.data_containers["observed_N_polls"].get_value() # Keep as original dtype (likely int)
+            # We don't need obs_poll_probs here anymore
+            # with np.errstate(divide='ignore', invalid='ignore'):
+            #    obs_poll_probs = obs_poll_counts / obs_poll_n[:, np.newaxis]
+            # obs_poll_probs = np.nan_to_num(obs_poll_probs)
             
             print("\n[Poll Data]")
-            print(f"  Shape pred_poll_probs: {pred_poll_probs.shape}")
-            print(f"  Shape obs_poll_probs: {obs_poll_probs.shape}")
+            print(f"  Shape pred_poll_probs (mean): {pred_poll_probs.shape}")
+            print(f"  Shape posterior_poll_prob_da (samples): {posterior_poll_prob_da.shape}")
             print(f"  Shape obs_poll_counts: {obs_poll_counts.shape}")
 
             if obs_poll_counts.shape[0] > 0:
-                metrics["poll_mae"] = calculate_mae(pred_poll_probs, obs_poll_probs)
-                metrics["poll_rmse"] = calculate_rmse(pred_poll_probs, obs_poll_probs)
-                # Calculate log score using predicted probs and observed counts
-                # pp_poll_counts_samples = idata.posterior_predictive["poll_likelihood"] # Predicted counts
-                individual_poll_log_scores = calculate_log_score(pred_poll_probs, obs_poll_counts) # Use mean pred prob for simplicity here
+                # Pass counts and N to metric functions
+                metrics["poll_mae"] = calculate_mae(pred_poll_probs, obs_poll_counts_int, obs_poll_n)
+                metrics["poll_rmse"] = calculate_rmse(pred_poll_probs, obs_poll_counts_int, obs_poll_n)
+                # Use integer counts for log_score
+                individual_poll_log_scores = calculate_log_score(pred_poll_probs, obs_poll_counts_int) 
                 metrics["poll_log_score"] = np.mean(individual_poll_log_scores[np.isfinite(individual_poll_log_scores)])
-                metrics["poll_rps"] = calculate_rps(pred_poll_probs, obs_poll_probs)
-                # Need samples of probabilities for calibration, not just mean
-                # Use pp_poll_da which has (chain, draw, obs, party) dimensions
-                metrics["poll_calibration"] = calculate_calibration_data(pp_poll_da, obs_poll_probs)
+                metrics["poll_rps"] = calculate_rps(pred_poll_probs, obs_poll_counts_int, obs_poll_n)
+                # Pass the full posterior distribution, counts, and N for calibration
+                metrics["poll_calibration"] = calculate_calibration_data(posterior_poll_prob_da, obs_poll_counts_int, obs_poll_n)
             else:
                 print("Warning: No poll observations found. Skipping poll metrics.")
                 metrics["poll_mae"] = np.nan
-                metrics["poll_rmse"] = np.nan
-                metrics["poll_log_score"] = np.nan
-                metrics["poll_rps"] = np.nan
-                metrics["poll_calibration"] = {"bins": [], "observed_freq": [], "expected_freq": [], "bin_counts": []}
+                # ... (set other poll metrics to nan/default) ...
+                metrics["poll_calibration"] = {"mean_predicted_prob": [], "mean_observed_prob": [], "bin_counts": [], "bin_edges": []} # Default empty
 
         except KeyError as e:
-            print(f"Warning: Missing poll variable in InferenceData: {e}. Skipping poll metrics.")
+            print(f"Warning: Missing poll variable: {e}. Skipping poll metrics.")
             metrics["poll_mae"] = np.nan
-            metrics["poll_rmse"] = np.nan
-            metrics["poll_log_score"] = np.nan
-            metrics["poll_rps"] = np.nan
-            metrics["poll_calibration"] = {"bins": [], "observed_freq": [], "expected_freq": [], "bin_counts": []}
+            # ... (set other poll metrics to nan/default) ...
+            metrics["poll_calibration"] = {"mean_predicted_prob": [], "mean_observed_prob": [], "bin_counts": [], "bin_edges": []} # Default empty
         except Exception as e:
-            print(f"Error extracting poll data: {e}")
-             # Handle error state for poll metrics - setting metrics to NaN
+            print(f"Error calculating poll metrics: {e}")
             metrics["poll_mae"] = np.nan
-            metrics["poll_rmse"] = np.nan
-            metrics["poll_log_score"] = np.nan
-            metrics["poll_rps"] = np.nan
-            metrics["poll_calibration"] = {"bins": [], "observed_freq": [], "expected_freq": [], "bin_counts": []}
+            # ... (set other poll metrics to nan/default) ...
+            metrics["poll_calibration"] = {"mean_predicted_prob": [], "mean_observed_prob": [], "bin_counts": [], "bin_edges": []} # Default empty
 
-
-        # --- District Results ---
+        # --- District Results --- 
         # Check if district probabilities and observed counts are available
-        district_probs_available = "p_results_district" in idata.posterior_predictive
-        district_counts_available = "observed_results_district" in idata.observed_data
+        district_probs_available = "p_results_district" in idata.posterior
+        district_counts_available = "observed_district" in idata.observed_data
 
         if district_probs_available and district_counts_available:
             try:
-                pp_result_da = idata.posterior_predictive["p_results_district"]
-                pred_result_probs = pp_result_da.mean(dim=["chain", "draw"]).values
-                # Use observed data name 'observed_results_district' for counts
-                obs_result_counts = idata.observed_data["observed_results_district"].values
-                # Get total district counts directly from model's data containers
+                posterior_result_prob_da = idata.posterior["p_results_district"] # Shape (chain, draw, obs, party)
+                # Calculate mean probability for MAE, RMSE etc.
+                pred_result_probs = posterior_result_prob_da.mean(dim=["chain", "draw"]).values
+                
+                obs_result_counts = idata.observed_data["observed_district"].values
+                # Ensure counts are integer for log_score
+                obs_result_counts_int = obs_result_counts.astype(int)
+
                 if "observed_N_results_district" not in self.data_containers:
                      raise KeyError("'observed_N_results_district' not found in self.data_containers")
-                obs_result_n = self.data_containers["observed_N_results_district"].eval()
-
-                with np.errstate(divide='ignore', invalid='ignore'):
-                    obs_result_probs = obs_result_counts / obs_result_n[:, np.newaxis]
-                obs_result_probs = np.nan_to_num(obs_result_probs)
+                # Ensure obs_result_n is a numpy array
+                obs_result_n = self.data_containers["observed_N_results_district"].get_value() # Keep as original dtype
+                # We don't need obs_result_probs here anymore
+                # with np.errstate(divide='ignore', invalid='ignore'):
+                #     obs_result_probs = obs_result_counts / obs_result_n[:, np.newaxis]
+                # obs_result_probs = np.nan_to_num(obs_result_probs)
 
                 print("\n[District Result Data]")
-                print(f"  Shape pred_result_probs (district): {pred_result_probs.shape}")
-                print(f"  Shape obs_result_probs (district): {obs_result_probs.shape}")
+                print(f"  Shape pred_result_probs (mean, district): {pred_result_probs.shape}")
+                print(f"  Shape posterior_result_prob_da (samples): {posterior_result_prob_da.shape}")
                 print(f"  Shape obs_result_counts (district): {obs_result_counts.shape}")
 
                 if obs_result_counts.shape[0] > 0:
-                    metrics["result_district_mae"] = calculate_mae(pred_result_probs, obs_result_probs)
-                    metrics["result_district_rmse"] = calculate_rmse(pred_result_probs, obs_result_probs)
-                    individual_result_log_scores = calculate_log_score(pred_result_probs, obs_result_counts)
+                    # Pass counts and N to metric functions
+                    metrics["result_district_mae"] = calculate_mae(pred_result_probs, obs_result_counts_int, obs_result_n)
+                    metrics["result_district_rmse"] = calculate_rmse(pred_result_probs, obs_result_counts_int, obs_result_n)
+                    # Use integer counts for log_score
+                    individual_result_log_scores = calculate_log_score(pred_result_probs, obs_result_counts_int)
                     metrics["result_district_log_score"] = np.mean(individual_result_log_scores[np.isfinite(individual_result_log_scores)])
-                    metrics["result_district_rps"] = calculate_rps(pred_result_probs, obs_result_probs)
-                    # Use pp_result_da which has (chain, draw, obs, party) dimensions
-                    metrics["result_district_calibration"] = calculate_calibration_data(pp_result_da, obs_result_probs)
+                    metrics["result_district_rps"] = calculate_rps(pred_result_probs, obs_result_counts_int, obs_result_n)
+                    # Pass the full posterior distribution, counts, and N for calibration
+                    metrics["result_district_calibration"] = calculate_calibration_data(posterior_result_prob_da, obs_result_counts_int, obs_result_n)
                 else:
                     print("Warning: No district result observations found. Skipping district result metrics.")
                     metrics["result_district_mae"] = np.nan
-                    metrics["result_district_rmse"] = np.nan
-                    metrics["result_district_log_score"] = np.nan
-                    metrics["result_district_rps"] = np.nan
-                    metrics["result_district_calibration"] = {"bins": [], "observed_freq": [], "expected_freq": [], "bin_counts": []}
-
+                    # ... (set other district metrics to nan/default) ...
+                    metrics["result_district_calibration"] = {"mean_predicted_prob": [], "mean_observed_prob": [], "bin_counts": [], "bin_edges": []} # Default empty
             except KeyError as e:
-                print(f"Warning: Missing district result variable in InferenceData: {e}. Skipping district result metrics.")
+                print(f"Warning: Missing district result variable: {e}. Skipping district result metrics.")
                 metrics["result_district_mae"] = np.nan
-                metrics["result_district_rmse"] = np.nan
-                metrics["result_district_log_score"] = np.nan
-                metrics["result_district_rps"] = np.nan
-                metrics["result_district_calibration"] = {"bins": [], "observed_freq": [], "expected_freq": [], "bin_counts": []}
+                # ... (set other district metrics to nan/default) ...
+                metrics["result_district_calibration"] = {"mean_predicted_prob": [], "mean_observed_prob": [], "bin_counts": [], "bin_edges": []} # Default empty
             except Exception as e:
-                 print(f"Error extracting district result data: {e}")
-                 # Handle error state for district result metrics
+                 print(f"Error calculating district result metrics: {e}")
                  metrics["result_district_mae"] = np.nan
-                 metrics["result_district_rmse"] = np.nan
-                 metrics["result_district_log_score"] = np.nan
-                 metrics["result_district_rps"] = np.nan
-                 metrics["result_district_calibration"] = {"bins": [], "observed_freq": [], "expected_freq": [], "bin_counts": []}
+                 # ... (set other district metrics to nan/default) ...
+                 metrics["result_district_calibration"] = {"mean_predicted_prob": [], "mean_observed_prob": [], "bin_counts": [], "bin_edges": []} # Default empty
         else:
-            print("Warning: District result probabilities ('p_results_district' in posterior_predictive) or counts ('observed_results_district' in observed_data) not found. Skipping district result metrics.")
+            missing_var = "'p_results_district' in posterior" if not district_probs_available else "'observed_district' in observed_data"
+            print(f"Warning: {missing_var} not found. Skipping district result metrics.")
             metrics["result_district_mae"] = np.nan
-            metrics["result_district_rmse"] = np.nan
-            metrics["result_district_log_score"] = np.nan
-            metrics["result_district_rps"] = np.nan
-            metrics["result_district_calibration"] = {"bins": [], "observed_freq": [], "expected_freq": [], "bin_counts": []}
-
+            # ... (set other district metrics to nan/default) ...
+            metrics["result_district_calibration"] = {"mean_predicted_prob": [], "mean_observed_prob": [], "bin_counts": [], "bin_edges": []} # Default empty
 
         print("--- End Debugging Metric Calculation Inputs ---")
+        # Return the original idata, as we didn't modify it here
         return metrics, idata
 
 

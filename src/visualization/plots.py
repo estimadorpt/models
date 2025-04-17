@@ -228,104 +228,57 @@ def plot_latent_popularity_vs_polls(elections_model, output_dir, include_target_
     time_values = None
 
     # Determine which latent variable and time coordinate to use
-    if is_dynamic_model:
-        potential_var_name = "national_trend_pt" # This is pre-softmax
+    # We now directly use the deterministic variable if available
+    deterministic_pop_var = "latent_popularity_national"
+    if deterministic_pop_var in trace.posterior:
+        print(f"Using deterministic national popularity variable: {deterministic_pop_var}")
+        latent_variable_da = trace.posterior[deterministic_pop_var].copy()
+        time_coord_name = "calendar_time"
+        if time_coord_name in latent_variable_da.coords:
+            time_values = pd.to_datetime(latent_variable_da[time_coord_name].values)
+        else:
+            print(f"Warning: Time coordinate '{time_coord_name}' not found in {deterministic_pop_var}.")
+    # Fallback to old logic ONLY if the new variable isn't found (for compatibility?)
+    elif isinstance(model_instance, DynamicGPElectionModel):
+        potential_var_name = "national_trend_pt" # Pre-softmax
         time_coord_name = "calendar_time"
         if potential_var_name in trace.posterior:
-            print(f"Found dynamic model variable: {potential_var_name}")
-            latent_variable_da = trace.posterior[potential_var_name].copy()
+            print(f"Warning: {deterministic_pop_var} not found. Falling back to pre-softmax {potential_var_name} and applying manual softmax.")
+            latent_variable_da_raw = trace.posterior[potential_var_name].copy()
             
-            # +++ Debug: Before Softmax +++
-            print(f"DEBUG: BEFORE softmax, {potential_var_name} mean:")
+            # <<< Keep the manual numpy softmax ONLY as a fallback >>>
             try:
-                # Calculate mean over chain/draw, print mean per party
-                pre_softmax_mean = latent_variable_da.mean(dim=["chain", "draw"])
-                for party_coord in pre_softmax_mean['parties_complete'].values:
-                     print(f"  Party {party_coord}: Mean = {pre_softmax_mean.sel(parties_complete=party_coord).mean().item():.4f}") 
-            except Exception as dbg_e:
-                 print(f"  Error calculating pre-softmax mean: {dbg_e}")
-            # +++ End Debug +++
-            
-            # Apply softmax MANUALLY using numpy + xarray reassignment
-            try:
-                latent_variable_da_raw = latent_variable_da.copy() # Keep original
-                # Ensure we are working with numpy array for calculations
-                values = latent_variable_da.values 
-                
-                # Assume party dimension is the last one, adjust axis=-1 if needed
-                party_axis = -1 
-                
-                # Subtract max for numerical stability (applied along the party axis)
+                values = latent_variable_da_raw.values
+                party_axis = -1
                 max_val = np.max(values, axis=party_axis, keepdims=True)
                 stable_values = values - max_val
-                
-                # Calculate exponentiation
                 exp_values = np.exp(stable_values)
-                
-                # Calculate sum along the party axis
                 sum_exp_values = np.sum(exp_values, axis=party_axis, keepdims=True)
-                
-                # Calculate softmax probabilities, handle potential division by zero
-                # Add a small epsilon to the denominator to prevent 0/0 -> NaN
-                epsilon = 1e-9 
+                epsilon = 1e-9
                 softmax_values = exp_values / (sum_exp_values + epsilon)
-                
-                # Put the result back into the xarray DataArray structure
                 latent_variable_da = xr.DataArray(
-                    softmax_values, 
-                    coords=latent_variable_da_raw.coords, # Use original coords
-                    dims=latent_variable_da_raw.dims,     # Use original dims
-                    name= (latent_variable_da_raw.name + "_softmax") if latent_variable_da_raw.name else "latent_softmax" # Create name if original is None
+                    softmax_values,
+                    coords=latent_variable_da_raw.coords,
+                    dims=latent_variable_da_raw.dims,
+                    name=(latent_variable_da_raw.name + "_manual_softmax") if latent_variable_da_raw.name else "latent_manual_softmax"
                 )
-                print("Applied MANUAL softmax using numpy + xarray reassignment.")
-            
-                # --- Attempt to restore coordinates after softmax (potentially redundant now) --- 
-                if 'parties_complete' in latent_variable_da_raw.coords:
-                     try:
-                          # Check if coordinate already exists from DataArray creation
-                          if 'parties_complete' not in latent_variable_da.coords:
-                               latent_variable_da = latent_variable_da.assign_coords(
-                                    parties_complete=latent_variable_da_raw['parties_complete']
-                               )
-                               print("Restored 'parties_complete' coordinate after numpy softmax.")
-                          else:
-                               print("'parties_complete' coordinate already present after numpy softmax.")
-                     except Exception as coord_err:
-                          print(f"Warning: Failed to ensure 'parties_complete' coordinate: {coord_err}")
-                else:
-                     print("Warning: 'parties_complete' coordinate not found in pre-softmax data.")
-                # --- End coordinate restoration --- 
+                print("Applied MANUAL numpy softmax (fallback).")
+                # Ensure coords are restored (might be redundant)
+                if 'parties_complete' in latent_variable_da_raw.coords and 'parties_complete' not in latent_variable_da.coords:
+                    latent_variable_da = latent_variable_da.assign_coords(parties_complete=latent_variable_da_raw['parties_complete'])
             except Exception as e:
-                 print(f"Error applying manual numpy softmax: {e}. Proceeding with pre-softmax values.")
-                 latent_variable_da = latent_variable_da_raw # Revert if manual softmax fails
+                print(f"Error applying fallback manual numpy softmax: {e}. Proceeding with pre-softmax values.")
+                latent_variable_da = latent_variable_da_raw # Revert if fallback softmax fails
+            # <<< End fallback softmax >>>
 
-            # +++ Debug: After Softmax (before coord restore) +++
-            print(f"DEBUG: AFTER softmax, latent_variable_da mean:")
-            try:
-                # Calculate mean over chain/draw, print mean per party
-                post_softmax_mean = latent_variable_da.mean(dim=["chain", "draw"])
-                # Note: We probably CANNOT select by party coord here yet
-                # So let's print the mean across time for each party index
-                if 'parties_complete' in latent_variable_da_raw.coords: # Check if original coord exists
-                     parties_list = list(latent_variable_da_raw['parties_complete'].values)
-                     for idx, party_name in enumerate(parties_list):
-                          # Select by positional index along the party dimension
-                          party_mean_slice = post_softmax_mean.isel(parties_complete=idx) 
-                          print(f"  Party {party_name} (idx {idx}): Mean = {party_mean_slice.mean().item():.4f}")
-                else:
-                     print("  Cannot debug party means: Original party coordinate missing.")
-            except Exception as dbg_e:
-                 print(f"  Error calculating post-softmax mean: {dbg_e}")
-            # +++ End Debug +++
-            
             if time_coord_name in latent_variable_da.coords:
                 time_values = pd.to_datetime(latent_variable_da[time_coord_name].values)
             else:
                  print(f"Warning: Time coordinate '{time_coord_name}' not found in {potential_var_name}.")
         else:
             print(f"Dynamic model variable '{potential_var_name}' not found.")
-
-    else: # Static model
+    # --- Keep Static Model Logic --- #
+    elif isinstance(model_instance, StaticBaselineElectionModel): # Static model
         potential_var_name = "latent_popularity_trajectory"
         time_coord_name = "countdown"
         if potential_var_name in trace.posterior:
@@ -346,34 +299,26 @@ def plot_latent_popularity_vs_polls(elections_model, output_dir, include_target_
                 print("Warning: Static model trajectory missing 'elections' or 'countdown' coords.")
         else:
             print(f"Static model variable '{potential_var_name}' not found.")
+    # --- End Static Model Logic --- #
+    else:
+        print(f"Error: Could not determine appropriate latent variable. Model type: {type(model_instance)}")
+        return
 
-    # --- Fallback Check (Original expected name - unlikely to exist) ---
+    # --- Check if successful --- 
     if latent_variable_da is None:
-        fallback_var_name = "latent_popularity_calendar_trajectory"
-        if fallback_var_name in trace.posterior:
-             print(f"Warning: Using fallback variable '{fallback_var_name}'. Check model saving logic.")
-             latent_variable_da = trace.posterior[fallback_var_name].copy()
-             time_coord_name = "calendar_time"
-             if time_coord_name in latent_variable_da.coords:
-                  time_values = pd.to_datetime(latent_variable_da[time_coord_name].values)
-             else:
-                  print(f"Warning: Time coordinate '{time_coord_name}' not found in {fallback_var_name}.")
-        else:
-             print(f"Error: Could not find a suitable latent trajectory variable ('{potential_var_name}' or fallback). Skipping plot.")
-             return
-             
+        print(f"Error: Could not find or process a suitable latent trajectory variable. Skipping plot.")
+        return
     if time_values is None:
-         print("Error: Time values could not be determined. Skipping plot.")
-         return
+        print("Error: Time values could not be determined. Skipping plot.")
+        return
 
     # --- Calculate mean and HDI --- 
     print("Calculating mean and HDI...")
-    # Ensure calculations happen on the final latent_variable_da
     mean_latent_popularity = latent_variable_da.mean(dim=["chain", "draw"])
     hdi_latent_popularity = az.hdi(latent_variable_da, hdi_prob=0.94)
     print("Mean and HDI calculated.")
 
-    # --- Remove Noisy Popularity Section (for clarity) --- 
+    # --- Remove Noisy Popularity Section (for clarity) ---
     noisy_pop_daily_mean = None
     noisy_pop_daily_dates = None
     print("Skipping noisy popularity calculation/plotting for clarity.")
@@ -1058,12 +1003,20 @@ def plot_latent_trend_since_last_election(elections_model: 'ElectionsFacade', ou
         latent_var_name = "latent_popularity_t" # Adjust if static model uses different var name
         time_coord_name = "date"
     else:
-        latent_var_name = "latent_popularity_calendar_trajectory"
+        # Use the new deterministic variable directly
+        latent_var_name = "latent_popularity_national" 
         time_coord_name = "calendar_time"
 
     if latent_var_name not in trace.posterior:
-        print(f"Latent variable '{latent_var_name}' not found in trace. Skipping plot.")
-        return
+        # Add a fallback check for older variable name for compatibility?
+        fallback_var_name = "latent_popularity_calendar_trajectory"
+        if fallback_var_name in trace.posterior:
+             print(f"Warning: Variable '{latent_var_name}' not found. Using fallback '{fallback_var_name}'.")
+             latent_var_name = fallback_var_name
+        else:
+             print(f"Latent variable '{latent_var_name}' (or fallback '{fallback_var_name}') not found in trace. Skipping plot.")
+             return
+             
     if time_coord_name not in trace.posterior.coords:
          print(f"Time coordinate '{time_coord_name}' not found in trace. Skipping plot.")
          return

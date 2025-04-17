@@ -56,6 +56,9 @@ class ElectionsFacade:
         model_kwargs :
             Additional keyword arguments passed to the model class constructor.
         """
+        # <<< Init Start Debug >>>
+        print("DEBUG FACADE INIT: Starting __init__...") 
+        # <<< End Init Start Debug >>>
         self.debug = debug
         self.election_date = election_date
         self.model_instance: Optional[BaseElectionModel] = None
@@ -89,10 +92,16 @@ class ElectionsFacade:
         
         # Create the specific model instance using the provided class
         print(f"Initializing model of type: {model_class.__name__}")
+        # <<< Before Model Instance Debug >>>
+        print(f"DEBUG FACADE INIT: About to instantiate model: {model_class.__name__}") 
+        # <<< End Before Model Instance Debug >>>
         self.model_instance = model_class(
             dataset=self.dataset,
             **self.model_config_full
         )
+        # <<< After Model Instance Debug >>>
+        print(f"DEBUG FACADE INIT: Finished instantiating model instance. Type: {type(self.model_instance)}") 
+        # <<< End After Model Instance Debug >>>
         
         # Initialize trace containers
         self.prior = None
@@ -109,6 +118,9 @@ class ElectionsFacade:
         
         # Flag to track if inference results have been saved
         self._inference_results_saved = False
+        # <<< Init End Debug >>>
+        print("DEBUG FACADE INIT: Finished __init__.") 
+        # <<< End Init End Debug >>>
         
     def build_model(self):
         """Build the PyMC model using the specific model instance"""
@@ -399,6 +411,102 @@ class ElectionsFacade:
         result_to_return = True
         # print(f"DEBUG: Value to return: {result_to_return}, Type: {type(result_to_return)}") # DEBUG
         return result_to_return
+    
+    def get_latent_popularity(self, date_mode: str = 'election_day', district: Optional[str] = None) -> Optional[xr.DataArray]:
+        """
+        Extracts the posterior distribution of latent popularity at a specific time point,
+        potentially adjusted for a specific district.
+
+        Args:
+            date_mode (str): Defines the time point: 'election_day', 'last_poll', 'today', or 'specific_date'.
+                             If 'specific_date', `self.election_date` is used implicitly.
+            district (str, optional): Name of the district to get adjusted popularity for.
+                                      If None, returns the national latent popularity.
+
+        Returns:
+            xr.DataArray or None: Posterior samples of latent popularity for the specified date.
+                                  Dimensions: (chain, draw, parties_complete).
+                                  Returns None on error or if data/coords are missing.
+        """
+        if self.trace is None or 'posterior' not in self.trace:
+            print("Error: Valid InferenceData with posterior samples required."); return None
+
+        # --- Determine Target Date based on mode --- 
+        actual_target_date = None
+        try:
+            if date_mode == 'election_day':
+                if hasattr(self, 'election_date') and self.election_date:
+                    actual_target_date = pd.Timestamp(self.election_date).normalize()
+                    print(f"DEBUG get_latent: Using election_day: {actual_target_date.date()}")
+                else:
+                    print("Error: election_date not available for 'election_day' mode."); return None
+            elif date_mode == 'last_poll':
+                if hasattr(self.dataset, 'polls_train') and not self.dataset.polls_train.empty:
+                    last_poll_date = pd.to_datetime(self.dataset.polls_train['date']).max()
+                    actual_target_date = pd.Timestamp(last_poll_date).normalize()
+                    print(f"DEBUG get_latent: Using last_poll date: {actual_target_date.date()}")
+                else:
+                    print("Error: Cannot determine last poll date from dataset."); return None
+            elif date_mode == 'today':
+                actual_target_date = pd.Timestamp.now().normalize()
+                print(f"DEBUG get_latent: Using today's date: {actual_target_date.date()}")
+            elif date_mode == 'specific_date': # Use election_date if mode is specific
+                if hasattr(self, 'election_date') and self.election_date:
+                    actual_target_date = pd.Timestamp(self.election_date).normalize()
+                    print(f"DEBUG get_latent: Using specific_date (from election_date): {actual_target_date.date()}")
+                else:
+                    print("Error: election_date not available for 'specific_date' mode."); return None
+            else:
+                print(f"Error: Invalid date_mode '{date_mode}'."); return None
+        except Exception as date_err:
+            print(f"Error determining target date: {date_err}"); return None
+        # --- End Determine Target Date ---
+
+        # --- Get National Latent Popularity (already softmaxed) at Target Date --- 
+        national_pop_var = "latent_popularity_national" # Use the new deterministic variable
+        if national_pop_var not in self.trace.posterior:
+            print(f"Error: National popularity variable '{national_pop_var}' not found in trace posterior."); return None
+        if 'calendar_time' not in self.trace.posterior.coords:
+             print("Error: Coordinate 'calendar_time' not found."); return None
+
+        try:
+            national_pop_da = self.trace.posterior[national_pop_var].copy()
+            # Ensure coordinate is datetime and normalized
+            calendar_coords = pd.to_datetime(national_pop_da['calendar_time'].values).normalize()
+            national_pop_da['calendar_time'] = calendar_coords
+            min_cal_date = calendar_coords.min()
+            max_cal_date = calendar_coords.max()
+
+            # Select the nearest date
+            national_pop_at_date = national_pop_da.sel(
+                calendar_time=actual_target_date,
+                method="nearest",
+                tolerance=pd.Timedelta(days=1) # Allow slight tolerance
+            )
+            selected_date = pd.Timestamp(national_pop_at_date.calendar_time.item()).normalize()
+            if selected_date != actual_target_date:
+                 print(f"Warning: Using nearest date {selected_date.date()} for target {actual_target_date.date()}")
+            print(f"Selected national popularity for date: {selected_date.date()}")
+        except Exception as e:
+            print(f"Error selecting national popularity at {actual_target_date.date()}: {e}"); return None
+        # --- End Get National Latent Popularity ---
+
+        # --- District Adjustment (Placeholder/Future Enhancement) ---
+        if district is not None:
+            # IMPORTANT: Adjusting post-softmax probabilities is complex. 
+            # Correct approach requires adding district effects *before* softmax in the model.
+            # Current model structure adds district effects *before* softmax for the likelihood,
+            # but we don't have a separate deterministic variable for district-level softmaxed popularity.
+            print(f"Warning: District adjustment requested for '{district}', but getting district-specific popularity" 
+                  " from the current trace requires recalculation or a dedicated model variable." 
+                  " Returning NATIONAL popularity for now.")
+            # For now, we just return the national popularity calculated above.
+            # Future: Implement logic to either recalculate using latent means + district effects + softmax,
+            # or add a pm.Deterministic("latent_popularity_district", ...) to the model.
+            pass # Fall through to return national_pop_at_date
+        # --- End District Adjustment --- 
+
+        return national_pop_at_date
     
     def _analyze_trace_quality(self, trace):
         """Analyze trace quality and print diagnostics."""
@@ -1131,6 +1239,48 @@ class ElectionsFacade:
         else:
             print("- Skipping district_effects forest plot (variable not found).")
 
+        # <<< Add Forest Plots for Base Offset and Beta >>>
+        # 7. Forest Plot for Base Offset (Faceted by Party)
+        base_offset_var = "base_offset_p"
+        if base_offset_var in present_vars:
+            print(f"- Generating forest plot for {base_offset_var}...")
+            base_offset_plot_path = os.path.join(directory, f"diagnostic_forest_plot_{base_offset_var}.png")
+            try:
+                n_districts = len(self.trace.posterior.coords.get("districts", []))
+                n_parties = len(self.trace.posterior.coords.get("parties_complete", []))
+                fig_height = max(10, n_districts * n_parties * 0.4)
+                az.plot_forest(self.trace, var_names=[base_offset_var], combined=True, figsize=(12, fig_height))
+                plt.suptitle(f"Forest Plot: {base_offset_var} (Faceted by Party)", y=1.02)
+                plt.tight_layout()
+                plt.savefig(base_offset_plot_path)
+                plt.close()
+                print(f"  Saved {base_offset_var} forest plot to {base_offset_plot_path}")
+            except Exception as e:
+                print(f"  Error generating {base_offset_var} forest plot: {e}")
+        else:
+            print(f"- Skipping {base_offset_var} forest plot (variable not found).")
+
+        # 8. Forest Plot for Beta Sensitivity (Faceted by Party)
+        beta_var = "beta_p"
+        if beta_var in present_vars:
+            print(f"- Generating forest plot for {beta_var}...")
+            beta_plot_path = os.path.join(directory, f"diagnostic_forest_plot_{beta_var}.png")
+            try:
+                n_districts = len(self.trace.posterior.coords.get("districts", []))
+                n_parties = len(self.trace.posterior.coords.get("parties_complete", []))
+                fig_height = max(10, n_districts * n_parties * 0.4)
+                az.plot_forest(self.trace, var_names=[beta_var], combined=True, figsize=(12, fig_height))
+                plt.suptitle(f"Forest Plot: {beta_var} (Faceted by Party)", y=1.02)
+                plt.tight_layout()
+                plt.savefig(beta_plot_path)
+                plt.close()
+                print(f"  Saved {beta_var} forest plot to {beta_plot_path}")
+            except Exception as e:
+                print(f"  Error generating {beta_var} forest plot: {e}")
+        else:
+            print(f"- Skipping {beta_var} forest plot (variable not found).")
+        # <<< End Added Forest Plots >>>
+        
         # 7. Generate Summary Text File (renumbered)
         summary_path = os.path.join(directory, "diagnostic_summary.txt")
         print(f"- Generating diagnostic summary text file...")

@@ -18,6 +18,11 @@ from pprint import pprint
 from src.models.elections_facade import ElectionsFacade
 from src.models.static_baseline_election_model import StaticBaselineElectionModel
 from src.models.dynamic_gp_election_model import DynamicGPElectionModel
+
+# # <<< Print loaded class file path >>>
+# print(f"DEBUG MAIN: ElectionsFacade class loaded from: {ElectionsFacade.__file__}")
+# # <<< End print >>>
+
 from src.visualization.plots import (
     plot_election_data, 
     plot_latent_popularity_vs_polls, 
@@ -442,6 +447,12 @@ def load_model(args, directory, election_date=None, baseline_timescales=None, el
             test_cutoff=pd.Timedelta(final_cutoff_date) if final_cutoff_date else None,
             **model_kwargs # Pass determined kwargs
         )
+        
+        # <<< Debug Check AFTER Facade Instantiation >>>
+        print(f"DEBUG LOAD: Instantiated facade type: {type(elections_model)}")
+        if elections_model:
+            print(f"DEBUG LOAD: Facade has get_latent_popularity right after init? {hasattr(elections_model, 'get_latent_popularity')}")
+        # <<< End Debug Check >>>
         
         # Load the saved trace
         elections_model.load_inference_results(directory)
