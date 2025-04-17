@@ -156,7 +156,7 @@ def fit_model(args):
             draws=args.draws, 
             tune=args.tune, 
             target_accept=args.target_accept, 
-            max_treedepth=10 # Keeping lower tree depth for faster run if needed
+            max_treedepth=12 # Increase max_treedepth
         )
         
         # Calculate elapsed time
@@ -214,24 +214,49 @@ def fit_model(args):
                         print(f"  {key}: {value}")
                 
                 metrics_path = os.path.join(output_dir, "fit_metrics.json")
+                # --- Convert numpy arrays in calibration dicts to lists AND handle NaN for JSON ---
+                metrics_serializable = {}
+                for key, value in metrics_dict.items():
+                    if isinstance(value, dict) and key.endswith('_calibration'):
+                         calib_serializable = {}
+                         for cal_key, cal_value in value.items():
+                             # Check for NaN in calibration values (though less likely here)
+                             if isinstance(cal_value, float) and np.isnan(cal_value):
+                                 calib_serializable[cal_key] = None
+                             elif isinstance(cal_value, np.ndarray):
+                                 # Replace NaN within numpy arrays before converting to list
+                                 calib_serializable[cal_key] = np.where(np.isnan(cal_value), None, cal_value).tolist()
+                             else:
+                                 calib_serializable[cal_key] = cal_value
+                         metrics_serializable[key] = calib_serializable
+                    # Explicitly check top-level values for NaN
+                    elif isinstance(value, float) and np.isnan(value):
+                        metrics_serializable[key] = None
+                    elif isinstance(value, np.number) and np.isnan(value): # Catch numpy float types
+                         metrics_serializable[key] = None
+                    else:
+                         metrics_serializable[key] = value
+                # --- End conversion ---
+                
                 with open(metrics_path, 'w') as f:
-                    json.dump(metrics_dict, f, indent=4)
+                    # Save the serializable version
+                    json.dump(metrics_serializable, f, indent=4) 
                 print(f"Fit metrics saved to {metrics_path}")
 
                 # --- Plot Calibration --- #
                 viz_dir = os.path.join(output_dir, "visualizations") # Use same dir as other plots
                 os.makedirs(viz_dir, exist_ok=True)
-                if "poll_calibration" in metrics_dict:
+                if "poll_calibration" in metrics_dict: # Use original metrics dict for plotting
                      plot_reliability_diagram(
                          metrics_dict["poll_calibration"],
                          title="Poll Calibration",
                          filename=os.path.join(viz_dir, "calibration_polls.png")
                      )
-                if "result_calibration" in metrics_dict:
+                if "result_district_calibration" in metrics_dict: # Check for district calibration key
                      plot_reliability_diagram(
-                         metrics_dict["result_calibration"],
-                         title="Election Result Calibration",
-                         filename=os.path.join(viz_dir, "calibration_results.png")
+                         metrics_dict["result_district_calibration"],
+                         title="District Result Calibration",
+                         filename=os.path.join(viz_dir, "calibration_results_district.png")
                      )
                 # --- End Plot Calibration --- #
 
@@ -692,11 +717,11 @@ def diagnose_model(args):
                          title="Poll Calibration",
                          filename=os.path.join(viz_dir, "calibration_polls.png")
                      )
-                if "result_calibration" in metrics_dict:
+                if "result_district_calibration" in metrics_dict: # Check for district calibration key
                      plot_reliability_diagram(
-                         metrics_dict["result_calibration"],
-                         title="Election Result Calibration",
-                         filename=os.path.join(viz_dir, "calibration_results.png")
+                         metrics_dict["result_district_calibration"],
+                         title="District Result Calibration",
+                         filename=os.path.join(viz_dir, "calibration_results_district.png")
                      )
                 # --- End Plot Calibration --- #
 
@@ -722,6 +747,12 @@ def predict(args):
 
     try:
         elections_model = load_model(args, args.load_dir, debug=args.debug)
+
+        # <<< Add Debug Check Here >>>
+        print(f"DEBUG PREDICT: Loaded elections_model type: {type(elections_model)}")
+        if elections_model:
+            print(f"DEBUG PREDICT: Has get_latent_popularity method? {hasattr(elections_model, 'get_latent_popularity')}")
+        # <<< End Debug Check >>>
 
         if elections_model is None: print("Exiting prediction due to loading error."); return
         if elections_model.trace is None: print(f"No trace found in {args.load_dir}. Cannot generate predictions."); return
@@ -792,13 +823,17 @@ def predict(args):
                              )
                          except Exception as plot_err:
                              print(f"Warning: Failed to generate seat distribution histograms: {plot_err}")
-                             if args.debug: traceback.print_exc()
+                             if args.debug: 
+                                 import traceback # Import locally
+                                 traceback.print_exc()
                      else:
                          print("\nSkipping seat histogram plot as simulation did not produce results.")
 
                  except Exception as simulation_err:
                      print(f"Error during seat prediction simulation call: {simulation_err}")
-                     if args.debug: traceback.print_exc()
+                     if args.debug: 
+                         import traceback # Import locally
+                         traceback.print_exc()
 
             elif num_samples_for_seats <= 0:
                  print("\nSeat prediction simulation skipped (num_samples_for_seats <= 0).")
@@ -820,7 +855,7 @@ def predict(args):
         except Exception as trend_plot_err:
              print(f"Warning: Failed to generate latent trend plot: {trend_plot_err}")
              if args.debug:
-                  import traceback
+                  import traceback # Import locally
                   traceback.print_exc()
         # --- End Latent Trend Plot ---
 
@@ -841,6 +876,7 @@ def predict(args):
                 except Exception as plot_err:
                      print(f"Warning: Failed to generate forecast distribution plot: {plot_err}")
                      if args.debug:
+                          import traceback # Import locally
                           traceback.print_exc()
             else:
                  print("Skipping forecast distribution plot: target popularity not calculated.")
@@ -851,7 +887,10 @@ def predict(args):
 
     except Exception as e:
         print(f"Error during prediction mode: {e}")
-        if args.debug: traceback.print_exc()
+        # <<< Import traceback locally here >>>
+        if args.debug: 
+            import traceback 
+            traceback.print_exc()
 
 def main(args=None):
     parser = argparse.ArgumentParser(description="Election Model CLI")

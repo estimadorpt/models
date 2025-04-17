@@ -205,15 +205,15 @@ def plot_election_data(dataset: ElectionDataset, output_dir: str):
 def plot_latent_popularity_vs_polls(elections_model, output_dir, include_target_date=True):
     """
     Plots the latent popularity mean and HDI against observed polls over time.
-    Also plots the daily average of the mean noisy popularity (latent + house effect).
+    Handles both StaticBaselineElectionModel and DynamicGPElectionModel.
 
     Args:
         elections_model: The fitted ElectionsFacade instance.
         output_dir: Directory to save the plot.
         include_target_date: Whether to include the target election date as a vertical line.
     """
-    if elections_model.trace is None:
-        print("Trace not found. Skipping latent popularity plot.")
+    if elections_model.trace is None or not hasattr(elections_model.trace, 'posterior'):
+        print("Posterior trace not found. Skipping latent popularity plot.")
         return
 
     trace = elections_model.trace
@@ -224,69 +224,170 @@ def plot_latent_popularity_vs_polls(elections_model, output_dir, include_target_
     is_dynamic_model = isinstance(model_instance, DynamicGPElectionModel)
     print(f"DEBUG plot_latent_pop: is_dynamic_model = {is_dynamic_model}")
 
+    latent_variable_da = None
+    time_values = None
+
     # Determine which latent variable and time coordinate to use
     if is_dynamic_model:
-        latent_var_name = "latent_popularity_calendar_trajectory"
+        potential_var_name = "national_trend_pt" # This is pre-softmax
         time_coord_name = "calendar_time"
-        latent_time_values = pd.to_datetime(trace.posterior[time_coord_name].values)
+        if potential_var_name in trace.posterior:
+            print(f"Found dynamic model variable: {potential_var_name}")
+            latent_variable_da = trace.posterior[potential_var_name].copy()
+            
+            # +++ Debug: Before Softmax +++
+            print(f"DEBUG: BEFORE softmax, {potential_var_name} mean:")
+            try:
+                # Calculate mean over chain/draw, print mean per party
+                pre_softmax_mean = latent_variable_da.mean(dim=["chain", "draw"])
+                for party_coord in pre_softmax_mean['parties_complete'].values:
+                     print(f"  Party {party_coord}: Mean = {pre_softmax_mean.sel(parties_complete=party_coord).mean().item():.4f}") 
+            except Exception as dbg_e:
+                 print(f"  Error calculating pre-softmax mean: {dbg_e}")
+            # +++ End Debug +++
+            
+            # Apply softmax MANUALLY using numpy + xarray reassignment
+            try:
+                latent_variable_da_raw = latent_variable_da.copy() # Keep original
+                # Ensure we are working with numpy array for calculations
+                values = latent_variable_da.values 
+                
+                # Assume party dimension is the last one, adjust axis=-1 if needed
+                party_axis = -1 
+                
+                # Subtract max for numerical stability (applied along the party axis)
+                max_val = np.max(values, axis=party_axis, keepdims=True)
+                stable_values = values - max_val
+                
+                # Calculate exponentiation
+                exp_values = np.exp(stable_values)
+                
+                # Calculate sum along the party axis
+                sum_exp_values = np.sum(exp_values, axis=party_axis, keepdims=True)
+                
+                # Calculate softmax probabilities, handle potential division by zero
+                # Add a small epsilon to the denominator to prevent 0/0 -> NaN
+                epsilon = 1e-9 
+                softmax_values = exp_values / (sum_exp_values + epsilon)
+                
+                # Put the result back into the xarray DataArray structure
+                latent_variable_da = xr.DataArray(
+                    softmax_values, 
+                    coords=latent_variable_da_raw.coords, # Use original coords
+                    dims=latent_variable_da_raw.dims,     # Use original dims
+                    name= (latent_variable_da_raw.name + "_softmax") if latent_variable_da_raw.name else "latent_softmax" # Create name if original is None
+                )
+                print("Applied MANUAL softmax using numpy + xarray reassignment.")
+            
+                # --- Attempt to restore coordinates after softmax (potentially redundant now) --- 
+                if 'parties_complete' in latent_variable_da_raw.coords:
+                     try:
+                          # Check if coordinate already exists from DataArray creation
+                          if 'parties_complete' not in latent_variable_da.coords:
+                               latent_variable_da = latent_variable_da.assign_coords(
+                                    parties_complete=latent_variable_da_raw['parties_complete']
+                               )
+                               print("Restored 'parties_complete' coordinate after numpy softmax.")
+                          else:
+                               print("'parties_complete' coordinate already present after numpy softmax.")
+                     except Exception as coord_err:
+                          print(f"Warning: Failed to ensure 'parties_complete' coordinate: {coord_err}")
+                else:
+                     print("Warning: 'parties_complete' coordinate not found in pre-softmax data.")
+                # --- End coordinate restoration --- 
+            except Exception as e:
+                 print(f"Error applying manual numpy softmax: {e}. Proceeding with pre-softmax values.")
+                 latent_variable_da = latent_variable_da_raw # Revert if manual softmax fails
+
+            # +++ Debug: After Softmax (before coord restore) +++
+            print(f"DEBUG: AFTER softmax, latent_variable_da mean:")
+            try:
+                # Calculate mean over chain/draw, print mean per party
+                post_softmax_mean = latent_variable_da.mean(dim=["chain", "draw"])
+                # Note: We probably CANNOT select by party coord here yet
+                # So let's print the mean across time for each party index
+                if 'parties_complete' in latent_variable_da_raw.coords: # Check if original coord exists
+                     parties_list = list(latent_variable_da_raw['parties_complete'].values)
+                     for idx, party_name in enumerate(parties_list):
+                          # Select by positional index along the party dimension
+                          party_mean_slice = post_softmax_mean.isel(parties_complete=idx) 
+                          print(f"  Party {party_name} (idx {idx}): Mean = {party_mean_slice.mean().item():.4f}")
+                else:
+                     print("  Cannot debug party means: Original party coordinate missing.")
+            except Exception as dbg_e:
+                 print(f"  Error calculating post-softmax mean: {dbg_e}")
+            # +++ End Debug +++
+            
+            if time_coord_name in latent_variable_da.coords:
+                time_values = pd.to_datetime(latent_variable_da[time_coord_name].values)
+            else:
+                 print(f"Warning: Time coordinate '{time_coord_name}' not found in {potential_var_name}.")
+        else:
+            print(f"Dynamic model variable '{potential_var_name}' not found.")
+
     else: # Static model
-        latent_var_name = "latent_popularity_t"
-        time_coord_name = "date"
-        # Ensure date coordinate is datetime
-        if time_coord_name in trace.posterior.coords:
-             latent_time_values = pd.to_datetime(trace.posterior[time_coord_name].values)
+        potential_var_name = "latent_popularity_trajectory"
+        time_coord_name = "countdown"
+        if potential_var_name in trace.posterior:
+            print(f"Found static model variable: {potential_var_name}")
+            latent_variable_da = trace.posterior[potential_var_name].copy()
+            # Select last election cycle and map countdown to dates
+            if 'elections' in latent_variable_da.coords and 'countdown' in latent_variable_da.coords:
+                try:
+                    last_election_date_str = latent_variable_da['elections'].values[-1]
+                    last_election_date = pd.to_datetime(last_election_date_str)
+                    latent_variable_da = latent_variable_da.sel(elections=last_election_date_str)
+                    countdown_values = latent_variable_da[time_coord_name].values
+                    time_values = last_election_date - pd.to_timedelta(countdown_values, unit='D')
+                    print(f"Mapped static model countdown to dates using last election: {last_election_date.date()}")
+                except Exception as e:
+                     print(f"Error processing static model trajectory: {e}")
+            else:
+                print("Warning: Static model trajectory missing 'elections' or 'countdown' coords.")
         else:
-             print(f"Warning: Coordinate '{time_coord_name}' not found in posterior for static model. Cannot plot latent trajectory.")
-             return
+            print(f"Static model variable '{potential_var_name}' not found.")
 
-    if latent_var_name not in trace.posterior:
-        print(f"Latent variable '{latent_var_name}' not found in trace. Skipping plot.")
-        return
-
-    latent_popularity = trace.posterior["latent_popularity_calendar_trajectory"] # Use RAW (unpenalized) version for visualization
-
-    # Calculate mean and HDI for latent popularity
-    mean_latent_popularity = latent_popularity.mean(dim=["chain", "draw"])
-    hdi_latent_popularity = az.hdi(latent_popularity, hdi_prob=0.94)
-
-    # Extract calendar time coordinates
-    calendar_time_coord = pd.to_datetime(trace.posterior["calendar_time"].values)
-
-    # Daily average noisy popularity (if available)
-    try:
-        noisy_pop = trace.posterior["noisy_popularity_polls"]
-        # Calculate mean across samples
-        noisy_pop_mean_obs = noisy_pop.mean(dim=["chain", "draw"]) # Shape (observations, parties)
-
-        # Create a pandas Series for dates indexed by observation coord
-        # Ensure observation coordinates match polls_train index
-        obs_coords = noisy_pop_mean_obs['observations'].values
-        if not np.array_equal(obs_coords, polls_train.index.values):
-             # Attempt to reindex if coords are just integers 0..N-1
-             if np.array_equal(obs_coords, np.arange(len(polls_train))):
-                 print("Attempting to align observation coords with polls_train index.")
-                 poll_dates = pd.to_datetime(polls_train['date']).values
+    # --- Fallback Check (Original expected name - unlikely to exist) ---
+    if latent_variable_da is None:
+        fallback_var_name = "latent_popularity_calendar_trajectory"
+        if fallback_var_name in trace.posterior:
+             print(f"Warning: Using fallback variable '{fallback_var_name}'. Check model saving logic.")
+             latent_variable_da = trace.posterior[fallback_var_name].copy()
+             time_coord_name = "calendar_time"
+             if time_coord_name in latent_variable_da.coords:
+                  time_values = pd.to_datetime(latent_variable_da[time_coord_name].values)
              else:
-                  raise ValueError("Observation coordinates in trace do not match polls_train index.")
+                  print(f"Warning: Time coordinate '{time_coord_name}' not found in {fallback_var_name}.")
         else:
-             poll_dates = pd.to_datetime(polls_train.loc[obs_coords, 'date']).values
+             print(f"Error: Could not find a suitable latent trajectory variable ('{potential_var_name}' or fallback). Skipping plot.")
+             return
+             
+    if time_values is None:
+         print("Error: Time values could not be determined. Skipping plot.")
+         return
 
-        # Add dates as a coordinate to the xarray DataArray
-        noisy_pop_mean_obs = noisy_pop_mean_obs.assign_coords(date=("observations", poll_dates))
+    # --- Calculate mean and HDI --- 
+    print("Calculating mean and HDI...")
+    # Ensure calculations happen on the final latent_variable_da
+    mean_latent_popularity = latent_variable_da.mean(dim=["chain", "draw"])
+    hdi_latent_popularity = az.hdi(latent_variable_da, hdi_prob=0.94)
+    print("Mean and HDI calculated.")
 
-        # Group by date and average
-        # Use dropna=False if needed, handle potential NaT dates if any
-        noisy_pop_daily_mean_xr = noisy_pop_mean_obs.groupby("date").mean()
-        noisy_pop_daily_dates = noisy_pop_daily_mean_xr['date'].values
-        noisy_pop_daily_mean = noisy_pop_daily_mean_xr.values # Numpy array (days, parties)
-        print("Successfully calculated daily average noisy popularity.")
-    except Exception as e:
-        print(f"Warning: Could not calculate daily average noisy popularity: {e}")
-        noisy_pop_daily_mean = None
-        noisy_pop_daily_dates = None
-    else:
-        print("Info: 'noisy_popularity_polls' not found in trace, skipping noisy popularity line.")
+    # --- Remove Noisy Popularity Section (for clarity) --- 
+    noisy_pop_daily_mean = None
+    noisy_pop_daily_dates = None
+    print("Skipping noisy popularity calculation/plotting for clarity.")
 
+    # +++ Add Debugging +++
+    print("\nDEBUG: Inspecting mean_latent_popularity before plotting loop:")
+    print(f"  Type: {type(mean_latent_popularity)}")
+    if hasattr(mean_latent_popularity, 'dims'):
+        print(f"  Dims: {mean_latent_popularity.dims}")
+    if hasattr(mean_latent_popularity, 'coords'):
+        print(f"  Coords: {list(mean_latent_popularity.coords.keys())}")
+    # print(mean_latent_popularity) # Optional: Print the whole object if small enough
+    print("DEBUG: End inspection ---\n")
+    # +++ End Debugging +++
 
     # --- Plotting ---
     parties = dataset.political_families
@@ -297,12 +398,7 @@ def plot_latent_popularity_vs_polls(elections_model, output_dir, include_target_
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(6 * n_cols, 4 * n_rows), sharex=True, sharey=True)
     axes = axes.flatten()
 
-    # --- Inspect polls_train before melt ---
-    print("\n--- Describing polls_train[parties] before melt ---")
-    print(polls_train[parties].describe())
-    print("--------------------------------------------------")
-    # --- End Inspection ---
-
+    # Prepare melted poll data (outside loop)
     polls_melt = polls_train.melt(
         id_vars=['date', 'pollster', 'sample_size'],
         value_vars=parties,
@@ -315,25 +411,27 @@ def plot_latent_popularity_vs_polls(elections_model, output_dir, include_target_
         ax = axes[i]
 
         # Plot Latent Popularity Mean and HDI (Scale 0-1 data by 100)
+        # Select party from the already calculated mean DataArray
         latent_mean_party = mean_latent_popularity.sel(parties_complete=party)
-        ax.plot(calendar_time_coord, latent_mean_party * 100, label="Latent Popularity (Mean)")
+        ax.plot(time_values, latent_mean_party * 100, label="Latent Popularity (Mean)")
 
-        # Plot HDI using positional index
-        # Select the specific DataArray from the HDI Dataset first
-        hdi_data_array = hdi_latent_popularity[latent_var_name].sel(parties_complete=party)
-        ax.fill_between(
-            calendar_time_coord,
-            hdi_data_array.isel(hdi=0) * 100, # Use index 0 for lower bound
-            hdi_data_array.isel(hdi=1) * 100, # Use index 1 for upper bound
-            alpha=0.3, label="94% HDI"
-        )
+        # Plot HDI using the calculated HDI dataset (which is an xarray Dataset)
+        # Select the specific party from the HDI Dataset
+        # The variable within the HDI dataset has the name of the original variable
+        hdi_data_array_party = hdi_latent_popularity.sel(parties_complete=party)
+        # Check if the latent_var_name exists as a variable in the hdi dataset
+        if latent_variable_da.name in hdi_data_array_party:
+             hdi_plot_data = hdi_data_array_party[latent_variable_da.name]
+             ax.fill_between(
+                 time_values,
+                 hdi_plot_data.isel(hdi=0) * 100, # Use index 0 for lower bound
+                 hdi_plot_data.isel(hdi=1) * 100, # Use index 1 for upper bound
+                 alpha=0.3, label="94% HDI"
+             )
+        else:
+             print(f"Warning: Could not find HDI variable '{latent_variable_da.name}' for party {party}. Skipping HDI plot.")
 
-        # Plot Daily Average Noisy Popularity (if available) (Scale 0-1 data by 100)
-        if noisy_pop_daily_mean is not None and noisy_pop_daily_dates is not None:
-             party_idx_noisy = parties.index(party)
-             # ax.plot(noisy_pop_daily_dates, noisy_pop_daily_mean[:, party_idx_noisy] * 100, # Scale 0-1 data by 100
-             #         label="Noisy Pop (Daily Avg)", color='green', linestyle='--', alpha=0.8)
-
+        # Removed noisy popularity plot line
 
         # Plot Observed Polls (Calculate percentage from counts)
         party_polls = polls_melt[polls_melt['party'] == party]
@@ -351,8 +449,9 @@ def plot_latent_popularity_vs_polls(elections_model, output_dir, include_target_
         ax.yaxis.set_major_formatter(mtick.PercentFormatter()) # Use default formatter for 0-100 data
         ax.legend()
         ax.grid(True, linestyle=':')
-        # Add reasonable y-limits for percentage data
-        # ax.set_ylim(-5, 105) # Set y-axis limits from -5% to 105% <-- Commented out
+        # Ensure y-limits accommodate the data
+        ax.autoscale(enable=True, axis='y') 
+        # ax.set_ylim(bottom=max(-5, ax.get_ylim()[0]), top=min(105, ax.get_ylim()[1])) # Optional adjusted limits
 
         # Add vertical line for target election date
         if include_target_date and dataset.election_date:

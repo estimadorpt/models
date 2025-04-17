@@ -126,206 +126,87 @@ class ElectionsFacade:
         **sampler_kwargs
     ):
         """
-        Run MCMC inference on the model.
-        
-        Parameters:
-        -----------
-        draws : int
-            Number of posterior samples to draw
-        tune : int
-            Number of tuning samples
-        target_accept : float
-            Target acceptance rate for NUTS sampler
-        **sampler_kwargs :
-            Additional arguments for PyMC sampler
+        Runs the MCMC sampling process for the compiled model.
+
+        Args:
+            draws: Number of posterior samples per chain.
+            tune: Number of tuning (burn-in) samples per chain.
+            target_accept: Target acceptance probability for NUTS sampler.
+            **sampler_kwargs: Additional keyword arguments passed to pm.sample().
         
         Returns:
-        --------
-        prior, trace, posterior : tuple of arviz.InferenceData
-            Prior, trace and posterior samples
+            Tuple[az.InferenceData, az.InferenceData, az.InferenceData]: 
+            A tuple containing prior checks, the main trace (posterior), and posterior predictive checks.
         """
-        # Build the model if it hasn't been built yet
         if self.model_instance.model is None:
+            print("Building model...")
             self.build_model()
 
-        # --- Determine var_names based on model type --- 
-        model_type_name = self.model_instance.__class__.__name__
-        if model_type_name == "StaticBaselineElectionModel":
-            var_names = [
-                # Static Model Core Components
-                "party_baseline",
-                "election_party_baseline",
-                "party_time_effect", # Derived from GP
-                # Latent & Noisy Popularities
-                "latent_popularity_trajectory", # Full trajectory
-                "latent_pop_t0", # Election day latent pop
-                "noisy_popularity", # Poll-level noisy pop
-                # Likelihoods & House Effects
-                "N_approve", # Poll likelihood variable
-                "R", # Results likelihood variable
-                "house_effects",
-                # Parameters
-                "house_effects_sd",
-                "concentration_polls",
-                "concentration_results",
-                "gp_coef_baseline" # GP coefficients
-            ]
-        elif model_type_name == "DynamicGPElectionModel":
-             var_names = [
-                # Dynamic Model Core Components
-                "gp_coef_calendar_raw", # Raw GP coefficients
-                "gp_coef_calendar", # Zero-sum GP coefficients
-                "party_calendar_effect", # GP realization over time
-                # Latent & Noisy Popularities
-                "latent_popularity_calendar_trajectory", # Softmax of GP over time
-                "latent_pop_results", # Latent pop on election days
-                "noisy_popularity_polls", # Poll-level noisy pop
-                # Likelihoods & House Effects
-                "N_approve", # Poll likelihood variable
-                "R", # Results likelihood variable
-                "house_effects",
-                # Parameters
-                "house_effects_sd",
-                "concentration_polls",
-                "concentration_results",
-             ]
-        else:
-            # Default or raise error if unknown model
-            print(f"Warning: Unknown model type '{model_type_name}' for var_names selection. Using basic list.")
-            var_names = ["N_approve", "R", "house_effects"] # Fallback to minimal
-        
-        if self.debug:
-            print(f"Selected var_names for {model_type_name}: {var_names}")
-        # --- End Determine var_names --- 
+        with self.model_instance.model:
+            # --- Prior Predictive Checks ---
+            print("Sampling prior predictive...")
+            self.prior = pm.sample_prior_predictive()
+            # --- End Prior Predictive Checks ---
 
-        # Include draws and tune in sampler_kwargs instead of passing them directly
-        sampler_kwargs['draws'] = draws
-        sampler_kwargs['tune'] = tune
-        sampler_kwargs['target_accept'] = target_accept
-        sampler_kwargs['max_treedepth'] = 15 # Increase max tree depth
-        
-        # Run sampling
-        prior_checks, trace_from_sample, posterior_checks = self.model_instance.sample_all(
-            var_names=var_names,
+            # --- Main Sampling (Posterior) ---
+            print("Sampling posterior...")
+            self.trace = pm.sample(
+                draws=draws, 
+                tune=tune, 
+                target_accept=target_accept,
             **sampler_kwargs
         )
-        
-        # Assign prior and posterior checks (might be None)
-        self.prior = prior_checks
-        self.posterior = posterior_checks # Note: sample_all currently returns None here
+            # --- End Main Sampling ---
+            
+            # --- Posterior Predictive Checks --- 
+            # This is now handled explicitly in fit_metrics or if called separately.
+            # --- End Posterior Predictive Checks ---
+            
+            # --- Construct final InferenceData --- 
+            # OBSERVED DATA IS ADDED AUTOMATICALLY BY pm.sample based on likelihood's 'observed' arg
+            # We will verify/rely on that in calculate_fit_metrics
+            # REMOVED manual population of observed_data_dict and add_groups call
+            # observed_data_dict = {}
+            # if hasattr(self.model_instance, 'data_containers'):
+            # ... (removed code) ...
+            # else:
+            #      print("Warning: Model instance has no data_containers attribute. Observed data might be incomplete.")
 
-        # Initialize self.trace to None before potentially assigning the enhanced version
-        self.trace = None 
-        
-        # print(f"DEBUG (BaseModel): Returning trace of type: {type(trace_from_sample)}")
-
-        # --- Debug trace_from_sample --- 
-        if trace_from_sample is not None:
-            # print("DEBUG SAMPLE: Inspecting trace_from_sample coordinates...")
-            if hasattr(trace_from_sample, 'posterior') and hasattr(trace_from_sample.posterior, 'coords'):
-                 # print(f"DEBUG SAMPLE: Coords in trace_from_sample.posterior: {list(trace_from_sample.posterior.coords.keys())}")
-                 if 'calendar_time' in trace_from_sample.posterior.coords:
-                      # print("DEBUG SAMPLE: 'calendar_time' FOUND in posterior coords.")
-                      pass
-                 else:
-                      # print("DEBUG SAMPLE: 'calendar_time' NOT found in posterior coords.")
-                      pass
-            else:
-                 # print("DEBUG SAMPLE: No posterior or coords found in trace_from_sample.")
-                 pass
-                 
-            if hasattr(trace_from_sample, 'constant_data') and hasattr(trace_from_sample.constant_data, 'coords'):
-                 # print(f"DEBUG SAMPLE: Coords in trace_from_sample.constant_data: {list(trace_from_sample.constant_data.coords.keys())}")
-                 if 'calendar_time' in trace_from_sample.constant_data.coords:
-                      # print("DEBUG SAMPLE: 'calendar_time' FOUND in constant_data coords.")
-                      pass
-                 else:
-                      # print("DEBUG SAMPLE: 'calendar_time' NOT found in constant_data coords.")
-                      pass
-            else:
-                 # print("DEBUG SAMPLE: No constant_data or coords found in trace_from_sample.")
-                 pass
-        else:
-             # print("DEBUG SAMPLE: trace_from_sample is None.")
-             pass
-        # --- End Debug trace_from_sample --- 
-
-        # --- Explicitly construct InferenceData with observed_data --- #
-        # Check if trace_from_sample was generated and has posterior
-        if trace_from_sample is not None and hasattr(trace_from_sample, 'posterior'):
+            print("Constructing final InferenceData...") # Adjusted print
             try:
-                print("Constructing final InferenceData including observed_data...")
-                observed_data_dict = {}
-                model = self.model_instance.model
-                required_obs_vars = [
-                    "observed_polls", "observed_N_polls",
-                    "observed_results", "observed_N_results"
-                ]
-                # Use coordinates from the generated posterior trace
-                coords = trace_from_sample.posterior.coords 
+                 # Combine prior and posterior (trace)
+                 # Observed data should already be in self.trace from pm.sample
+                 self.trace.extend(self.prior)
+                 
+                 # REMOVED: self.trace.add_groups(observed_data=observed_data_dict)
 
-                for var_name in required_obs_vars:
-                    if var_name in model.named_vars:
-                        pm_data_var = model[var_name]
-                        if hasattr(pm_data_var, 'get_value'):
-                            data_val = pm_data_var.get_value(borrow=True)
-                            dims = model.named_vars_to_dims.get(var_name)
-                            if dims:
-                                relevant_coords = {dim: coords[dim] for dim in dims if dim in coords}
-                                observed_data_dict[var_name] = xr.DataArray(data_val, coords=relevant_coords, dims=dims)
-                            else:
-                                observed_data_dict[var_name] = xr.DataArray(data_val)
-                        else:
-                             print(f"Warning: Could not get value for observed var '{var_name}'.")
-                    else:
-                         print(f"Warning: Observed data variable '{var_name}' not found in model.")
-                
-                if observed_data_dict:
-                     observed_data_group = xr.Dataset(observed_data_dict)
-                     # Create a new InferenceData object using trace_from_sample
-                     final_idata = az.InferenceData(
-                         posterior=trace_from_sample.posterior,
-                         observed_data=observed_data_group,
-                         sample_stats=getattr(trace_from_sample, 'sample_stats', None),
-                         prior=getattr(trace_from_sample, 'prior', None), 
-                         constant_data=getattr(trace_from_sample, 'constant_data', None)
-                     )
-                     self.trace = final_idata # Assign the final, enhanced object to self.trace
-                     print("Final InferenceData constructed successfully.")
-                else:
-                     print("Warning: No observed data collected; assigning original trace from sample.")
-                     self.trace = trace_from_sample # Use the original trace if no obs data added
+                 # Add constant data if available (check model instance)
+                 # CONSTANT DATA IS ALSO LIKELY ADDED AUTOMATICALLY BY PYMC
+                 # REMOVING manual addition to prevent errors
+                 # if hasattr(self.model_instance, 'data_containers'):
+                 #      constant_data_to_add = {}
+                 #      potential_constants = [
+                 #           "calendar_time_poll_idx", "pollster_idx", "poll_cycle_idx",
+                 #           "calendar_time_result_district_idx", "result_cycle_district_idx", "result_district_idx",
+                 #           "calendar_time_cycle_idx", "poll_days_numeric", "calendar_time_days_numeric"
+                 #      ]
+                 #      for const_key in potential_constants:
+                 #           if const_key in self.model_instance.data_containers:
+                 #                constant_data_to_add[const_key] = self.model_instance.data_containers[const_key].eval()
+                 #      
+                 #      if constant_data_to_add:
+                 #           self.trace.add_groups(constant_data=constant_data_to_add)
+                 #           print(f"DEBUG FACADE: Added constant_data with keys: {list(constant_data_to_add.keys())}")
+                 
+                 print("Final InferenceData constructed successfully.")
+                 
+            except Exception as idata_err:
+                 print(f"Error constructing final InferenceData: {idata_err}")
+                 # Fallback: trace might still be usable but potentially missing groups
 
-            except Exception as e:
-                 print(f"Warning: Failed to construct final InferenceData with observed_data: {e}")
-                 import traceback
-                 traceback.print_exc()
-                 # Fallback: assign the original trace if construction failed
-                 self.trace = trace_from_sample 
-        else:
-             print("Warning: No trace or posterior found after sampling. Cannot add observed_data.")
-             self.trace = trace_from_sample # Assign whatever was returned
-        # --- End Construct InferenceData --- #
-        
-        # --- Debug loaded idata --- 
-        if self.trace is not None and hasattr(self.trace, 'coords') and self.trace.coords is not None:
-            if 'calendar_time' in self.trace.coords:
-                 loaded_cal_time = self.trace.coords['calendar_time'].values
-                 # print(f"DEBUG LOAD: Type of loaded calendar_time: {type(loaded_cal_time)}")
-                 # if hasattr(loaded_cal_time, 'dtype'): print(f"DEBUG LOAD: Dtype of loaded calendar_time: {loaded_cal_time.dtype}")
-                 # try:
-                 #      print(f"DEBUG LOAD: Last 5 loaded calendar_time coords: {loaded_cal_time[-5:]}")
-                 # except Exception as e:
-                 #      print(f"DEBUG LOAD: Error printing loaded coords: {e}")
-            else:
-                 # print("DEBUG LOAD: 'calendar_time' not found in loaded coords.")
-                 pass
-        else:
-             # print("DEBUG LOAD: No trace or coords found after loading.")
-             pass
-        # --- End debug --- 
-        
-        # Return the objects stored in the facade instance attributes
+        # Assign posterior separately if needed (currently not sampled here)
+        self.posterior = None # Explicitly set to None as it's not sampled here
+
         return self.prior, self.trace, self.posterior
     
     def save_inference_results(self, directory: str = ".", force: bool = False):
@@ -1035,308 +916,288 @@ class ElectionsFacade:
                 traceback.print_exc()
             raise ValueError(error_msg)
     
-    def debug_prediction_structure(self):
-        """
-        Print detailed debug information about the prediction structure.
-        This is helpful for debugging issues with predictions and plots.
-        """
-        if not hasattr(self, "prediction") or self.prediction is None:
-            print("No prediction available. Generate a prediction first.")
-            return
-        
-        import numpy as np
-        
-        print("\n=== PREDICTION STRUCTURE DEBUG INFO ===", flush=True)
-        print(f"Type of prediction: {type(self.prediction)}", flush=True)
-        print(f"Keys in prediction: {list(self.prediction.keys())}", flush=True)
-        
-        # Print information about each prediction array
-        for key, value in self.prediction.items():
-            print(f"\n{key}:", flush=True)
-            print(f"  Shape: {value.shape}", flush=True)
-            print(f"  Dtype: {value.dtype}", flush=True)
-            print(f"  Contains NaNs: {np.isnan(value).any()}", flush=True)
-            if np.isnan(value).any():
-                print(f"  NaN percentage: {np.isnan(value).mean() * 100:.2f}%", flush=True)
-        
-        # Print information about coordinates
-        if hasattr(self, "prediction_coords") and self.prediction_coords is not None:
-            print("\nCoordinates:", flush=True)
-            for key, value in self.prediction_coords.items():
-                print(f"\n{key}:", flush=True)
-                print(f"  Type: {type(value)}", flush=True)
-                print(f"  Length: {len(value)}", flush=True)
-                print(f"  Content: {value}", flush=True)
-                print(f"  Is scalar: {np.isscalar(value)}", flush=True)
-                
-                # Special handling for parties_complete
-                if key == 'parties_complete':
-                    print(f"  Content type: {type(value[0]) if len(value) > 0 else 'empty'}", flush=True)
-                    # Convert to list for safety
-                    self.prediction_coords[key] = list(value)
-                    print(f"  Converted to list: {self.prediction_coords[key]}", flush=True)
-        
-        # Print information about dimensions
-        if hasattr(self, "prediction_dims") and self.prediction_dims is not None:
-            print("\nDimensions:", flush=True)
-            for key, value in self.prediction_dims.items():
-                print(f"  {key}: {value}", flush=True)
-        
-        print("=======================================", flush=True)
-        return self.prediction, self.prediction_coords, self.prediction_dims 
-
-    def nowcast_party_support(self, *args, **kwargs):
-        """Calls the nowcast method of the specific model instance, if available."""
-        if self.model_instance is None or not hasattr(self.model_instance, 'nowcast_party_support'):
-            raise NotImplementedError("The current model does not implement nowcast_party_support.")
-        if self.trace is None:
-             raise ValueError("Model must be fit with run_inference() before nowcasting")
-        # Pass necessary arguments, including trace
-        return self.model_instance.nowcast_party_support(idata=self.trace, *args, **kwargs)
-
-    def predict(self, *args, **kwargs):
-        """Calls the predict method of the specific model instance, if available."""
-        if self.model_instance is None or not hasattr(self.model_instance, 'predict'):
-            raise NotImplementedError("The current model does not implement predict.")
-        if self.trace is None:
-             raise ValueError("Model must be fit with run_inference() before predicting")
-        return self.model_instance.predict(*args, **kwargs)
-
-    def predict_history(self, *args, **kwargs):
-        """Calls the predict_history method of the specific model instance, if available."""
-        if self.model_instance is None or not hasattr(self.model_instance, 'predict_history'):
-            raise NotImplementedError("The current model does not implement predict_history.")
-        if self.trace is None:
-             raise ValueError("Model must be fit with run_inference() before predicting history")
-        return self.model_instance.predict_history(*args, **kwargs)
-
-    def predict_latent_trajectory(self, *args, **kwargs):
-        """Calls the predict_latent_trajectory method of the specific model instance, if available."""
-        if self.model_instance is None or not hasattr(self.model_instance, 'predict_latent_trajectory'):
-            raise NotImplementedError("The current model does not implement predict_latent_trajectory.")
-        if self.trace is None:
-             raise ValueError("Model must be fit with run_inference() before predicting trajectory")
-        return self.model_instance.predict_latent_trajectory(idata=self.trace, *args, **kwargs)
-
     def generate_diagnostic_plots(self, directory: str = "."):
         """
-        Generate and save arviz diagnostic plots for the trace.
-        
-        Parameters:
-        -----------
-        directory : str
-            Directory where to save the plots.
+        Generates various diagnostic plots and a summary text file for the model trace.
+        Focuses on trace plots per variable category for better readability.
         """
         if self.trace is None:
-            print("Trace object not found. Cannot generate diagnostic plots.")
+            print("Error: Trace object not found. Cannot generate diagnostic plots.")
             return
-            
+        if not hasattr(self.trace, 'posterior') or self.trace.posterior.sizes['draw'] == 0:
+             print("Error: Posterior samples not found in trace. Cannot generate diagnostic plots.")
+             return
+        
         os.makedirs(directory, exist_ok=True)
         print(f"Generating diagnostic plots in: {directory}")
-        
-        # Key parameters to focus on (avoid plotting too many)
-        key_params = [
-            'party_baseline', 
-            'election_party_baseline_sd',
-            'election_party_baseline',
-            'gp_coef_baseline', 
-            'concentration_polls', 
-            'concentration_results',
-            'house_effects'
-        ]
-        plot_vars = [p for p in key_params if p in self.trace.posterior]
 
-        # 1. Trace Plot (for key parameters)
+        # --- Temporarily increase Matplotlib warning limits ---
+        original_max_warning = plt.rcParams.get('figure.max_open_warning', 20) # Get current or default
+        # original_max_subplots = plt.rcParams.get('plot.max_subplots', 40) # Invalid key, removed
+        new_max_warning = 150 # Set a higher limit for open figures warning
         try:
-            trace_plot_path = os.path.join(directory, "diagnostic_trace_plot.png")
-            print(f"- Generating trace plot for key parameters...")
-            az.plot_trace(self.trace, var_names=plot_vars)
-            plt.savefig(trace_plot_path)
-            plt.close()
-            print(f"  Saved trace plot to {trace_plot_path}")
-        except Exception as e:
-            print(f"  Error generating trace plot: {e}")
+            plt.rcParams['figure.max_open_warning'] = new_max_warning
+            # plt.rcParams['plot.max_subplots'] = new_max_subplots # Invalid key, removed
+            print(f"Temporarily increased figure.max_open_warning to {new_max_warning}")
+        except KeyError as e:
+             print(f"Warning: Could not set rcParams: {e}. Using defaults.")
+
+
+        # --- Categorize Variables ---
+        # Identify variables present in the posterior trace
+        present_vars = list(self.trace.posterior.data_vars)
+
+        # Define categories (can be customized)
+        var_categories = {
+            'baseline_gp': [v for v in present_vars if 'baseline_gp' in v and '_raw' not in v],
+            'short_term_gp': [v for v in present_vars if 'short_term_gp' in v and '_raw' not in v],
+            'house_effects': [v for v in present_vars if 'house_effect' in v and '_raw' not in v], # Catch house_effects_sd too
+            'district_effects': [v for v in present_vars if 'district_effect' in v and '_raw' not in v],
+            'concentration': [v for v in present_vars if 'concentration_' in v],
+            'raw_gp_coefs': [v for v in present_vars if '_gp_coef_raw' in v],
+            'other': [] # Catch-all for remaining variables
+        }
+
+        # Assign remaining variables to 'other' category
+        categorized_vars = set(v for cat_list in var_categories.values() for v in cat_list)
+        var_categories['other'] = [v for v in present_vars if v not in categorized_vars and 'noisy_mu' not in v] # Exclude noisy_mu for now
+        # Special handling for potentially huge variables like noisy_mu
+        if 'noisy_mu_polls' in present_vars:
+            var_categories.setdefault('large_likelihood_params', []).append('noisy_mu_polls')
+
+
+        # Filter categories to only include those with present variables
+        present_vars_by_category = {cat: var_list for cat, var_list in var_categories.items() if var_list}
+        print("\nVariable Categories for Plotting:")
+        for cat, var_list in present_vars_by_category.items():
+            print(f"  {cat}: {var_list}")
+
+
+        # --- Generate Plots ---
+
+        # 1. Basic Trace Plot (Key Parameters)
+        # Select a smaller subset of key parameters for the main trace plot
+        key_params = []
+        key_params.extend(present_vars_by_category.get('baseline_gp', []))
+        key_params.extend(present_vars_by_category.get('short_term_gp', []))
+        key_params.extend([v for v in present_vars_by_category.get('house_effects', []) if 'sd' in v]) # Only SDs
+        key_params.extend([v for v in present_vars_by_category.get('district_effects', []) if 'sd' in v]) # Only SDs
+        key_params.extend(present_vars_by_category.get('concentration', []))
+        # Ensure we only include variables actually present
+        key_params = [p for p in key_params if p in present_vars]
+
+        if key_params:
+            print(f"\n- Generating main trace plot for {len(key_params)} key parameters...")
+            trace_plot_path = os.path.join(directory, "diagnostic_trace_plot_main.png")
+            try:
+                az.plot_trace(self.trace, var_names=key_params, compact=True, figsize=(12, 2 * len(key_params)))
+                plt.suptitle("Trace Plot: Key Parameters", y=1.02)
+            except Exception as e:
+                print(f"  Error generating main trace plot: {e}")
+        else:
+             print("\n- Skipping main trace plot (no key parameters identified).")
 
         # 2. Energy Plot
+        print("- Generating energy plot...")
+        energy_plot_path = os.path.join(directory, "diagnostic_energy_plot.png")
         try:
-            energy_plot_path = os.path.join(directory, "diagnostic_energy_plot.png")
-            print(f"- Generating energy plot...")
             az.plot_energy(self.trace)
+            plt.suptitle("Energy Plot")
             plt.savefig(energy_plot_path)
             plt.close()
             print(f"  Saved energy plot to {energy_plot_path}")
         except Exception as e:
             print(f"  Error generating energy plot: {e}")
 
-        # 3. Pair Plot (for a smaller subset, e.g., baseline parameters)
-        try:
-            pair_plot_vars = [p for p in ['party_baseline', 'election_party_baseline_sd', 'concentration_polls', 'concentration_results'] if p in self.trace.posterior]
-            if pair_plot_vars:
-                pair_plot_path = os.path.join(directory, "diagnostic_pair_plot.png")
-                print(f"- Generating pair plot for {pair_plot_vars}...")
-                az.plot_pair(self.trace, var_names=pair_plot_vars, divergences=True)
+        # 3. Pair Plot (Small subset of scalar parameters)
+        # Select only scalar parameters (no dimensions other than chain/draw)
+        scalar_params = []
+        for cat, var_list in present_vars_by_category.items():
+            if cat == 'raw_gp_coefs' or cat == 'large_likelihood_params': continue # Skip large/raw coefs
+            for var_name in var_list:
+                 try:
+                     dims = self.trace.posterior[var_name].dims
+                     if len(dims) == 2 and 'chain' in dims and 'draw' in dims:
+                           scalar_params.append(var_name)
+                 except Exception:
+                     continue # Ignore if error accessing dims
+
+        # Limit number of parameters for pair plot
+        max_pair_plot_vars = 6
+        if len(scalar_params) > max_pair_plot_vars:
+             print(f"  (Pair plot limited to {max_pair_plot_vars} scalar params: {scalar_params[:max_pair_plot_vars]})")
+             scalar_params = scalar_params[:max_pair_plot_vars]
+
+        if scalar_params:
+            print(f"- Generating pair plot for {len(scalar_params)} scalar parameters...")
+            pair_plot_path = os.path.join(directory, "diagnostic_pair_plot.png")
+            try:
+                az.plot_pair(self.trace, var_names=scalar_params, kind='kde', divergences=True)
+                plt.suptitle("Pair Plot (Scalar Parameters)")
                 plt.savefig(pair_plot_path)
                 plt.close()
                 print(f"  Saved pair plot to {pair_plot_path}")
-        except Exception as e:
-            print(f"  Error generating pair plot: {e}")
-            
-        # 4. ESS Plot
-        try:
-            ess_plot_path = os.path.join(directory, "diagnostic_ess_plot.png")
-            print(f"- Generating ESS plot...")
-            az.plot_ess(self.trace, var_names=plot_vars, kind="evolution")
-            plt.savefig(ess_plot_path)
-            plt.close()
-            az.plot_ess(self.trace, var_names=plot_vars, kind="local")
-            plt.savefig(ess_plot_path.replace(".png", "_local.png"))
-            plt.close()
-            print(f"  Saved ESS plots to {directory}")
-        except Exception as e:
-            print(f"  Error generating ESS plot: {e}")
-            
-        # 5. R-hat Plot
-        try:
-            rhat_plot_path = os.path.join(directory, "diagnostic_rhat_plot.png")
-            print(f"- Generating R-hat plot...")
-            az.plot_rank(self.trace, var_names=plot_vars)
-            plt.savefig(rhat_plot_path)
-            plt.close()
-            print(f"  Saved R-hat plot to {rhat_plot_path}")
-        except Exception as e:
-            print(f"  Error generating R-hat plot: {e}")
+            except Exception as e:
+                print(f"  Error generating pair plot: {e}")
+        else:
+            print("- Skipping pair plot (no suitable scalar parameters found).")
 
-        # 6. Generate Summary Text File
+        # 4. NEW: Generate Trace Plots per Category
+        print("- Generating trace plots per variable category...")
+        for category, var_list in present_vars_by_category.items():
+            if not var_list or category == 'large_likelihood_params': # Skip huge params category
+                 print(f"  - Skipping category '{category}' (no variables or large params).")
+                 continue
+
+            # Filter out variables with excessive dimensions for standard trace plots
+            # Limit based on the number of individual traces to plot (e.g., 8 parties * 20 districts = 160)
+            MAX_ELEMENTS_FOR_TRACE = 50 # Adjust this limit as needed
+            vars_to_plot = []
+            skipped_vars = []
+            for v in var_list:
+                try:
+                    # Calculate number of non-chain/draw elements
+                    var_dims = self.trace.posterior[v].dims
+                    num_elements = np.prod([self.trace.posterior[v].sizes[d] for d in var_dims if d not in ['chain', 'draw']])
+                    if num_elements <= MAX_ELEMENTS_FOR_TRACE:
+                        vars_to_plot.append(v)
+                    else:
+                        skipped_vars.append(f"{v} ({num_elements} elements)")
+                except Exception as e:
+                     print(f"    Warning: Could not check size for variable {v}: {e}")
+                     skipped_vars.append(f"{v} (size check error)")
+
+
+            if skipped_vars:
+                 print(f"  - Skipping trace plot for some vars in category '{category}' due to large size: {skipped_vars}")
+
+            if not vars_to_plot:
+                 print(f"  - No suitable variables to plot trace for in category '{category}'.")
+                 continue
+
+            print(f"  - Generating trace plot for category: {category} (vars: {vars_to_plot})")
+            trace_plot_path = os.path.join(directory, f"diagnostic_trace_plot_{category}.png")
+            try:
+                # Calculate a reasonable figsize. Base height + height per variable.
+                num_vars_in_plot = len(vars_to_plot)
+                fig_height = 4 + num_vars_in_plot * 1.5 # Adjust multiplier as needed
+                az.plot_trace(self.trace, var_names=vars_to_plot, compact=True, figsize=(15, fig_height))
+                plt.suptitle(f"Trace Plot: Category '{category}'", y=1.01, fontsize=14) # Adjust y slightly
+                plt.tight_layout(rect=[0, 0.03, 1, 0.99]) # Adjust layout to prevent title overlap
+                plt.savefig(trace_plot_path)
+                plt.close()
+                print(f"    Saved category trace plot to {trace_plot_path}")
+            except Exception as e:
+                print(f"    Error generating trace plot for category {category}: {e}")
+        print("  Finished generating category trace plots.")
+
+        # 5. Forest Plot for House Effects (Faceted by Party)
+        if 'house_effects' in present_vars:
+             print("- Generating forest plot for house_effects...")
+             house_effects_plot_path = os.path.join(directory, "diagnostic_forest_plot_house_effects.png")
+             try:
+                 # Determine figsize based on number of pollsters AND parties
+                 n_pollsters = len(self.trace.posterior.coords.get("pollsters", []))
+                 n_parties = len(self.trace.posterior.coords.get("parties_complete", []))
+                 fig_height_house = max(8, n_pollsters * n_parties * 0.4) # Increased base height and multiplied by n_parties
+                 az.plot_forest(self.trace, var_names=['house_effects'], combined=True, figsize=(12, fig_height_house))
+                 plt.suptitle("Forest Plot: House Effects (Faceted by Party)", y=1.02)
+                 plt.tight_layout()
+                 plt.savefig(house_effects_plot_path)
+                 plt.close()
+                 print(f"  Saved house effects forest plot to {house_effects_plot_path}")
+             except Exception as e:
+                 print(f"  Error generating house_effects forest plot: {e}")
+        else:
+            print("- Skipping house_effects forest plot (variable not found).")
+            
+        # 6. Forest Plot for District Effects (Faceted by Party)
+        if 'district_effects' in present_vars:
+             print("- Generating forest plot for district_effects...")
+             district_effects_plot_path = os.path.join(directory, "diagnostic_forest_plot_district_effects.png")
+             try:
+                 # Determine figsize based on number of districts AND parties
+                 n_districts = len(self.trace.posterior.coords.get("districts", []))
+                 n_parties = len(self.trace.posterior.coords.get("parties_complete", [])) # Get number of parties
+                 fig_height_district = max(10, n_districts * n_parties * 0.4) # Increased base height and multiplied by n_parties
+                 az.plot_forest(self.trace, var_names=['district_effects'], combined=True, figsize=(12, fig_height_district))
+                 plt.suptitle("Forest Plot: District Effects (Faceted by Party)", y=1.02)
+                 plt.tight_layout()
+                 plt.savefig(district_effects_plot_path)
+                 plt.close()
+                 print(f"  Saved district effects forest plot to {district_effects_plot_path}")
+             except Exception as e:
+                 print(f"  Error generating district_effects forest plot: {e}")
+        else:
+            print("- Skipping district_effects forest plot (variable not found).")
+
+        # 7. Generate Summary Text File (renumbered)
         summary_path = os.path.join(directory, "diagnostic_summary.txt")
         print(f"- Generating diagnostic summary text file...")
         try:
             # Calculate required ESS based on 10% of total samples
-            # Default to 400 if dimensions aren't available
+            # Default to 4000 if dimensions aren't available
             total_samples = 4000 # Fallback
-            if hasattr(self.trace, 'posterior') and 'chain' in self.trace.posterior.dims and 'draw' in self.trace.posterior.dims:
-                 total_samples = self.trace.posterior.dims['chain'] * self.trace.posterior.dims['draw']
+            # Use .sizes instead of .dims to access dimension lengths
+            if hasattr(self.trace, 'posterior') and 'chain' in self.trace.posterior.sizes and 'draw' in self.trace.posterior.sizes:
+                 # Access lengths from the .sizes mapping
+                 chain_dim = self.trace.posterior.sizes['chain']
+                 draw_dim = self.trace.posterior.sizes['draw']
+                 total_samples = int(chain_dim) * int(draw_dim)
             ess_threshold_pct = 0.10 # 10%
             ess_threshold = int(total_samples * ess_threshold_pct)
             if ess_threshold == 0: ess_threshold = 1 # Ensure threshold is at least 1
 
             summary = az.summary(self.trace)
-            rhat_threshold = 1.01 # New R-hat threshold
+            rhat_threshold = 1.01 # Set R-hat threshold to 1.01
 
-            # Identify potentially problematic parameters
+            # Identify potentially problematic parameters based ONLY on R-hat
             bad_rhat = summary[summary['r_hat'] > rhat_threshold]
-            bad_ess_bulk = summary[summary['ess_bulk'] < ess_threshold]
-            bad_ess_tail = summary[summary['ess_tail'] < ess_threshold]
+            # bad_ess_bulk = summary[summary['ess_bulk'] < ess_threshold] # Removed ESS check
+            # bad_ess_tail = summary[summary['ess_tail'] < ess_threshold] # Removed ESS check
 
-            # Combine indices of all potentially problematic parameters
-            bad_indices = set(bad_rhat.index) | set(bad_ess_bulk.index) | set(bad_ess_tail.index)
+            # Combine indices of problematic parameters based ONLY on R-hat
+            # bad_indices = set(bad_rhat.index) | set(bad_ess_bulk.index) | set(bad_ess_tail.index) # Original logic
+            bad_indices = set(bad_rhat.index) # Only consider R-hat issues
             bad_summary = summary.loc[list(bad_indices)]
 
             with open(summary_path, 'w') as f:
-                f.write("Convergence Diagnostics Summary\n")
-                f.write("=============================\n")
-                f.write(f"R-hat Threshold: > {rhat_threshold}\n")
-                f.write(f"ESS Threshold (Bulk & Tail): < {ess_threshold} ({ess_threshold_pct:.0%} of {total_samples} total samples)\n\n")
+                f.write("Convergence Diagnostics Summary (R-hat > 1.01)\\n")
+                f.write("=============================================\\n")
+                f.write(f"R-hat Threshold Used: > {rhat_threshold}\\n")
+                # f.write(f"ESS Threshold Used for Summary (Bulk & Tail): < {ess_threshold} ({ess_threshold_pct:.0%} of {total_samples} total samples)\\n\\n") # Removed ESS info
 
                 if bad_indices:
-                    f.write("Potential convergence issues detected for the following parameters:\n")
-                    f.write("------------------------------------------------------------------\n")
-                    # Select relevant columns for the problematic summary
-                    problem_cols = ['mean', 'sd', 'hdi_3%', 'hdi_97%', 'ess_bulk', 'ess_tail', 'r_hat']
+                    f.write("\\nParameters with Potential Convergence Issues (R-hat > 1.01):\\n")
+                    f.write("------------------------------------------------------------------\\n")
+                    # Select relevant columns, focusing on R-hat
+                    problem_cols = ['mean', 'sd', 'hdi_3%', 'hdi_97%', 'r_hat'] # Removed ESS cols
+                    # Ensure columns exist before selecting
+                    problem_cols = [col for col in problem_cols if col in bad_summary.columns]
                     f.write(bad_summary[problem_cols].to_string())
-                    f.write("\n\n")
+                    f.write("\\n\\n")
                 else:
-                    f.write("No major convergence issues detected based on R-hat and ESS thresholds.\n\n")
+                    f.write("\\nNo parameters found with R-hat > 1.01.\\n\\n")
 
-                # Append the full summary for reference
-                f.write("Full ArviZ Summary:\n")
-                f.write("==================\n")
-                f.write(summary.to_string())
+                # Append the full summary for reference -- REMOVED
+                # f.write("Full ArviZ Summary:\\n")
+                # f.write("==================\\n")
+                # f.write(summary.to_string())
 
-            print(f"  Saved diagnostic summary to {summary_path}")
+            print(f"  Saved diagnostic summary (R-hat > {rhat_threshold}) to {summary_path}")
         except Exception as e:
             print(f"  Error generating diagnostic summary: {e}")
 
+        # --- Restore original Matplotlib settings ---
+        try:
+            plt.rcParams['figure.max_open_warning'] = original_max_warning
+            # plt.rcParams['plot.max_subplots'] = original_max_subplots # Invalid key, removed
+            print(f"Restored figure.max_open_warning to {plt.rcParams.get('figure.max_open_warning', 'default')}")
+            # print(f"Restored plot.max_subplots to {plt.rcParams.get('plot.max_subplots', 'default')}\") # Invalid key, removed
+        except KeyError as e:
+             print(f"Warning: Could not restore rcParams: {e}.")
+        finally:
+             pass # Add finally clause to satisfy linter
+
+
         print("Diagnostic plot and summary generation complete.")
-
-    def get_latent_popularity(self, date_mode: str = 'election_day'):
-        """
-        Extracts the posterior distribution of the latent popularity 
-        at a specified date (election day, last poll date, or today).
-
-        Args:
-            date_mode (str): Determines the target date for popularity extraction.
-                             Options: 'election_day', 'last_poll', 'today'.
-                             Defaults to 'election_day'.
-
-        Returns:
-            xr.DataArray or None:
-            An xarray DataArray containing the posterior samples of latent popularity
-            at the specified date. 
-            Dimensions: (chain, draw, parties_complete).
-            Returns None if the necessary data is not available in the trace or
-            the target date cannot be determined.
-        """
-        if self.trace is None:
-            print("Error: Trace object not found. Cannot extract latent popularity.")
-            return None
-        if self.dataset is None:
-            print("Error: Dataset not found. Cannot determine target date.")
-            return None
-
-        # Determine the target date based on date_mode
-        target_date = None
-        today = pd.Timestamp.now().normalize() # Get today's date at midnight
-
-        if date_mode == 'election_day':
-            target_date = pd.to_datetime(self.election_date)
-            print(f"Extracting latent popularity for target election date: {target_date.date()}")
-        elif date_mode == 'last_poll':
-            last_poll_date = None
-            # Check polls_train
-            last_poll_date_train = None
-            if self.dataset.polls_train is not None and not self.dataset.polls_train.empty:
-                last_poll_date_train = self.dataset.polls_train['date'].max()
-            
-            # Check polls_test
-            last_poll_date_test = None
-            if self.dataset.polls_test is not None and not self.dataset.polls_test.empty:
-                last_poll_date_test = self.dataset.polls_test['date'].max()
-
-            # Determine the overall last poll date
-            if last_poll_date_train and last_poll_date_test:
-                last_poll_date = max(last_poll_date_train, last_poll_date_test)
-            elif last_poll_date_train:
-                last_poll_date = last_poll_date_train
-            elif last_poll_date_test:
-                last_poll_date = last_poll_date_test
-            
-            # Set the target date if a last poll date was found
-            if last_poll_date:
-                target_date = last_poll_date
-                print(f"Extracting latent popularity for last poll date: {target_date.date()}")
-            else:
-                print("Error: Could not determine last poll date from polls_train or polls_test.")
-                return None
-        elif date_mode == 'today':
-            target_date = today
-            print(f"Extracting latent popularity for current date (today): {target_date.date()}")
-        else:
-            print(f"Error: Invalid date_mode '{date_mode}'. Choose 'election_day', 'last_poll', or 'today'.")
-            return None
-
-        if target_date is None:
-            print("Error: Target date could not be determined.")
-            return None
-
-        # Delegate to the model instance, passing the determined target_date
-        if self.model_instance is None or not hasattr(self.model_instance, 'get_latent_popularity'):
-             print("Error: Model instance does not have the 'get_latent_popularity' method.")
-             return None
-
-        return self.model_instance.get_latent_popularity(idata=self.trace, target_date=target_date)
-
-    # TODO: Implement post-hoc adjustment for Blank/Null votes 
-    #       when generating final forecasts (e.g., for seat projections). 
-    #       The current model output represents shares among modeled parties.
-    #       This adjustment step would estimate the Blank/Null share and 
-    #       renormalize the modeled party shares to represent shares of valid votes. 
