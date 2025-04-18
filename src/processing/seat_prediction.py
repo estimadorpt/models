@@ -121,20 +121,23 @@ def calculate_seat_predictions(
     return total_seats_allocation 
 
 def simulate_seat_allocation(
-    target_pop_posterior: xr.DataArray, # Changed hint to reflect it's likely Dataset
+    district_vote_share_posterior: xr.Dataset | xr.DataArray, # Expect district-level shares
     dataset: ElectionDataset,
     num_samples_for_seats: int,
     pred_dir: str,
     prediction_date_mode: str,
-    hdi_prob: float = 0.94, # Add hdi_prob as parameter
+    hdi_prob: float = 0.94,
     debug: bool = False
 ) -> Tuple[Optional[pd.DataFrame], Optional[pd.DataFrame]]:
     """
-    Simulates seat allocation based on predicted national vote shares and historical district results.
+    Simulates seat allocation based on DIRECT district-level posterior vote shares.
 
     Args:
-        target_pop_posterior: Xarray Dataset containing posterior samples of latent popularity (vote shares).
-                               Must have dimensions 'chain', 'draw', and a party dimension coordinate.
+        district_vote_share_posterior: Xarray Dataset or DataArray containing posterior samples
+                                       of district-level vote shares. Must have dimensions 'chain',
+                                       'draw', a district dimension, and a party dimension coordinate.
+                                       Values should represent probabilities (summing to 1 across parties
+                                       for each district/sample).
         dataset: The ElectionDataset object containing political_families, election_dates, etc.
         num_samples_for_seats: The maximum number of posterior samples to use for the simulation.
         pred_dir: Directory to save prediction outputs (like CSVs).
@@ -147,7 +150,7 @@ def simulate_seat_allocation(
         - pd.DataFrame: DataFrame with seat allocation samples (or None if simulation fails).
         - pd.DataFrame: DataFrame with seat allocation summary statistics (or None if simulation fails).
     """
-    print(f"\nStarting seat prediction simulation using up to {num_samples_for_seats} samples...")
+    print(f"\nStarting seat prediction simulation using DIRECT district shares (up to {num_samples_for_seats} samples)...")
     # Initialize return values
     seats_df_results: Optional[pd.DataFrame] = None
     seat_summary_results: Optional[pd.DataFrame] = None
@@ -155,41 +158,40 @@ def simulate_seat_allocation(
     # Extract necessary info from dataset
     political_families = dataset.political_families
     election_dates = dataset.election_dates
-    last_election_date_for_swing = None
+    last_election_date_for_baseline_votes = None # Renamed for clarity
 
-    # --- Pre-load Data and Calculate Baselines --- 
+    # --- Pre-load Data ---
+    # We only need district_config and baseline district *total* votes now
     pre_load_successful = False # Initialize flag
-    last_election_national_shares = None
-    last_election_district_shares = None
     district_config = None
     district_total_votes_baseline = None
     all_district_names = None
 
     try:
-        if debug: print("Pre-loading data for seat simulation...")
-        # 1. Find latest election date string
+        if debug: print("Pre-loading data for seat simulation (Config & Baseline Totals)...")
+        # 1. Find latest election date string (needed for baseline vote totals)
         if election_dates:
             parsed_dates = [pd.to_datetime(d, errors='coerce') for d in election_dates]
             valid_dates = [d for d in parsed_dates if pd.notna(d)]
             if valid_dates:
                     last_election_date_dt = max(valid_dates)
+                    # Find the original string representation
                     original_indices = [i for i, dt in enumerate(parsed_dates) if dt == last_election_date_dt]
                     if original_indices:
                         original_index = original_indices[0]
-                        # Handle cases where dates might be stored as strings or datetime objects
                         if isinstance(election_dates[original_index], str):
-                            last_election_date_for_swing = election_dates[original_index]
+                            last_election_date_for_baseline_votes = election_dates[original_index]
                         else:
-                            try: # Attempt conversion if not string
-                                last_election_date_for_swing = pd.to_datetime(election_dates[original_index]).strftime('%Y-%m-%d')
+                            try:
+                                last_election_date_for_baseline_votes = pd.to_datetime(election_dates[original_index]).strftime('%Y-%m-%d')
                             except Exception:
-                                 last_election_date_for_swing = last_election_date_dt.strftime('%Y-%m-%d') # Fallback
-                    else:
-                        last_election_date_for_swing = last_election_date_dt.strftime('%Y-%m-%d')
-        
-        if not last_election_date_for_swing:
-                raise ValueError("Could not determine last election date for swing calculation.")
-        if debug: print(f"(Using {last_election_date_for_swing} as baseline election for swing)")
+                                 last_election_date_for_baseline_votes = last_election_date_dt.strftime('%Y-%m-%d') # Fallback
+                    else: # Fallback if original string index not found
+                        last_election_date_for_baseline_votes = last_election_date_dt.strftime('%Y-%m-%d')
+
+        if not last_election_date_for_baseline_votes:
+                raise ValueError("Could not determine last election date for baseline vote total calculation.")
+        if debug: print(f"(Using {last_election_date_for_baseline_votes} election to estimate baseline district total votes)")
 
         # 2. Load District Config
         district_config = load_district_config()
@@ -197,100 +199,95 @@ def simulate_seat_allocation(
         all_district_names = list(district_config.keys()) # Get list of names
         if debug: print(f"Loaded config for {len(all_district_names)} districts.")
 
-        # 3. Load National Results for Baseline Election
-        national_results_df_all = load_election_results(election_dates, political_families, aggregate_national=True)
-        last_election_national_row = national_results_df_all[national_results_df_all['date'] == pd.to_datetime(last_election_date_for_swing)]
-        if last_election_national_row.empty: raise ValueError(f"Could not find national results for baseline date {last_election_date_for_swing}")
-        last_election_national_row = last_election_national_row.iloc[0]
-        # Ensure numeric conversion for safety
-        national_total_votes_baseline = pd.to_numeric(last_election_national_row[political_families], errors='coerce').sum()
-        if pd.isna(national_total_votes_baseline) or national_total_votes_baseline <= 0: 
-            raise ValueError(f"Baseline national total votes are invalid ({national_total_votes_baseline}).")
-        last_election_national_shares = pd.to_numeric(last_election_national_row[political_families], errors='coerce').fillna(0) / national_total_votes_baseline
-        last_election_national_shares = last_election_national_shares.reindex(political_families, fill_value=0.0)
-        if debug: print("Loaded baseline national shares.")
-
-        # 4. Load District Results for Baseline Election
+        # 3. Load District Results ONLY for Baseline Total Votes
         district_results_df_all = load_election_results(election_dates, political_families, aggregate_national=False)
-        last_election_district_df = district_results_df_all[district_results_df_all['date'] == pd.to_datetime(last_election_date_for_swing)].copy()
-        if last_election_district_df.empty: raise ValueError(f"Could not find district results for baseline date {last_election_date_for_swing}")
+        last_election_district_df = district_results_df_all[district_results_df_all['date'] == pd.to_datetime(last_election_date_for_baseline_votes)].copy()
+        if last_election_district_df.empty: raise ValueError(f"Could not find district results for baseline date {last_election_date_for_baseline_votes}")
         if 'Circulo' not in last_election_district_df.columns: raise ValueError("'Circulo' column missing in loaded district results.")
-        # Ensure 'Circulo' is suitable as index (e.g., string)
+        if 'sample_size' not in last_election_district_df.columns: raise ValueError("'sample_size' column missing in loaded district results.")
+
+        # Ensure 'Circulo' is suitable as index
         last_election_district_df['Circulo'] = last_election_district_df['Circulo'].astype(str)
         last_election_district_df = last_election_district_df.set_index('Circulo')
-        # Ensure 'sample_size' is numeric
+
+        # Extract baseline total votes per district (sample_size)
         district_total_votes_baseline = pd.to_numeric(last_election_district_df['sample_size'], errors='coerce').fillna(0)
-        # Ensure party columns are numeric by applying to_numeric to each column
-        party_cols_numeric = last_election_district_df[political_families].apply(pd.to_numeric, errors='coerce').fillna(0)
-        last_election_district_shares = party_cols_numeric.copy()
-        valid_districts_baseline = district_total_votes_baseline[district_total_votes_baseline > 0].index
-        # Perform division only for valid districts
-        if not valid_districts_baseline.empty:
-             last_election_district_shares.loc[valid_districts_baseline] = last_election_district_shares.loc[valid_districts_baseline].div(district_total_votes_baseline.loc[valid_districts_baseline], axis=0)
-        # Handle districts with zero votes (set shares to zero)
-        zero_vote_districts = district_total_votes_baseline[district_total_votes_baseline <= 0].index
-        if not zero_vote_districts.empty:
-             last_election_district_shares.loc[zero_vote_districts, :] = 0.0
-        # Reindex to ensure all parties and districts are present
-        last_election_district_shares = last_election_district_shares.reindex(columns=political_families, fill_value=0.0)
-        last_election_district_shares = last_election_district_shares.reindex(index=all_district_names, fill_value=0.0)
+        # Reindex to ensure all configured districts are present, filling missing with 0
         district_total_votes_baseline = district_total_votes_baseline.reindex(all_district_names, fill_value=0)
-        if debug: print("Loaded and processed baseline district shares and totals.")
-        
+        if debug: print("Loaded baseline district total votes.")
+
+        # --- Removed baseline share calculations (national and district) ---
+
         print("Pre-loading complete.")
         pre_load_successful = True
-        
+
     except Exception as preload_err:
             print(f"Error pre-loading data for seat simulation: {preload_err}")
             if debug: traceback.print_exc()
-            # pre_load_successful remains False
-            # Return None tuple immediately if pre-load fails
-            return None, None
-    # --- End Pre-load Data --- 
+            return None, None # Return None tuple immediately if pre-load fails
+    # --- End Pre-load Data ---
 
     # Proceed only if pre-loading was successful
     if pre_load_successful:
-        # --- Dynamically find party coordinate name --- 
+        # --- Dynamically find coordinate names ---
         party_dim_name = None
         party_coord_values = None
+        district_dim_name = None
+        district_coord_values = None
         expected_num_parties = len(political_families)
-        # Iterate through dimensions AND coordinates of the input DataArray/Dataset
-        for dim_name in target_pop_posterior.dims:
-            if dim_name in target_pop_posterior.coords:
-                if target_pop_posterior[dim_name].size == expected_num_parties:
-                    coord_values = target_pop_posterior[dim_name].values.tolist()
-                    # Check if coordinate values match political families (order doesn't matter)
-                    if sorted(coord_values) == sorted(political_families):
-                        party_dim_name = dim_name
-                        party_coord_values = coord_values # Store the actual coord values
-                        if debug: print(f"Found party coordinate dimension: '{party_dim_name}' with values: {party_coord_values}")
-                        break # Found it
-        
+        expected_num_districts = len(all_district_names)
+
+        # Identify target DataArray if input is Dataset
+        if isinstance(district_vote_share_posterior, xr.Dataset):
+            # Simple approach: use the first data variable. Improve if needed.
+            if not district_vote_share_posterior.data_vars:
+                 print("Error: Input Dataset has no data variables. Aborting.")
+                 return None, None
+            data_var_name = list(district_vote_share_posterior.data_vars)[0]
+            if debug: print(f"Using data variable '{data_var_name}' from posterior Dataset.")
+            target_data_array = district_vote_share_posterior[data_var_name]
+        elif isinstance(district_vote_share_posterior, xr.DataArray):
+            target_data_array = district_vote_share_posterior
+            if debug: print(f"Using input DataArray directly.")
+        else:
+            print(f"Error: Unsupported type for district_vote_share_posterior: {type(district_vote_share_posterior)}")
+            return None, None
+
+        # Check for chain and draw dimensions
+        if 'chain' not in target_data_array.dims or 'draw' not in target_data_array.dims:
+            print(f"Error: Input posterior missing 'chain' or 'draw' dimension. Found: {list(target_data_array.dims)}")
+            return None, None
+
+        # Find party and district dimensions
+        for dim_name in target_data_array.dims:
+            if dim_name in target_data_array.coords:
+                coord = target_data_array[dim_name]
+                coord_values_list = coord.values.tolist()
+                # Check for party dimension
+                if coord.size == expected_num_parties and sorted(coord_values_list) == sorted(political_families):
+                    party_dim_name = dim_name
+                    party_coord_values = coord_values_list
+                    if debug: print(f"Found party dimension: '{party_dim_name}' with values: {party_coord_values}")
+                # Check for district dimension
+                elif coord.size >= expected_num_districts and set(all_district_names).issubset(set(coord_values_list)):
+                    # Allow posterior to have more districts than config (e.g. regions), but ensure all configured are present
+                    district_dim_name = dim_name
+                    # Use the actual coordinate values from the posterior for selection later
+                    district_coord_values = coord_values_list
+                    if debug: print(f"Found district dimension: '{district_dim_name}' (matching {len(set(all_district_names) & set(coord_values_list))}/{expected_num_districts} configured districts)")
+
+        # Verify dimensions were found
         if not party_dim_name:
-            print(f"Error: Could not determine party coordinate dimension in target_pop_posterior matching political_families: {political_families}. Aborting simulation.")
-            # Check available coords/dims for debugging
-            if debug:
-                 print("Available dimensions: ", list(target_pop_posterior.dims))
-                 print("Available coordinates: ", list(target_pop_posterior.coords))
-            return None, None # Abort if party dimension not found
-        
-        # --- Start Simulation Loop --- 
+            print(f"Error: Could not find party dimension matching {political_families}. Coords checked: {list(target_data_array.coords.keys())}")
+            return None, None
+        if not district_dim_name:
+            print(f"Error: Could not find district dimension matching configured districts ({expected_num_districts}). Coords checked: {list(target_data_array.coords.keys())}")
+            return None, None
+
+        # --- Start Simulation Loop ---
         seat_allocation_samples = []
         try:
-            # Stack chain and draw dimensions for easier iteration
-            # Check if input is Dataset or DataArray
-            if isinstance(target_pop_posterior, xr.Dataset):
-                # If Dataset, assume first data var is the one (or add logic to find it)
-                data_var_name = list(target_pop_posterior.data_vars)[0]
-                if debug: print(f"Using data variable '{data_var_name}' from posterior Dataset.")
-                target_data_array = target_pop_posterior[data_var_name]
-            elif isinstance(target_pop_posterior, xr.DataArray):
-                # If DataArray, use it directly
-                if debug: print(f"Using input DataArray directly for posterior samples.")
-                target_data_array = target_pop_posterior
-            else:
-                raise TypeError(f"Unsupported type for target_pop_posterior: {type(target_pop_posterior)}")
-
+            # Stack chain and draw dimensions
             stacked_posterior = target_data_array.stack(sample=("chain", "draw"))
             total_draws = len(stacked_posterior['sample'])
             samples_to_process = min(num_samples_for_seats, total_draws)
@@ -299,133 +296,138 @@ def simulate_seat_allocation(
 
             for i in range(samples_to_process):
                 if (i + 1) % 500 == 0: print(f"  Processed {i+1}/{samples_to_process} samples...")
-                # Get the vote share sample for this iteration
-                sample_shares_xr = stacked_posterior.isel(sample=i)
-                
-                # Convert xarray slice to dictionary {party_name: share}
-                # Use the discovered party_coord_values to ensure correct mapping
-                sample_shares_dict = {party: sample_shares_xr.sel(**{party_dim_name: party}).item() 
-                                        for party in party_coord_values}
-
-                # Normalize shares in the sample (robust against potential small negative values or sum != 1)
-                total_share = sum(sample_shares_dict.values())
-                if total_share > 1e-9: # Avoid division by zero/very small numbers
-                    normalized_shares = {p: max(0, s / total_share) for p, s in sample_shares_dict.items()}
-                    # Renormalize again after clipping negatives
-                    final_total = sum(normalized_shares.values())
-                    if final_total > 1e-9:
-                         normalized_shares = {p: s / final_total for p, s in normalized_shares.items()}
-                    else: # If all were negative or zero initially
-                         normalized_shares = {p: 0.0 for p in political_families} # Assign zero to all
-                else:
-                    normalized_shares = {p: 0.0 for p in political_families} # Assign zero if initial sum is zero/negative
-                
-                # Convert to pandas Series, ensuring all political families are present
-                sample_shares_series = pd.Series(normalized_shares).reindex(political_families, fill_value=0.0)
-
-                # Calculate Swing for this sample (Predicted Shares - Baseline Shares)
-                national_swing = sample_shares_series - last_election_national_shares
-                
-                # Apply Uniform Swing to District Shares
-                # Add swing: df.add(series, axis='columns' or 1)
-                forecasted_district_shares = last_election_district_shares.add(national_swing, axis=1)
-                
-                # Adjust and Re-normalize District Shares
-                # 1. Clip negative shares to zero
-                forecasted_district_shares = forecasted_district_shares.clip(lower=0)
-                # 2. Re-normalize rows (districts) so they sum to 1
-                row_sums = forecasted_district_shares.sum(axis=1)
-                # Avoid division by zero for districts where all forecasted shares became zero
-                valid_rows_mask = row_sums > 1e-9
-                if valid_rows_mask.any():
-                    forecasted_district_shares.loc[valid_rows_mask] = forecasted_district_shares.loc[valid_rows_mask].div(row_sums[valid_rows_mask], axis=0)
-                # Ensure districts with zero sum remain zero (already handled by clipping and division logic, but explicit check is safe)
-                forecasted_district_shares.loc[~valid_rows_mask, :] = 0.0 
-                                    
-                # Convert Forecasted Shares back to Estimated Vote Counts
-                # Multiply shares by the baseline total votes for each district
-                # Ensure alignment using reindexed baseline totals
-                forecasted_district_counts_df = forecasted_district_shares.mul(district_total_votes_baseline, axis=0)
-                # Round to nearest integer for vote counts
-                forecasted_district_counts_df = forecasted_district_counts_df.round().astype(int)
+                # Get the vote share sample for this iteration (dims should be district, party)
+                sample_district_shares_xr = stacked_posterior.isel(sample=i)
 
                 # Allocate Seats district by district using D'Hondt
                 sample_total_seats = {party: 0 for party in political_families}
-                try:
-                    for circulo_name, num_seats in district_config.items():
-                        # Get vote counts for the current district as a dict
-                        # Use .get(circulo_name, pd.Series(0, index=political_families)) for robustness if a district is missing counts
-                        votes_series = forecasted_district_counts_df.loc[circulo_name] if circulo_name in forecasted_district_counts_df.index else pd.Series(0, index=political_families)
-                        votes_dict = votes_series.to_dict()
-                        
-                        # Skip allocation if no seats are assigned to the district or total votes are zero
-                        if num_seats > 0 and sum(votes_dict.values()) > 0:
-                             district_seat_allocation = calculate_dhondt(votes_dict, num_seats)
-                             # Aggregate seats nationally
-                             for party, seats in district_seat_allocation.items():
-                                 if party in sample_total_seats: sample_total_seats[party] += seats
-                    
-                    # Store the total seats for this sample
+                districts_processed_this_sample = 0
+
+                for circulo_name, num_seats in district_config.items():
+                    # Skip districts with 0 seats assigned
+                    if num_seats <= 0: continue
+
+                    # Get baseline total votes for this district
+                    baseline_votes = district_total_votes_baseline.get(circulo_name, 0)
+                    # Skip if baseline votes are zero (cannot estimate counts)
+                    if baseline_votes <= 0:
+                        # if debug: print(f"Skipping district '{circulo_name}' for sample {i}: Zero baseline votes.")
+                        continue
+
+                    try:
+                        # Extract predicted shares for this specific district and sample
+                        # Use .sel() with the identified dimension names
+                        current_district_shares_xr = sample_district_shares_xr.sel(**{district_dim_name: circulo_name})
+
+                        # Convert shares to pandas Series for easier handling & normalization check
+                        current_district_shares_series = current_district_shares_xr.to_series().reindex(party_coord_values)
+
+                        # Normalize shares for robustness (should ideally sum to 1 already)
+                        total_share = current_district_shares_series.sum()
+                        if total_share > 1e-9:
+                            normalized_shares = (current_district_shares_series / total_share).clip(lower=0)
+                            # Renormalize after clipping just in case
+                            final_total = normalized_shares.sum()
+                            if final_total > 1e-9:
+                                normalized_shares = normalized_shares / final_total
+                            else:
+                                normalized_shares.values[:] = 0.0 # Set all to 0 if sum is still ~0
+                        else:
+                            normalized_shares = pd.Series(0.0, index=current_district_shares_series.index)
+
+                        # Ensure all political families are present before converting to votes
+                        normalized_shares = normalized_shares.reindex(political_families, fill_value=0.0)
+
+                        # Convert shares to estimated vote counts
+                        estimated_votes = (normalized_shares * baseline_votes).round().astype(int)
+                        votes_dict = estimated_votes.to_dict()
+
+                        # Skip D'Hondt if total estimated votes are zero
+                        if sum(votes_dict.values()) <= 0:
+                            # if debug: print(f"Skipping district '{circulo_name}' for sample {i}: Zero estimated votes after share conversion.")
+                            continue
+
+                        # Calculate seat allocation for this district
+                        district_seat_allocation = calculate_dhondt(votes_dict, num_seats)
+
+                        # Aggregate seats nationally for this sample
+                        for party, seats in district_seat_allocation.items():
+                            if party in sample_total_seats:
+                                sample_total_seats[party] += seats
+                        districts_processed_this_sample += 1
+
+                    except KeyError:
+                         if debug: print(f"Warning: District '{circulo_name}' configured but not found in posterior coordinate '{district_dim_name}' for sample {i}. Skipping.")
+                         continue # Skip this district if not in posterior
+                    except Exception as district_err:
+                         print(f"Warning: Error processing district '{circulo_name}' for sample {i}: {district_err}")
+                         if debug: traceback.print_exc()
+                         continue # Skip to next district on error
+
+                # Store the total seats for this sample if any districts were processed
+                if districts_processed_this_sample > 0:
                     sample_total_seats['sample_index'] = i # Add sample index for reference
                     seat_allocation_samples.append(sample_total_seats)
-                except Exception as dhondt_err:
-                        print(f"Warning: Error during D'Hondt allocation for sample {i}, district {circulo_name}: {dhondt_err}")
-                        # Optionally skip this sample or handle error differently
-                        continue # Skip to next sample
-            
+                elif debug:
+                    print(f"Note: No districts processed for sample {i}.")
+
+
             loop_end_time = time.time()
             print(f"Seat simulation loop finished in {loop_end_time - loop_start_time:.2f} seconds.")
-            # --- End Simulation Loop --- 
+            # --- End Simulation Loop ---
 
-            # --- Process Seat Simulation Results --- 
+            # --- Process Seat Simulation Results ---
             if seat_allocation_samples:
                 seats_df = pd.DataFrame(seat_allocation_samples).fillna(0)
-                # Ensure all political families are columns, even if they got 0 seats everywhere
+                # Ensure all political families are columns, even if they got 0 seats
                 for party in political_families:
                     if party not in seats_df.columns:
                         seats_df[party] = 0
-                # Define column order (sample_index first, then sorted parties)
-                party_cols = sorted([p for p in political_families if p in seats_df.columns]) # Get existing party cols sorted
+                # Define column order
+                party_cols = sorted([p for p in political_families if p in seats_df.columns])
                 cols_order = ['sample_index'] + party_cols
                 seats_df = seats_df[cols_order]
-                # Ensure party columns are integer type
                 seats_df[party_cols] = seats_df[party_cols].astype(int)
-                
-                print("\n--- Seat Prediction Simulation Summary ---")
-                # Calculate summary statistics using ArviZ
-                # Convert party columns to a dictionary suitable for az.summary
-                seat_summary = az.summary(seats_df[party_cols].to_dict(orient='list'), 
-                                            hdi_prob=hdi_prob, 
-                                            kind='stats', # Use 'stats' for mean, sd, hdi
+
+                print("\n--- Seat Prediction Simulation Summary (Direct District Method) ---")
+                # Calculate summary statistics
+                # Convert relevant columns to a dict for arviz
+                summary_dict = {col: seats_df[col].values for col in party_cols}
+                seat_summary = az.summary(summary_dict,
+                                            hdi_prob=hdi_prob,
+                                            kind='stats',
                                             round_to=1)
                 print(seat_summary.to_string())
-                print("------------------------------------------")
-                
+                print("------------------------------------------------------------------")
+
                 # Save results to CSV
                 try:
-                    seats_samples_path = os.path.join(pred_dir, f"seat_samples_{prediction_date_mode}.csv")
+                    # Add suffix to distinguish from potential UNS results
+                    file_suffix = f"seat_samples_direct_{prediction_date_mode}.csv"
+                    summary_suffix = f"seat_summary_direct_{prediction_date_mode}.csv"
+
+                    seats_samples_path = os.path.join(pred_dir, file_suffix)
                     seats_df.to_csv(seats_samples_path, index=False)
                     print(f"Full seat prediction samples saved to {seats_samples_path}")
-                    
-                    seat_summary_path = os.path.join(pred_dir, f"seat_summary_{prediction_date_mode}.csv")
+
+                    seat_summary_path = os.path.join(pred_dir, summary_suffix)
                     seat_summary.to_csv(seat_summary_path)
                     print(f"Seat prediction summary saved to {seat_summary_path}")
-                    
+
                     # Assign results to be returned
                     seats_df_results = seats_df
                     seat_summary_results = seat_summary
-                    
+
                 except Exception as save_err:
                     print(f"Warning: Failed to save seat prediction results: {save_err}")
 
             else:
-                    print("\nSeat prediction simulation did not produce any valid samples.")
-        
+                    print("\nSeat prediction simulation (direct district method) did not produce any valid samples.")
+
         except Exception as simulation_loop_err:
-            print(f"Error during seat simulation loop: {simulation_loop_err}")
+            print(f"Error during seat simulation loop (direct district method): {simulation_loop_err}")
             if debug: traceback.print_exc()
-            # Ensure None is returned if the loop fails
-            return None, None
-            
+            return None, None # Ensure None is returned if the loop fails
+
     # Return the collected results (or None if simulation failed)
     return seats_df_results, seat_summary_results 

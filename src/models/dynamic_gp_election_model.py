@@ -8,6 +8,7 @@ import pymc as pm
 import pytensor.tensor as pt
 import xarray as xr
 from scipy.special import softmax
+import time
 
 from src.data.dataset import ElectionDataset # Assuming dataset structure
 from src.models.base_model import BaseElectionModel
@@ -59,6 +60,9 @@ class DynamicGPElectionModel(BaseElectionModel):
 
         # Max days before election for the cycle GP
         self.cycle_gp_max_days = cycle_gp_max_days
+
+        # Add election_date attribute initialization
+        self.election_date = dataset.election_date # Store election date from dataset
 
         # Configuration for the GPs
         self.baseline_gp_config = baseline_gp_config
@@ -955,12 +959,11 @@ class DynamicGPElectionModel(BaseElectionModel):
                     input_core_dims=[["parties_complete"]],
                     output_core_dims=[["parties_complete"]],
                     exclude_dims=set(("parties_complete",)),
-                    dask="parallelized",
                     output_dtypes=[district_latent_mean_at_date.dtype]
-                ).rename("district_adjusted_popularity")
+                ).rename("district_adjusted_popularity").assign_coords(district_latent_mean_at_date.coords)
 
-                # Assign coordinates from the input DataArray to the output
-                adjusted_popularity = adjusted_popularity.assign_coords(district_latent_mean_at_date.coords)
+                # Ensure coordinates are preserved and dimensions are in desired order (c, d, di, p)
+                adjusted_popularity = adjusted_popularity.transpose("chain", "draw", "districts", "parties_complete")
 
 
                 print(f"Successfully calculated popularity adjusted for district '{district}'.")
@@ -975,6 +978,210 @@ class DynamicGPElectionModel(BaseElectionModel):
             # Return the national popularity if no district was specified
             print("Returning national latent popularity (no district specified).")
             return national_pop_at_date
+
+    def get_district_vote_share_posterior(self, idata: az.InferenceData, date_mode: str = 'election_day', target_date: Optional[pd.Timestamp] = None) -> Optional[xr.DataArray]:
+        """
+        Calculates the posterior distribution of vote shares for ALL districts at a specific time point.
+
+        This function performs post-processing using the posterior samples from the InferenceData object.
+
+        Args:
+            idata (az.InferenceData): InferenceData object with posterior samples. Must contain
+                                      'national_trend_pt', 'base_offset_p', 'beta_p', and coordinates.
+            date_mode (str): Defines the time point: 'election_day', 'last_poll', 'today', or 'specific_date'.
+            target_date (pd.Timestamp, optional): Specific date. Used if date_mode is 'specific_date'.
+
+        Returns:
+            xr.DataArray or None: Posterior samples of district vote shares (probabilities).
+                                  Dimensions: (chain, draw, districts, parties_complete).
+                                  Returns None on error or if required data/coords are missing.
+        """
+        if idata is None or 'posterior' not in idata:
+            print("Error: Valid InferenceData with posterior samples required."); return None
+
+        # --- Determine Target Date based on mode ---
+        actual_target_date = None
+        # Use similar logic as get_latent_popularity to find the date
+        if date_mode == 'election_day':
+            if hasattr(self, 'election_date') and self.election_date:
+                 actual_target_date = pd.Timestamp(self.election_date).normalize()
+            else: print("Error: election_date not available for 'election_day' mode."); return None
+        elif date_mode == 'last_poll':
+             if hasattr(self.dataset, 'polls_train') and not self.dataset.polls_train.empty:
+                  actual_target_date = pd.Timestamp(self.dataset.polls_train['date'].max()).normalize()
+             else: print("Error: Cannot determine last poll date from dataset."); return None
+        elif date_mode == 'today':
+             actual_target_date = pd.Timestamp.now().normalize()
+        elif date_mode == 'specific_date':
+             if target_date is None: print("Error: target_date must be provided for 'specific_date' mode."); return None
+             actual_target_date = pd.Timestamp(target_date).normalize()
+        else:
+            print(f"Error: Invalid date_mode '{date_mode}'."); return None
+        print(f"DEBUG get_district_shares: Calculating for target date: {actual_target_date.date()} (mode: {date_mode})")
+        # --- End Determine Target Date ---
+
+        # --- Check for required variables and coordinates ---
+        required_vars = ["national_trend_pt", "base_offset_p", "beta_p"]
+        required_coords = ["calendar_time", "districts", "parties_complete"]
+
+        missing_vars = [v for v in required_vars if v not in idata.posterior]
+        if missing_vars: print(f"Error: Missing required posterior variables: {missing_vars}"); return None
+
+        missing_coords = [c for c in required_coords if c not in idata.posterior.coords]
+        if missing_coords: print(f"Error: Missing required coordinates: {missing_coords}"); return None
+
+        # Also need national average trend (or calculate it)
+        if "national_avg_trend_p" not in idata.posterior:
+             print("Warning: 'national_avg_trend_p' not found. Calculating from 'national_trend_pt'.")
+             try:
+                  # Calculate and add to idata for potential future use (be cautious modifying idata)
+                  # This calculation happens in memory here, doesn't modify the stored idata object persistently unless saved later
+                  idata.posterior["national_avg_trend_p"] = idata.posterior["national_trend_pt"].mean(dim="calendar_time")
+             except Exception as e:
+                  print(f"Error calculating 'national_avg_trend_p': {e}"); return None
+        # --- End Check ---
+
+        try:
+            # --- Prepare Coordinates and DataArrays ---
+            calendar_coords = pd.to_datetime(idata.posterior['calendar_time'].values).normalize()
+            district_coords = idata.posterior['districts'].values
+            party_coords = idata.posterior['parties_complete'].values
+
+            national_trend_da = idata.posterior["national_trend_pt"].copy()
+            national_trend_da['calendar_time'] = calendar_coords # Assign converted coords
+
+            national_avg_trend_da = idata.posterior["national_avg_trend_p"] # Should have dims (chain, draw, party)
+
+            base_offset_da = idata.posterior["base_offset_p"] # Dims (chain, draw, party, district)
+            beta_da = idata.posterior["beta_p"] # Dims (chain, draw, party, district)
+
+            # --- Select National Trend at Target Date ---
+            min_cal_date = calendar_coords.min()
+            max_cal_date = calendar_coords.max()
+            if not (min_cal_date <= actual_target_date <= max_cal_date):
+                 print(f"Warning: Target date {actual_target_date.date()} outside modeled range ({min_cal_date.date()} to {max_cal_date.date()}). Using nearest.")
+
+            # Select national trend at the target date
+            # Result dims: (chain, draw, parties_complete)
+            national_trend_at_date = national_trend_da.sel(
+                calendar_time=actual_target_date,
+                method="nearest",
+                tolerance=pd.Timedelta(days=1)
+            )
+            selected_date = pd.Timestamp(national_trend_at_date.calendar_time.item()).normalize()
+            print(f"Using national trend from nearest date: {selected_date.date()}")
+
+            # --- Calculate District Latent Support ---
+            # national_trend_at_date: (chain, draw, party)
+            # national_avg_trend_da: (chain, draw, party)
+            # base_offset_da:       (chain, draw, party, district)
+            # beta_da:              (chain, draw, party, district)
+
+            # Calculate deviation: (national_trend_at_date - national_avg_trend_da)
+            # Need to add a 'district' dimension for broadcasting
+            national_dev_at_date = national_trend_at_date - national_avg_trend_da
+            # national_dev_at_date: (chain, draw, party)
+
+            # Reshape/transpose for broadcasting:
+            # base_offset_da already (chain, draw, party, district)
+            # beta_da already (chain, draw, party, district)
+            # Need national_trend_at_date as (chain, draw, party, district=1) ? No, easier to broadcast other way.
+            # Need national_dev_at_date as (chain, draw, party, district=1)? Yes.
+
+            # Let's align dimensions:
+            # national_trend_at_date_b = national_trend_at_date.expand_dims(dim={"districts": district_coords}, axis=-1) # Add district dim
+            # base_offset_da_t = base_offset_da # Already correct dims (c,d,p,di) -> (c,d,di,p)? Check dims again.
+                # base_offset_p = pm.Deterministic("base_offset_p", ..., dims=("parties_complete", "districts"))
+                # So base_offset_da is (chain, draw, parties_complete, districts)
+            # beta_da also (chain, draw, parties_complete, districts)
+
+            # Recalculate district adjustment (similar to model build but using posterior samples)
+            # national_dev_at_date has dims (chain, draw, party)
+            # base_offset_da has dims (chain, draw, party, district)
+            # beta_da has dims (chain, draw, party, district)
+
+            # We need to multiply (beta - 1) by national_dev_at_date.
+            # Add district dim to national_dev_at_date for broadcasting
+            national_dev_at_date_b = national_dev_at_date.expand_dims(dim={"districts": district_coords}, axis=-1)
+            # Now national_dev_at_date_b has dims (chain, draw, party, district)
+
+            # Calculate dynamic adjustment term: (beta - 1) * national_dev_at_date_b
+            dynamic_adjustment = (beta_da - 1) * national_dev_at_date_b # Element-wise ok
+
+            # Calculate total district adjustment: base_offset + dynamic_adjustment
+            district_adjustment = base_offset_da + dynamic_adjustment # Element-wise ok
+            # district_adjustment has dims (chain, draw, party, district)
+
+            # Add national trend at date to district adjustment
+            # Need to add district dim to national_trend_at_date for broadcasting
+            national_trend_at_date_b = national_trend_at_date.expand_dims(dim={"districts": district_coords}, axis=-1)
+            # national_trend_at_date_b has dims (chain, draw, party, district)
+
+            latent_district_support = national_trend_at_date_b + district_adjustment
+            # latent_district_support has dims (chain, draw, party, district)
+
+            # --- Apply Softmax (MANUAL LOOP METHOD) ---
+            # Apply softmax across the 'parties_complete' dimension manually
+            # Get dimensions and values
+            latent_vals = latent_district_support.values
+            n_chains, n_draws, n_parties, n_districts = latent_vals.shape
+            
+            # Initialize output array
+            share_vals = np.empty_like(latent_vals)
+            
+            print("Applying softmax manually (looping through samples/districts)...")
+            loop_start = time.time() # Import time at top if not already present
+            for c in range(n_chains):
+                # Add progress print if needed
+                # if (c + 1) % (n_chains // 4) == 0: print(f"  Softmax loop progress: Chain {c+1}/{n_chains}")
+                for d in range(n_draws):
+                    for k in range(n_districts):
+                        # Apply softmax along the party dimension (axis=2)
+                        share_vals[c, d, :, k] = softmax(latent_vals[c, d, :, k])
+            loop_end = time.time()
+            print(f"Manual softmax loop finished in {loop_end - loop_start:.2f} seconds.")
+
+            # Reconstruct DataArray
+            district_vote_shares = xr.DataArray(
+                share_vals,
+                coords=latent_district_support.coords, # Use original coords
+                dims=latent_district_support.dims,     # Use original dims
+                name="district_vote_shares"
+            )
+            
+            # --- Old apply_ufunc method (commented out) ---
+            # district_vote_shares = xr.apply_ufunc(
+            #     softmax, # from scipy.special import softmax
+            #     latent_district_support,
+            #     input_core_dims=[["parties_complete"]],
+            #     output_core_dims=[["parties_complete"]],
+            #     exclude_dims=set(("parties_complete",)),
+            #     # dask="parallelized", # <--- REMOVED THIS
+            #     output_dtypes=[latent_district_support.dtype]
+            # ).rename("district_vote_shares").assign_coords(latent_district_support.coords)
+
+            # Ensure coordinates are preserved and dimensions are in desired order (c, d, di, p)
+            # Check if transpose is still necessary with the manual method
+            # The manual method should preserve the original (c, d, p, di) order, let's verify dims before transpose
+            print(f"DEBUG: district_vote_shares dims before potential transpose: {district_vote_shares.dims}")
+            # Transpose to ensure standard (c, d, di, p) order if needed
+            target_dims = ("chain", "draw", "districts", "parties_complete")
+            if district_vote_shares.dims != target_dims:
+                 print(f"Transposing dimensions from {district_vote_shares.dims} to {target_dims}")
+                 district_vote_shares = district_vote_shares.transpose(*target_dims)
+            else:
+                 print("Dimensions already in target order.")
+
+            print(f"Successfully calculated district vote shares for date {selected_date.date()}.")
+            return district_vote_shares
+
+        except KeyError as e:
+             print(f"Error: Key error during calculation (likely missing variable/coordinate): {e}"); return None
+        except Exception as e:
+             print(f"Unexpected error calculating district vote shares: {e}")
+             import traceback
+             traceback.print_exc()
+             return None
 
 # ... (rest of the file remains the same - placeholders, etc.) ...
 

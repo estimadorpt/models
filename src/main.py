@@ -385,10 +385,23 @@ def load_model(args, directory, election_date=None, baseline_timescales=None, el
         # --- Determine Model Type and Class --- #
         # Priority: Command-line args > Loaded config
         # Use the literal default value "static" for comparison
-        final_model_type = args.model_type if args.model_type != "static" else loaded_config.get('model_type', None)
-        if not final_model_type:
-            print("Warning: Model type not found in args or config, defaulting to 'static'.")
-            final_model_type = 'static' # Default if still not found
+        # final_model_type = args.model_type if args.model_type != "static" else loaded_config.get('model_type', None)
+        # if not final_model_type:
+        #     print("Warning: Model type not found in args or config, defaulting to 'static'.")
+        #     final_model_type = 'static' # Default if still not found
+
+        # Corrected logic:
+        loaded_type = loaded_config.get('model_type', None) # Get type from config first
+        # Use command-line arg only if it's different from the default 'static'
+        if hasattr(args, 'model_type') and args.model_type is not None and args.model_type != "static":
+             final_model_type = args.model_type
+             if debug: print(f"DEBUG LOAD: Using model_type '{final_model_type}' from command-line args.")
+        elif loaded_type: # If command-line wasn't overriding, use loaded config type
+             final_model_type = loaded_type
+             if debug: print(f"DEBUG LOAD: Using model_type '{final_model_type}' from loaded config.")
+        else: # Otherwise, default to static
+             final_model_type = 'static'
+             if debug: print("DEBUG LOAD: Using default model_type 'static'.")
 
         print(f"DEBUG load_model: Determined final_model_type = {final_model_type}")
         try:
@@ -452,6 +465,13 @@ def load_model(args, directory, election_date=None, baseline_timescales=None, el
         print(f"DEBUG LOAD: Instantiated facade type: {type(elections_model)}")
         if elections_model:
             print(f"DEBUG LOAD: Facade has get_latent_popularity right after init? {hasattr(elections_model, 'get_latent_popularity')}")
+            # <<< Explicitly set election_date on the model instance AFTER facade init >>>
+            if hasattr(elections_model, 'model_instance') and elections_model.model_instance is not None:
+                 if hasattr(elections_model.model_instance, 'election_date'): # Check if attr exists
+                      print(f"DEBUG LOAD: Setting election_date '{final_election_date}' on model instance.")
+                      elections_model.model_instance.election_date = final_election_date
+                 else:
+                      print("DEBUG LOAD: Warning - model instance does not have 'election_date' attribute to set.")
         # <<< End Debug Check >>>
         
         # Load the saved trace
@@ -762,7 +782,13 @@ def predict(args):
         # <<< Add Debug Check Here >>>
         print(f"DEBUG PREDICT: Loaded elections_model type: {type(elections_model)}")
         if elections_model:
-            print(f"DEBUG PREDICT: Has get_latent_popularity method? {hasattr(elections_model, 'get_latent_popularity')}")
+            # Determine the model instance and its type
+            model_instance = elections_model.model_instance
+            model_instance_type = type(model_instance) if model_instance else None
+            print(f"DEBUG PREDICT: Model instance type: {model_instance_type}")
+            print(f"DEBUG PREDICT: Has get_latent_popularity method (facade)? {hasattr(elections_model, 'get_latent_popularity')}")
+            if model_instance:
+                 print(f"DEBUG PREDICT: Has get_district_vote_share_posterior method (instance)? {hasattr(model_instance, 'get_district_vote_share_posterior')}")
         # <<< End Debug Check >>>
 
         if elections_model is None: print("Exiting prediction due to loading error."); return
@@ -772,85 +798,124 @@ def predict(args):
         pred_dir = os.path.join(args.load_dir, "predictions")
         os.makedirs(pred_dir, exist_ok=True)
 
-        # --- Calculate Latent Popularity Prediction (based on date mode) ---
-        print(f"\nCalculating Latent Popularity Prediction (mode: {args.prediction_date_mode})...")
-        target_pop_posterior = elections_model.get_latent_popularity(date_mode=args.prediction_date_mode)
+        # --- Get Posterior Vote Shares (National or District based on model) ---
+        target_pop_posterior = None # For national/static model
+        district_shares_posterior = None # For dynamic_gp model
+        model_instance = elections_model.model_instance # Get the underlying model instance
+        hdi_prob = 0.94 # Define hdi_prob before the conditional blocks
 
-        if target_pop_posterior is None:
-             print("Could not retrieve latent popularity for the specified date mode. Skipping vote share and seat predictions.")
+        # Determine which method to call based on the actual model instance type
+        if isinstance(model_instance, DynamicGPElectionModel) and hasattr(model_instance, 'get_district_vote_share_posterior'):
+            print(f"\nCalculating District Vote Share Posterior (mode: {args.prediction_date_mode})...")
+            district_shares_posterior = model_instance.get_district_vote_share_posterior(
+                idata=elections_model.trace,
+                date_mode=args.prediction_date_mode
+            )
+            if district_shares_posterior is None:
+                 print("Could not retrieve district vote shares. Skipping seat predictions.")
+            else:
+                 print("District vote share posterior calculated successfully.")
+                 # Optional: Display summary for a specific district or national average if needed
+                 # For now, we proceed directly to seat simulation
+
+        elif hasattr(elections_model, 'get_latent_popularity'): # Fallback or for static model
+             print(f"\nCalculating Latent Popularity Prediction (mode: {args.prediction_date_mode})...")
+             # This likely gets national popularity for static models or if district method failed/unavailable
+             target_pop_posterior = elections_model.get_latent_popularity(date_mode=args.prediction_date_mode)
+             if target_pop_posterior is None:
+                  print("Could not retrieve latent popularity. Skipping predictions.")
+                  # We might want to exit or handle this case differently
+             else:
+                 # --- Display Vote Share Summary (for National/Static) --- 
+                 pred_summary = None # Initialize pred_summary before the try block
+                 try: # Start try block for summary calculation
+                     pred_summary = az.summary(target_pop_posterior, hdi_prob=hdi_prob, kind='stats', round_to=None)
+                     pred_summary = pred_summary.rename(columns={
+                         'mean': 'Mean', 'sd': 'SD',
+                         f'hdi_{100*(1-hdi_prob)/2:.1f}%': f'HDI {100*(1-hdi_prob)/2:.0f}%',
+                         f'hdi_{100*(1-(1-hdi_prob)/2):.1f}%': f'HDI {100*(1-(1-hdi_prob)/2):.0f}%'
+                     })
+                     output_cols_display = ['Mean', f'HDI {100*(1-hdi_prob)/2:.0f}%', f'HDI {100*(1-(1-hdi_prob)/2):.0f}%']
+                     output_cols_display = [col for col in output_cols_display if col in pred_summary.columns]
+                     if output_cols_display:
+                          pred_summary_display = pred_summary[output_cols_display]
+                          # Ensure formatting handles potential non-numeric gracefully if needed
+                          pred_summary_pct = pred_summary_display.applymap(lambda x: f"{x*100:.1f}%" if pd.notnull(x) and isinstance(x, numbers.Number) else "N/A")
+                          print(f"\n--- Latent Popularity Prediction ({args.prediction_date_mode}) --- (National Vote Shares) ---")
+                          print(pred_summary_pct.to_string())
+                          print("----------------------------------------------------------------")
+                     # Use clear filename based on mode
+                     output_path = os.path.join(pred_dir, f"vote_share_summary_{args.prediction_date_mode}.csv")
+                     pred_summary.to_csv(output_path)
+                     print(f"National vote share prediction summary saved to {output_path}")
+                 except Exception as summary_err:
+                     print(f"Warning: Failed to calculate or display vote share summary statistics: {summary_err}")
+                 # --- End Display Vote Share Summary ---
         else:
-            # --- Display Vote Share Summary --- 
-            hdi_prob = 0.94
-            pred_summary = None # Initialize pred_summary before the try block
-            try: # Start try block for summary calculation
-                pred_summary = az.summary(target_pop_posterior, hdi_prob=hdi_prob, kind='stats', round_to=None)
-                pred_summary = pred_summary.rename(columns={
-                    'mean': 'Mean', 'sd': 'SD',
-                    f'hdi_{100*(1-hdi_prob)/2:.1f}%': f'HDI {100*(1-hdi_prob)/2:.0f}%',
-                    f'hdi_{100*(1-(1-hdi_prob)/2):.1f}%': f'HDI {100*(1-(1-hdi_prob)/2):.0f}%'
-                })
-                output_cols_display = ['Mean', f'HDI {100*(1-hdi_prob)/2:.0f}%', f'HDI {100*(1-(1-hdi_prob)/2):.0f}%']
-                output_cols_display = [col for col in output_cols_display if col in pred_summary.columns]
-                if output_cols_display:
-                     pred_summary_display = pred_summary[output_cols_display]
-                     # Ensure formatting handles potential non-numeric gracefully if needed
-                     pred_summary_pct = pred_summary_display.applymap(lambda x: f"{x*100:.1f}%" if pd.notnull(x) and isinstance(x, numbers.Number) else "N/A")
-                     print(f"\n--- Latent Popularity Prediction ({args.prediction_date_mode}) --- (Vote Shares) ---")
-                     print(pred_summary_pct.to_string())
-                     print("----------------------------------------------------------------")
-                # Use clear filename based on mode
-                output_path = os.path.join(pred_dir, f"vote_share_summary_{args.prediction_date_mode}.csv")
-                pred_summary.to_csv(output_path)
-                print(f"Vote share prediction summary saved to {output_path}")
-            except Exception as summary_err:
-                print(f"Warning: Failed to calculate or display vote share summary statistics: {summary_err}")
-            # --- End Display Vote Share Summary ---
+            print("Error: Cannot determine how to calculate vote share posteriors for the loaded model.")
+            return # Exit if no way to get shares
+        # --- End Posterior Share Calculation ---
 
-            # --- Call SEAT PREDICTION SIMULATION --- 
-            seats_df = None
-            seat_summary = None
-            if num_samples_for_seats > 0 and elections_model.dataset:
-                 try:
-                     # Call the refactored function
-                     seats_df, seat_summary = simulate_seat_allocation(
-                         target_pop_posterior=target_pop_posterior,
-                         dataset=elections_model.dataset,
-                         num_samples_for_seats=num_samples_for_seats,
-                         pred_dir=pred_dir,
-                         prediction_date_mode=args.prediction_date_mode,
-                         hdi_prob=hdi_prob,
-                         debug=args.debug
-                     )
 
-                     # --- Plot Seat Distribution Histograms (if simulation succeeded) --- 
-                     if seats_df is not None:
-                         try:
-                             print("\nGenerating seat distribution histograms...")
-                             plot_seat_distribution_histograms(
-                                 seats_df,
-                                 pred_dir,
-                                 date_mode=args.prediction_date_mode,
-                                 filename=f"seat_histograms_{args.prediction_date_mode}.png"
-                             )
-                         except Exception as plot_err:
-                             print(f"Warning: Failed to generate seat distribution histograms: {plot_err}")
-                             if args.debug: 
-                                 import traceback # Import locally
-                                 traceback.print_exc()
-                     else:
-                         print("\nSkipping seat histogram plot as simulation did not produce results.")
+        # --- Call SEAT PREDICTION SIMULATION --- 
+        seats_df = None
+        seat_summary = None
+        # Check if we have the necessary inputs for seat simulation
+        posterior_data_for_seats = district_shares_posterior if district_shares_posterior is not None else target_pop_posterior
 
-                 except Exception as simulation_err:
-                     print(f"Error during seat prediction simulation call: {simulation_err}")
-                     if args.debug: 
-                         import traceback # Import locally
-                         traceback.print_exc()
+        if num_samples_for_seats > 0 and elections_model.dataset and posterior_data_for_seats is not None:
+             # Check if we are using district shares (indicating DynamicGP model)
+             using_district_shares = district_shares_posterior is not None
+             if using_district_shares:
+                  print("\nStarting seat simulation using DIRECT DISTRICT shares...")
+             else:
+                  print("\nStarting seat simulation using NATIONAL shares (UNS implied)...")
 
-            elif num_samples_for_seats <= 0:
-                 print("\nSeat prediction simulation skipped (num_samples_for_seats <= 0).")
-            else: # elections_model.dataset is None
-                 print("\nSeat prediction simulation skipped (dataset not available).")
-            # --- END SEAT PREDICTION SIMULATION CALL ---
+             try:
+                 # Call the simulation function - it now expects district shares if available
+                 seats_df, seat_summary = simulate_seat_allocation(
+                     # Pass the appropriate posterior data
+                     district_vote_share_posterior=posterior_data_for_seats, 
+                     dataset=elections_model.dataset,
+                     num_samples_for_seats=num_samples_for_seats,
+                     pred_dir=pred_dir,
+                     prediction_date_mode=args.prediction_date_mode,
+                     hdi_prob=hdi_prob, # Reuse hdi_prob from vote share summary
+                     debug=args.debug
+                 )
+
+                 # --- Plot Seat Distribution Histograms (if simulation succeeded) --- 
+                 if seats_df is not None:
+                     try:
+                         print("\nGenerating seat distribution histograms...")
+                         plot_seat_distribution_histograms(
+                             seats_df,
+                             pred_dir,
+                             date_mode=args.prediction_date_mode,
+                             # Use appropriate filename based on simulation type
+                             filename=f"seat_histograms_{'direct_' if using_district_shares else 'UNS_'}{args.prediction_date_mode}.png"
+                         )
+                     except Exception as plot_err:
+                         print(f"Warning: Failed to generate seat distribution histograms: {plot_err}")
+                         if args.debug: 
+                             import traceback # Import locally
+                             traceback.print_exc()
+                 else:
+                     print("\nSkipping seat histogram plot as simulation did not produce results.")
+
+             except Exception as simulation_err:
+                 print(f"Error during seat prediction simulation call: {simulation_err}")
+                 if args.debug: 
+                     import traceback # Import locally
+                     traceback.print_exc()
+
+        elif num_samples_for_seats <= 0:
+             print("\nSeat prediction simulation skipped (num_samples_for_seats <= 0).")
+        elif posterior_data_for_seats is None:
+             print("\nSeat prediction simulation skipped (posterior vote share data not available).")
+        else: # elections_model.dataset is None
+             print("\nSeat prediction simulation skipped (dataset not available).")
+        # --- END SEAT PREDICTION SIMULATION CALL ---
 
         # --- Generate Latent Trend Plot --- # Moved outside the 'else' block to run even if popularity fails
         try:
@@ -871,11 +936,12 @@ def predict(args):
         # --- End Latent Trend Plot ---
 
         # --- Forecast Distribution Plotting --- # Moved outside the 'else' block
+        # This plot currently relies on national latent popularity
         if elections_model and hasattr(elections_model, 'model_instance') and elections_model.model_instance:
-            # Check if the necessary posterior exists before plotting
+            # Check if the necessary NATIONAL posterior exists before plotting
             if target_pop_posterior is not None:
                 try:
-                     print("\nAttempting to generate forecast distribution plot...")
+                     print("\nAttempting to generate forecast distribution plot (based on national trend)...")
                      # Ensure pred_dir exists
                      os.makedirs(pred_dir, exist_ok=True)
                      plot_forecasted_election_distribution(
@@ -890,7 +956,7 @@ def predict(args):
                           import traceback # Import locally
                           traceback.print_exc()
             else:
-                 print("Skipping forecast distribution plot: target popularity not calculated.")
+                 print("Skipping forecast distribution plot: national target popularity not calculated.")
         else:
              print("Warning: Model instance not available for plotting forecast distribution.")
 
