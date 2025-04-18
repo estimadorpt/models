@@ -170,15 +170,21 @@ def fit_model(args):
         print(f"Model fitting completed in {fitting_duration:.2f} seconds")
         
         # Send notification if requested
+        print("DEBUG FIT: Checking for notification...")
         if args.notify:
+            print("DEBUG FIT: Sending notification...")
             requests.post("https://ntfy.sh/bc-estimador",
                 data=f"Model fit completed in {fitting_duration:.2f} seconds".encode(encoding='utf-8'))
         
         # Generate diagnostic plots
+        print("DEBUG FIT: Checking if trace exists for diagnostics...")
         if elections_model.trace is not None:
             diag_plot_dir = os.path.join(output_dir, "diagnostics")
+            print(f"DEBUG FIT: Creating diagnostic plot directory: {diag_plot_dir}...")
             os.makedirs(diag_plot_dir, exist_ok=True)
+            print("DEBUG FIT: Calling generate_diagnostic_plots...")
             elections_model.generate_diagnostic_plots(diag_plot_dir)
+            print("DEBUG FIT: Finished generate_diagnostic_plots.")
             # If there are model-specific diagnostic plots, call them here:
             # if hasattr(model_instance, 'generate_specific_diagnostics'):
             #    model_instance.generate_specific_diagnostics(diag_plot_dir)
@@ -186,8 +192,10 @@ def fit_model(args):
             print("Skipping diagnostic plot generation as trace is not available.")
         
         # --- Calculate and Save Fit Metrics ---
+        print("DEBUG FIT: Checking if trace and calculate_fit_metrics exist...")
         metrics_dict = {}
         if elections_model.trace is not None and hasattr(model_instance, 'calculate_fit_metrics'):
+            print("DEBUG FIT: Preparing to calculate fit metrics...")
             try:
                 print("\nCalculating fit metrics...")
                 # Ensure the trace object is available in the model instance if needed by methods
@@ -266,20 +274,22 @@ def fit_model(args):
                 # --- End Plot Calibration --- #
 
             except Exception as metrics_err:
-                 print(f"Warning: Failed to calculate or save fit metrics: {metrics_err}")
+                print(f"ERROR during fit metrics calculation or saving: {metrics_err}")
+                # Optional: Add traceback print here if needed
+                # import traceback
+                # traceback.print_exc()
         else:
-            print("Skipping fit metric calculation (no trace or method unavailable).")
-        # --- End Calculate and Save Fit Metrics ---
+            print("DEBUG FIT: Skipping fit metrics calculation (trace or method missing).")
 
         # Save model configuration
-        print(f"Saving model configuration to {output_dir}/model_config.json")
+        print("DEBUG FIT: Saving model configuration...")
         config_path = os.path.join(output_dir, "model_config.json")
         try:
             with open(config_path, 'w') as f:
                 json.dump(config_to_save, f, indent=4)
-            print("Model configuration saved successfully.")
-        except Exception as config_err:
-            print(f"Warning: Failed to save model configuration: {config_err}")
+            print(f"Model config saved to {config_path}")
+        except Exception as config_save_err:
+            print(f"ERROR saving model config: {config_save_err}")
         
         # Save the trace and model - this now returns True/False
         save_successful = elections_model.save_inference_results(output_dir)
@@ -309,7 +319,7 @@ def fit_model(args):
                 os.symlink(target_path_absolute, latest_link_path, target_is_directory=target_is_dir)
                 print(f"Symbolic link 'latest' updated successfully.")
             except Exception as symlink_err:
-                print(f"Warning: Failed to create/update symbolic link: {symlink_err}")
+                print(f"ERROR updating 'latest' symlink: {symlink_err}")
         else:
             print("Skipping 'latest' symlink creation as no inference results were saved.")
         # --- End RE-ADD symlink logic ---
@@ -318,12 +328,17 @@ def fit_model(args):
         return elections_model
         
     except Exception as e:
-        print(f"Error fitting model: {e}")
-        if args.debug:
-            traceback.print_exc()
+        print(f"ERROR during model fitting: {e}")
+        # Ensure traceback is printed on outer error
         if args.notify:
-            requests.post("https://ntfy.sh/bc-estimador",
-                data=f"Error fitting model: {e}".encode(encoding='utf-8'))
+            try:
+                requests.post("https://ntfy.sh/bc-estimador",
+                    data=f"Model fit FAILED: {e}".encode(encoding='utf-8'))
+            except Exception as notify_err:
+                print(f"Failed to send error notification: {notify_err}")
+        if args.debug:
+             import traceback
+             traceback.print_exc()
         return None
 
 def load_model(args, directory, election_date=None, baseline_timescales=None, election_timescales=None, debug=False):
@@ -1021,16 +1036,16 @@ def main(args=None):
     # --- Sampling Arguments ---
     sampling_group = parser.add_argument_group('Sampling Parameters (for train, cross-validate)')
     sampling_group.add_argument(
-        "--draws", type=int, default=1000, help="Number of posterior draws per chain",
+        "--draws", type=int, default=1500, help="Number of posterior draws per chain",
     )
     sampling_group.add_argument(
         "--chains", type=int, default=4, help="Number of MCMC chains",
     )
     sampling_group.add_argument(
-        "--tune", type=int, default=1000, help="Number of tuning samples per chain",
+        "--tune", type=int, default=1500, help="Number of tuning samples per chain",
     )
     sampling_group.add_argument(
-        "--target-accept", type=float, default=0.95, help="Target acceptance rate for NUTS",
+        "--target-accept", type=float, default=0.98, help="Target acceptance rate for NUTS",
     )
 
     # --- Static Model Specific Arguments ---

@@ -98,11 +98,12 @@ class DynamicGPElectionModel(BaseElectionModel):
         self.calendar_time_result_district_id = None # Index mapping district result obs to calendar_time
         self.result_cycle_district_idx = None    # Index mapping district result obs to cycle
         self.observed_district_result_indices = None # Row index of district result observations
+        self.calendar_time_prev_election_idx = None # Initialize empty
 
 
     def _build_coords(self, polls: pd.DataFrame = None) -> Tuple[
         np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray,
-        np.ndarray, np.ndarray, np.ndarray, np.ndarray,
+        np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray,
         np.ndarray, Dict, np.ndarray]:
         """
         Build coordinates for the PyMC model, including calendar time, election cycles,
@@ -124,6 +125,7 @@ class DynamicGPElectionModel(BaseElectionModel):
             - result_district_idx (Mapping district result obs to district ID)
             - calendar_time_result_district_id (Mapping district result obs to calendar time)
             - result_cycle_district_idx (Mapping district result obs to cycle)
+            - calendar_time_prev_election_idx (Mapping district result obs to PREVIOUS election calendar time)
             - COORDS dictionary
             - observed_district_result_indices (Indices of the district results used)
         """
@@ -189,6 +191,7 @@ class DynamicGPElectionModel(BaseElectionModel):
             self.result_cycle_district_idx = np.array([], dtype=int)
             self.result_district_idx = np.array([], dtype=int)
             self.observed_district_result_indices = np.array([], dtype=int)
+            self.calendar_time_prev_election_idx = np.array([], dtype=int) # Initialize empty
             district_coords = []
         else:
             historical_results_dates_dt = pd.to_datetime(historical_results_district['election_date'])
@@ -200,6 +203,39 @@ class DynamicGPElectionModel(BaseElectionModel):
                 missing_result_cycles = historical_results_district.loc[np.isnan(self.result_cycle_district_idx), 'election_date'].unique()
                 raise ValueError(f"Could not map some district result election dates to cycles: {missing_result_cycles}")
             self.result_cycle_district_idx = self.result_cycle_district_idx.astype(int)
+
+            # Calculate index for previous election date for each result
+            sorted_election_dates_dt = sorted(pd.to_datetime(self.all_election_dates).unique())
+            prev_election_idx_list = []
+            for date in historical_results_dates_dt:
+                # Find the election date for the current result's cycle
+                current_cycle_date = min([d for d in cycle_boundaries_dt if d >= date], default=cycle_boundaries_dt[-1])
+                # Find the index of the current cycle date in the sorted list of all election dates
+                try:
+                    current_cycle_date_index = sorted_election_dates_dt.index(current_cycle_date)
+                except ValueError:
+                    # This should not happen if all_election_dates includes cycle_boundaries_dt
+                    raise ValueError(f"Current cycle date {current_cycle_date} not found in sorted all_election_dates.")
+                
+                # Determine the previous election date
+                if current_cycle_date_index == 0:
+                    # For the first election, use its own date as the "previous" date (swing relative to itself is zero)
+                    prev_election_date = current_cycle_date 
+                else:
+                    prev_election_date = sorted_election_dates_dt[current_cycle_date_index - 1]
+                    
+                # Map the previous election date to its calendar time index
+                prev_election_calendar_idx = date_to_calendar_index.get(prev_election_date)
+                if prev_election_calendar_idx is None:
+                    # This could happen if a historical election date wasn't included in unique_dates (e.g., no polls around it)
+                    # Fallback: Find nearest available date? Or use current date? Using current for zero swing.
+                    print(f"Warning: Previous election date {prev_election_date.date()} not found in calendar_time coordinate for result date {date.date()}. Using current date index as fallback.")
+                    prev_election_calendar_idx = date_to_calendar_index.get(date) # Fallback to current date
+                    if prev_election_calendar_idx is None:
+                        raise ValueError(f"Critical Error: Neither previous ({prev_election_date.date()}) nor current ({date.date()}) result date found in calendar index.")
+                prev_election_idx_list.append(prev_election_calendar_idx)
+
+            self.calendar_time_prev_election_idx = np.array(prev_election_idx_list, dtype=int)
 
             # Factorize districts from the historical results
             if 'Circulo' not in historical_results_district.columns:
@@ -229,6 +265,7 @@ class DynamicGPElectionModel(BaseElectionModel):
         print(f"DEBUG: calendar_time_result_district_id shape: {self.calendar_time_result_district_id.shape if self.calendar_time_result_district_id is not None else 'None'}")
         print(f"DEBUG: result_cycle_district_idx shape: {self.result_cycle_district_idx.shape if self.result_cycle_district_idx is not None else 'None'}")
         print(f"DEBUG: observed_district_result_indices shape: {self.observed_district_result_indices.shape if self.observed_district_result_indices is not None else 'None'}")
+        print(f"DEBUG: calendar_time_prev_election_idx shape: {self.calendar_time_prev_election_idx.shape if self.calendar_time_prev_election_idx is not None else 'None'}")
 
 
         return (self.pollster_id, self.calendar_time_poll_id,
@@ -236,6 +273,7 @@ class DynamicGPElectionModel(BaseElectionModel):
                 self.calendar_time_cycle_idx, self.calendar_time_days_numeric,
                 self.district_id, self.result_district_idx,
                 self.calendar_time_result_district_id, self.result_cycle_district_idx,
+                self.calendar_time_prev_election_idx,
                 COORDS, self.observed_district_result_indices)
 
 
@@ -252,7 +290,8 @@ class DynamicGPElectionModel(BaseElectionModel):
         if self.pollster_id is None or self.calendar_time_poll_id is None or \
            self.poll_cycle_idx is None or self.calendar_time_cycle_idx is None or \
            self.calendar_time_days_numeric is None or self.result_district_idx is None or \
-           self.calendar_time_result_district_id is None or self.result_cycle_district_idx is None:
+           self.calendar_time_result_district_id is None or self.result_cycle_district_idx is None or \
+           self.calendar_time_prev_election_idx is None: # Add check for new index
             raise ValueError("Indices/mappings not set. Ensure _build_coords runs first.")
 
         # Prepare district result data
@@ -264,6 +303,7 @@ class DynamicGPElectionModel(BaseElectionModel):
             calendar_time_result_district_idx_data = np.array([], dtype=int)
             result_cycle_district_idx_data = np.array([], dtype=int)
             result_district_idx_data = np.array([], dtype=int)
+            calendar_time_prev_election_idx_data = np.array([], dtype=int) # Add new empty index
         else:
             # Check alignment of indices with the dataframe used in _build_coords
             if len(self.observed_district_result_indices) != len(results_district):
@@ -277,6 +317,7 @@ class DynamicGPElectionModel(BaseElectionModel):
             calendar_time_result_district_idx_data = self.calendar_time_result_district_id
             result_cycle_district_idx_data = self.result_cycle_district_idx
             result_district_idx_data = self.result_district_idx
+            calendar_time_prev_election_idx_data = self.calendar_time_prev_election_idx # Use new index
 
         print("\n--- Debugging Data Containers (District Results) ---")
         print(f"  Shape observed_N_results_district: {results_N_district.shape}")
@@ -284,6 +325,7 @@ class DynamicGPElectionModel(BaseElectionModel):
         print(f"  Shape calendar_time_result_district_idx_data: {calendar_time_result_district_idx_data.shape}")
         print(f"  Shape result_cycle_district_idx_data: {result_cycle_district_idx_data.shape}")
         print(f"  Shape result_district_idx_data: {result_district_idx_data.shape}")
+        print(f"  Shape calendar_time_prev_election_idx_data: {calendar_time_prev_election_idx_data.shape}")
         print("--- End Debugging Data Containers ---")
 
 
@@ -296,6 +338,7 @@ class DynamicGPElectionModel(BaseElectionModel):
             calendar_time_result_district_idx=pm.Data("calendar_time_result_district_idx", calendar_time_result_district_idx_data, dims="elections_observed_district"),
             result_cycle_district_idx=pm.Data("result_cycle_district_idx", result_cycle_district_idx_data, dims="elections_observed_district"),
             result_district_idx=pm.Data("result_district_idx", result_district_idx_data, dims="elections_observed_district"),
+            calendar_time_prev_election_idx=pm.Data("calendar_time_prev_election_idx", calendar_time_prev_election_idx_data, dims="elections_observed_district"), # Add new data container
             # --- Calendar Time Indices ---
             calendar_time_cycle_idx=pm.Data("calendar_time_cycle_idx", self.calendar_time_cycle_idx, dims="calendar_time"),
             # --- GP Inputs ---
@@ -316,13 +359,14 @@ class DynamicGPElectionModel(BaseElectionModel):
         Build the PyMC model with two GPs over calendar time, house effects,
         and dynamic district effects (base offset + beta sensitivity).
         """
-        # Unpacking expects 12 values now
+        # Unpacking expects 13 values now
         (
             self.pollster_id, self.calendar_time_poll_id,
             self.poll_days_numeric, self.poll_cycle_idx,
             self.calendar_time_cycle_idx, self.calendar_time_days_numeric,
             self.district_id, self.result_district_idx,
             self.calendar_time_result_district_id, self.result_cycle_district_idx,
+            self.calendar_time_prev_election_idx,
             self.coords, self.observed_district_result_indices # Renamed from observed_election_indices
         ) = self._build_coords(polls)
 
@@ -489,9 +533,11 @@ class DynamicGPElectionModel(BaseElectionModel):
                  national_trend_results = national_trend_pt[data_containers["calendar_time_result_district_idx"], :]
 
                  # --- Calculate Dynamic District Adjustment ---
-                 # Deviation of national trend from its average at result times
-                 # national_avg_trend_p has shape (1, n_parties) due to keepdims=True
-                 national_dev_results = national_trend_results - national_avg_trend_p # Broadcasting works
+                 # Get national trend at PREVIOUS election date
+                 national_trend_prev = national_trend_pt[data_containers["calendar_time_prev_election_idx"], :]
+                 
+                 # Calculate national swing since last election
+                 national_swing = national_trend_results - national_trend_prev # Broadcasting should work
 
                  # Index base offset and beta for each result
                  # base_offset_p has shape (parties, districts)
@@ -500,11 +546,9 @@ class DynamicGPElectionModel(BaseElectionModel):
                  base_offset_term = base_offset_p[:, data_containers["result_district_idx"]] # Shape (parties, results_obs)
                  beta_term = beta_p[:, data_containers["result_district_idx"]]          # Shape (parties, results_obs)
 
-                 # Calculate the adjustment term: beta * deviation
-                 # Need to transpose national_dev_results to (parties, results_obs) for elementwise mult
-                 # (beta_term - 1): Shape (parties, results_obs)
-                 # national_dev_results.T: Shape (parties, results_obs)
-                 dynamic_adjustment_term = (beta_term - 1) * national_dev_results.T
+                 # Calculate the adjustment term: beta * national_swing
+                 # Need to transpose national_swing to (parties, results_obs) for elementwise mult
+                 dynamic_adjustment_term = beta_term * national_swing.T
 
                  # Combine base offset and dynamic adjustment
                  # Both terms have shape (parties, results_obs)
