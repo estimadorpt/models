@@ -1208,3 +1208,49 @@ def plot_seat_distribution_histograms(seats_df: pd.DataFrame, output_dir: str,
             plt.close(fig_err)
         except Exception as inner_e:
             print(f"Failed to create error placeholder plot: {inner_e}") 
+
+def plot_poll_bias_forest(elections_model, output_dir):
+    """
+    Generates a forest plot for the poll_bias parameter.
+
+    Args:
+        elections_model: The ElectionsFacade instance containing the trace.
+        output_dir: Directory to save the plot.
+    """
+    if elections_model.trace is None or 'posterior' not in elections_model.trace:
+        print("Warning: No posterior trace found. Skipping poll bias forest plot.")
+        return
+
+    idata = elections_model.trace
+    var_name = "poll_bias"
+
+    if var_name not in idata.posterior:
+        print(f"Warning: Variable '{var_name}' not found in posterior data. Skipping poll bias forest plot.")
+        return
+
+    try:
+        print(f"Generating forest plot for {var_name}...")
+        plot_kwargs = {
+            "var_names": [var_name],
+            "hdi_prob": 0.94,
+            "figsize": (10, max(4, idata.posterior[var_name].sizes.get("parties_complete", 8) * 0.5)), # Adjust height based on number of parties
+            "backend": "matplotlib",
+            "combined": True,  # Plot chains combined
+            "textsize": 10
+        }
+
+        az.plot_forest(idata, **plot_kwargs)
+        plt.axvline(0, color='grey', linestyle='--', label='Zero Bias') # Add vertical line at zero
+        plt.title("Posterior Distribution of Average Poll Bias (Relative)")
+        plt.xlabel("Bias (Logit Scale)")
+        plt.tight_layout()
+
+        filename = os.path.join(output_dir, "forest_plot_poll_bias.png")
+        plt.savefig(filename)
+        plt.close()
+        print(f"Poll bias forest plot saved to {filename}")
+
+    except Exception as e:
+        print(f"Error generating forest plot for {var_name}: {e}")
+        if plt.gcf().get_axes(): # Close plot if axes were created but error occurred
+            plt.close() 

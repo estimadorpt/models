@@ -33,6 +33,7 @@ from src.visualization.plots import (
     plot_latent_trend_since_last_election,
     plot_forecasted_election_distribution,
     plot_seat_distribution_histograms,
+    plot_poll_bias_forest
 )
 from src.config import DEFAULT_BASELINE_TIMESCALE, DEFAULT_ELECTION_TIMESCALES
 from src.data.dataset import ElectionDataset
@@ -550,6 +551,7 @@ def visualize(args):
         plot_latent_component_contributions(elections_model, viz_dir)
         plot_recent_polls(elections_model, viz_dir)
         plot_house_effects_heatmap(elections_model, viz_dir)
+        plot_poll_bias_forest(elections_model, viz_dir)
 
         print(f"Historical visualizations saved to {viz_dir}")
         
@@ -720,6 +722,9 @@ def diagnose_model(args):
         
         print(f"Generating diagnostic plots for trace loaded from {model_dir}")
         elections_model.generate_diagnostic_plots(diag_plot_dir)
+
+        # Add call to new plot function for diagnostics mode as well
+        plot_poll_bias_forest(elections_model, diag_plot_dir)
 
         print(f"Diagnostic plots saved to {diag_plot_dir}")
 

@@ -8,7 +8,6 @@ import pymc as pm
 import pytensor.tensor as pt
 import xarray as xr
 from scipy.special import softmax
-import time
 
 from src.data.dataset import ElectionDataset # Assuming dataset structure
 from src.models.base_model import BaseElectionModel
@@ -35,7 +34,7 @@ class DynamicGPElectionModel(BaseElectionModel):
         short_term_gp_config: Dict = {"kernel": "Matern52", "hsgp_m": [25], "hsgp_c": 1.5}, # Wrap hsgp_m in list
         house_effect_sd_prior_scale: float = 0.1, # Adjusted default
         district_offset_sd_prior_scale: float = 0.1, # Adjusted default
-        beta_sd_prior_scale: float = 0.5, # NEW sensitivity parameter scale
+        # beta_sd_prior_scale: float = 0.5, # NEW sensitivity parameter scale --- COMMENTED OUT
         cycle_gp_max_days: int = 90,
         **kwargs
     ):
@@ -48,7 +47,6 @@ class DynamicGPElectionModel(BaseElectionModel):
             short_term_gp_config: Configuration for the short-term GP
             house_effect_sd_prior_scale: Prior scale for house effect standard deviation
             district_offset_sd_prior_scale: Prior scale for district effect standard deviation
-            beta_sd_prior_scale: Prior scale for beta (sensitivity parameter)
             cycle_gp_max_days: Maximum days before election for the cycle GP
             **kwargs: Additional keyword arguments for model configuration.
                       Expected keys:
@@ -61,15 +59,12 @@ class DynamicGPElectionModel(BaseElectionModel):
         # Max days before election for the cycle GP
         self.cycle_gp_max_days = cycle_gp_max_days
 
-        # Add election_date attribute initialization
-        self.election_date = dataset.election_date # Store election date from dataset
-
         # Configuration for the GPs
         self.baseline_gp_config = baseline_gp_config
         self.short_term_gp_config = short_term_gp_config
         self.house_effect_sd_prior_scale = house_effect_sd_prior_scale
         self.district_offset_sd_prior_scale = district_offset_sd_prior_scale
-        self.beta_sd_prior_scale = beta_sd_prior_scale # Store the new parameter
+        # self.beta_sd_prior_scale = beta_sd_prior_scale # Store the new parameter --- COMMENTED OUT
 
         # Ensure m is a list in the configs (handle potential overrides from kwargs if needed, though defaults are usually enough)
         if not isinstance(self.baseline_gp_config.get("hsgp_m"), (list, tuple)):
@@ -98,12 +93,11 @@ class DynamicGPElectionModel(BaseElectionModel):
         self.calendar_time_result_district_id = None # Index mapping district result obs to calendar_time
         self.result_cycle_district_idx = None    # Index mapping district result obs to cycle
         self.observed_district_result_indices = None # Row index of district result observations
-        self.calendar_time_prev_election_idx = None # Initialize empty
 
 
     def _build_coords(self, polls: pd.DataFrame = None) -> Tuple[
         np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray,
-        np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray,
+        np.ndarray, np.ndarray, np.ndarray, np.ndarray,
         np.ndarray, Dict, np.ndarray]:
         """
         Build coordinates for the PyMC model, including calendar time, election cycles,
@@ -125,7 +119,6 @@ class DynamicGPElectionModel(BaseElectionModel):
             - result_district_idx (Mapping district result obs to district ID)
             - calendar_time_result_district_id (Mapping district result obs to calendar time)
             - result_cycle_district_idx (Mapping district result obs to cycle)
-            - calendar_time_prev_election_idx (Mapping district result obs to PREVIOUS election calendar time)
             - COORDS dictionary
             - observed_district_result_indices (Indices of the district results used)
         """
@@ -191,7 +184,6 @@ class DynamicGPElectionModel(BaseElectionModel):
             self.result_cycle_district_idx = np.array([], dtype=int)
             self.result_district_idx = np.array([], dtype=int)
             self.observed_district_result_indices = np.array([], dtype=int)
-            self.calendar_time_prev_election_idx = np.array([], dtype=int) # Initialize empty
             district_coords = []
         else:
             historical_results_dates_dt = pd.to_datetime(historical_results_district['election_date'])
@@ -203,39 +195,6 @@ class DynamicGPElectionModel(BaseElectionModel):
                 missing_result_cycles = historical_results_district.loc[np.isnan(self.result_cycle_district_idx), 'election_date'].unique()
                 raise ValueError(f"Could not map some district result election dates to cycles: {missing_result_cycles}")
             self.result_cycle_district_idx = self.result_cycle_district_idx.astype(int)
-
-            # Calculate index for previous election date for each result
-            sorted_election_dates_dt = sorted(pd.to_datetime(self.all_election_dates).unique())
-            prev_election_idx_list = []
-            for date in historical_results_dates_dt:
-                # Find the election date for the current result's cycle
-                current_cycle_date = min([d for d in cycle_boundaries_dt if d >= date], default=cycle_boundaries_dt[-1])
-                # Find the index of the current cycle date in the sorted list of all election dates
-                try:
-                    current_cycle_date_index = sorted_election_dates_dt.index(current_cycle_date)
-                except ValueError:
-                    # This should not happen if all_election_dates includes cycle_boundaries_dt
-                    raise ValueError(f"Current cycle date {current_cycle_date} not found in sorted all_election_dates.")
-                
-                # Determine the previous election date
-                if current_cycle_date_index == 0:
-                    # For the first election, use its own date as the "previous" date (swing relative to itself is zero)
-                    prev_election_date = current_cycle_date 
-                else:
-                    prev_election_date = sorted_election_dates_dt[current_cycle_date_index - 1]
-                    
-                # Map the previous election date to its calendar time index
-                prev_election_calendar_idx = date_to_calendar_index.get(prev_election_date)
-                if prev_election_calendar_idx is None:
-                    # This could happen if a historical election date wasn't included in unique_dates (e.g., no polls around it)
-                    # Fallback: Find nearest available date? Or use current date? Using current for zero swing.
-                    print(f"Warning: Previous election date {prev_election_date.date()} not found in calendar_time coordinate for result date {date.date()}. Using current date index as fallback.")
-                    prev_election_calendar_idx = date_to_calendar_index.get(date) # Fallback to current date
-                    if prev_election_calendar_idx is None:
-                        raise ValueError(f"Critical Error: Neither previous ({prev_election_date.date()}) nor current ({date.date()}) result date found in calendar index.")
-                prev_election_idx_list.append(prev_election_calendar_idx)
-
-            self.calendar_time_prev_election_idx = np.array(prev_election_idx_list, dtype=int)
 
             # Factorize districts from the historical results
             if 'Circulo' not in historical_results_district.columns:
@@ -265,7 +224,6 @@ class DynamicGPElectionModel(BaseElectionModel):
         print(f"DEBUG: calendar_time_result_district_id shape: {self.calendar_time_result_district_id.shape if self.calendar_time_result_district_id is not None else 'None'}")
         print(f"DEBUG: result_cycle_district_idx shape: {self.result_cycle_district_idx.shape if self.result_cycle_district_idx is not None else 'None'}")
         print(f"DEBUG: observed_district_result_indices shape: {self.observed_district_result_indices.shape if self.observed_district_result_indices is not None else 'None'}")
-        print(f"DEBUG: calendar_time_prev_election_idx shape: {self.calendar_time_prev_election_idx.shape if self.calendar_time_prev_election_idx is not None else 'None'}")
 
 
         return (self.pollster_id, self.calendar_time_poll_id,
@@ -273,7 +231,6 @@ class DynamicGPElectionModel(BaseElectionModel):
                 self.calendar_time_cycle_idx, self.calendar_time_days_numeric,
                 self.district_id, self.result_district_idx,
                 self.calendar_time_result_district_id, self.result_cycle_district_idx,
-                self.calendar_time_prev_election_idx,
                 COORDS, self.observed_district_result_indices)
 
 
@@ -290,8 +247,7 @@ class DynamicGPElectionModel(BaseElectionModel):
         if self.pollster_id is None or self.calendar_time_poll_id is None or \
            self.poll_cycle_idx is None or self.calendar_time_cycle_idx is None or \
            self.calendar_time_days_numeric is None or self.result_district_idx is None or \
-           self.calendar_time_result_district_id is None or self.result_cycle_district_idx is None or \
-           self.calendar_time_prev_election_idx is None: # Add check for new index
+           self.calendar_time_result_district_id is None or self.result_cycle_district_idx is None:
             raise ValueError("Indices/mappings not set. Ensure _build_coords runs first.")
 
         # Prepare district result data
@@ -303,7 +259,6 @@ class DynamicGPElectionModel(BaseElectionModel):
             calendar_time_result_district_idx_data = np.array([], dtype=int)
             result_cycle_district_idx_data = np.array([], dtype=int)
             result_district_idx_data = np.array([], dtype=int)
-            calendar_time_prev_election_idx_data = np.array([], dtype=int) # Add new empty index
         else:
             # Check alignment of indices with the dataframe used in _build_coords
             if len(self.observed_district_result_indices) != len(results_district):
@@ -317,7 +272,6 @@ class DynamicGPElectionModel(BaseElectionModel):
             calendar_time_result_district_idx_data = self.calendar_time_result_district_id
             result_cycle_district_idx_data = self.result_cycle_district_idx
             result_district_idx_data = self.result_district_idx
-            calendar_time_prev_election_idx_data = self.calendar_time_prev_election_idx # Use new index
 
         print("\n--- Debugging Data Containers (District Results) ---")
         print(f"  Shape observed_N_results_district: {results_N_district.shape}")
@@ -325,7 +279,6 @@ class DynamicGPElectionModel(BaseElectionModel):
         print(f"  Shape calendar_time_result_district_idx_data: {calendar_time_result_district_idx_data.shape}")
         print(f"  Shape result_cycle_district_idx_data: {result_cycle_district_idx_data.shape}")
         print(f"  Shape result_district_idx_data: {result_district_idx_data.shape}")
-        print(f"  Shape calendar_time_prev_election_idx_data: {calendar_time_prev_election_idx_data.shape}")
         print("--- End Debugging Data Containers ---")
 
 
@@ -338,7 +291,6 @@ class DynamicGPElectionModel(BaseElectionModel):
             calendar_time_result_district_idx=pm.Data("calendar_time_result_district_idx", calendar_time_result_district_idx_data, dims="elections_observed_district"),
             result_cycle_district_idx=pm.Data("result_cycle_district_idx", result_cycle_district_idx_data, dims="elections_observed_district"),
             result_district_idx=pm.Data("result_district_idx", result_district_idx_data, dims="elections_observed_district"),
-            calendar_time_prev_election_idx=pm.Data("calendar_time_prev_election_idx", calendar_time_prev_election_idx_data, dims="elections_observed_district"), # Add new data container
             # --- Calendar Time Indices ---
             calendar_time_cycle_idx=pm.Data("calendar_time_cycle_idx", self.calendar_time_cycle_idx, dims="calendar_time"),
             # --- GP Inputs ---
@@ -359,14 +311,13 @@ class DynamicGPElectionModel(BaseElectionModel):
         Build the PyMC model with two GPs over calendar time, house effects,
         and dynamic district effects (base offset + beta sensitivity).
         """
-        # Unpacking expects 13 values now
+        # Unpacking expects 12 values now
         (
             self.pollster_id, self.calendar_time_poll_id,
             self.poll_days_numeric, self.poll_cycle_idx,
             self.calendar_time_cycle_idx, self.calendar_time_days_numeric,
             self.district_id, self.result_district_idx,
             self.calendar_time_result_district_id, self.result_cycle_district_idx,
-            self.calendar_time_prev_election_idx,
             self.coords, self.observed_district_result_indices # Renamed from observed_election_indices
         ) = self._build_coords(polls)
 
@@ -470,16 +421,15 @@ class DynamicGPElectionModel(BaseElectionModel):
             #          3. HOUSE EFFECTS (Pollster Bias)
             # --------------------------------------------------------
             house_effects_sd = pm.HalfNormal("house_effects_sd", sigma=self.house_effect_sd_prior_scale, dims="parties_complete")
-            # Non-centered parameterization
-            house_effects_raw = pm.Normal("house_effects_raw", mu=0, sigma=1,
-                                          dims=("pollsters", "parties_complete"))
-            house_effects = pm.Deterministic("house_effects",
-                                             house_effects_raw * house_effects_sd[None, :],
-                                             dims=("pollsters", "parties_complete"))
-            # Ensure house effects sum to zero across parties for each pollster
-            house_effect_pollster_adj = pm.Deterministic("house_effect_pollster_adj",
-                                                    house_effects - house_effects.mean(axis=1, keepdims=True),
-                                             dims=("pollsters", "parties_complete"))
+            # Non-centered parameterization - Remove sum_axis, use default ZeroSumNormal behavior for now
+            house_effects_raw = pm.ZeroSumNormal("house_effects_raw", sigma=1.0, dims=("pollsters", "parties_complete")) # Removed sum_axis=0
+            house_effects = pm.Deterministic("house_effects", house_effects_raw * house_effects_sd[None, :], dims=("pollsters", "parties_complete"))
+
+            # --- Average Poll Bias (Zero-Sum across parties) ---
+            # Represents systematic relative over/underestimation in polls on average
+            sigma_poll_bias = pm.HalfNormal("sigma_poll_bias", 0.1) # Single sigma for overall magnitude
+            poll_bias_raw = pm.ZeroSumNormal("poll_bias_raw", sigma=1.0, dims="parties_complete")
+            poll_bias = pm.Deterministic("poll_bias", poll_bias_raw * sigma_poll_bias, dims="parties_complete")
 
             # --------------------------------------------------------
             #          4. DISTRICT EFFECTS (Dynamic: Base Offset + Beta)
@@ -500,17 +450,20 @@ class DynamicGPElectionModel(BaseElectionModel):
                                                    base_offset_p_noncentered - base_offset_p_noncentered.mean(axis=0, keepdims=True), 
                                                    dims=("parties_complete", "districts"))
 
-                 # --- Beta Sensitivity ---
-                 sigma_beta_p = pm.HalfNormal("sigma_beta", 
-                                              sigma=self.beta_sd_prior_scale, # Use new prior scale
-                                              dims="parties_complete")
-                 # Define beta centered around 1, shape (parties, districts)
-                 beta_raw_p = pm.Normal("beta_raw", mu=0, sigma=1, # Non-centered around zero
-                                         dims=("parties_complete", "districts"))
-                 # Center beta around 1 after scaling
-                 beta_p = pm.Deterministic("beta_p", 
-                                            1 + beta_raw_p * sigma_beta_p[:, None],
-                                            dims=("parties_complete", "districts"))
+                 # --- Beta Sensitivity --- COMMENTED OUT BLOCK --- START
+                 # sigma_beta_p = pm.HalfNormal("sigma_beta",
+                 #                              sigma=0.5, # Using a slightly wider prior than before, was district_offset_sd_prior_scale
+                 #                              dims="parties_complete")
+                 # # Define beta centered around 1, shape (parties, districts)
+                 # beta_raw_p = pm.Normal("beta_raw", mu=0, sigma=1, # Non-centered around zero
+                 #                        dims=("parties_complete", "districts"))
+                 # # Center beta around 1 after scaling
+                 # beta_p = pm.Deterministic("beta_p",
+                 #                            1 + beta_raw_p * sigma_beta_p[:, None],
+                 #                            dims=("parties_complete", "districts"))
+                 # # --- Save beta_p for debugging ---
+                 # pm.Deterministic("debug_beta_p", beta_p, dims=("parties_complete", "districts"))
+                 # --- Beta Sensitivity --- COMMENTED OUT BLOCK --- END
                  # Note: We are NOT forcing beta to sum to zero or one across parties.
                  # Each party's sensitivity in a district is modeled relative to its own national trend.
 
@@ -522,10 +475,17 @@ class DynamicGPElectionModel(BaseElectionModel):
             # National trend indexed by poll observation time
             national_trend_polls = national_trend_pt[data_containers["calendar_time_poll_idx"], :]
             # House effect indexed by poll observation pollster
-            house_effect_polls = house_effect_pollster_adj[data_containers["pollster_idx"], :]
+            house_effect_polls = house_effects[data_containers["pollster_idx"], :]
             
-            latent_polls = national_trend_polls + house_effect_polls
-            p_polls = pm.Deterministic("p_polls", pm.math.softmax(latent_polls, axis=1), dims=("observations", "parties_complete"))
+            # Latent score including trend, house effect, and average poll bias
+            latent_polls = pm.Deterministic("latent_polls",
+                                             national_trend_polls
+                                             + house_effect_polls
+                                             + poll_bias[None, :] # Add poll_bias here
+                                             )
+
+            # Apply softmax
+            poll_probs = pm.Deterministic("poll_probs", pm.math.softmax(latent_polls, axis=1))
 
             # --- Latent intention for District Results ---
             if has_districts and data_containers["observed_results_district"].get_value(borrow=True).shape[0] > 0:
@@ -533,32 +493,36 @@ class DynamicGPElectionModel(BaseElectionModel):
                  national_trend_results = national_trend_pt[data_containers["calendar_time_result_district_idx"], :]
 
                  # --- Calculate Dynamic District Adjustment ---
-                 # Get national trend at PREVIOUS election date
-                 national_trend_prev = national_trend_pt[data_containers["calendar_time_prev_election_idx"], :]
-                 
-                 # Calculate national swing since last election
-                 national_swing = national_trend_results - national_trend_prev # Broadcasting should work
+                 # Deviation of national trend from its average at result times
+                 # national_avg_trend_p has shape (1, n_parties) due to keepdims=True
+                 national_dev_results = national_trend_results - national_avg_trend_p # Broadcasting works
+                 # --- Save national deviation for debugging (Can keep this if desired, or remove) ---
+                 # pm.Deterministic("debug_national_dev_results", national_dev_results, dims=("elections_observed_district", "parties_complete"))
 
-                 # Index base offset and beta for each result
-                 # base_offset_p has shape (parties, districts)
-                 # beta_p has shape (parties, districts)
-                 # result_district_idx provides the district index for each observation
-                 base_offset_term = base_offset_p[:, data_containers["result_district_idx"]] # Shape (parties, results_obs)
-                 beta_term = beta_p[:, data_containers["result_district_idx"]]          # Shape (parties, results_obs)
+                 # --- Apply Beta Term --- COMMENTED OUT
+                 # beta_term = beta_p[:, data_containers["result_district_idx"]] # Shape (parties, results_obs)
+                 # # --- Save beta term for debugging ---
+                 # pm.Deterministic("debug_beta_term", beta_term, dims=("parties_complete", "elections_observed_district"))
+                 # # Use beta_term to scale the deviation
+                 # dynamic_adjustment_term = (beta_term - 1) * national_dev_results.T
+                 # # --- Save dynamic adjustment for debugging ---
+                 # pm.Deterministic("debug_dynamic_adjustment_term", dynamic_adjustment_term, dims=("parties_complete", "elections_observed_district"))
+                 # --- End Apply Beta Term --- COMMENTED OUT
 
-                 # Calculate the adjustment term: beta * national_swing
-                 # Need to transpose national_swing to (parties, results_obs) for elementwise mult
-                 dynamic_adjustment_term = beta_term * national_swing.T
+                 # Use only base offset for district adjustment
+                 district_adjustment_results_untransposed = base_offset_p[:, data_containers["result_district_idx"]] # Shape (parties, results_obs)
+                 # --- Save base offset term for debugging (Can keep this) ---
+                 # pm.Deterministic("debug_base_offset_term", district_adjustment_results_untransposed, dims=("parties_complete", "elections_observed_district"))
+                 # total_district_adjustment = district_adjustment_results_untransposed # Use ONLY base offset
+                 # # --- Save total adjustment for debugging (Would just be base offset) ---
+                 # pm.Deterministic("debug_total_district_adjustment", total_district_adjustment, dims=("parties_complete", "elections_observed_district"))
 
-                 # Combine base offset and dynamic adjustment
-                 # Both terms have shape (parties, results_obs)
-                 district_adjustment_results = base_offset_term + dynamic_adjustment_term
-                 
                  # Transpose back to (results_obs, parties) to add to national_trend_results
-                 district_adjustment_results = district_adjustment_results.T
+                 # Use the untransposed base offset term, transpose it
+                 total_district_adjustment_transposed = district_adjustment_results_untransposed.T # Shape (results_obs, parties)
 
-                 # --- Combine for final latent results ---
-                 latent_results = national_trend_results + district_adjustment_results
+                 # --- Combine for final latent results --- Only National Trend + Base Offset
+                 latent_results = national_trend_results + total_district_adjustment_transposed # Use ONLY base offset adjustment
                  p_results_district = pm.Deterministic("p_results_district",
                                                       pm.math.softmax(latent_results, axis=1),
                                                       dims=("elections_observed_district", "parties_complete"))
@@ -575,7 +539,7 @@ class DynamicGPElectionModel(BaseElectionModel):
             pm.DirichletMultinomial(
                 "poll_likelihood", # Renamed variable from original N_approve
                 n=data_containers["observed_N_polls"],
-                a=concentration_polls * p_polls, # Use concentration * probability
+                a=concentration_polls * poll_probs, # Use concentration * probability
                 observed=data_containers["observed_polls"], 
                 dims=("observations", "parties_complete"),
             )
@@ -1003,11 +967,12 @@ class DynamicGPElectionModel(BaseElectionModel):
                     input_core_dims=[["parties_complete"]],
                     output_core_dims=[["parties_complete"]],
                     exclude_dims=set(("parties_complete",)),
+                    dask="parallelized",
                     output_dtypes=[district_latent_mean_at_date.dtype]
-                ).rename("district_adjusted_popularity").assign_coords(district_latent_mean_at_date.coords)
+                ).rename("district_adjusted_popularity")
 
-                # Ensure coordinates are preserved and dimensions are in desired order (c, d, di, p)
-                adjusted_popularity = adjusted_popularity.transpose("chain", "draw", "districts", "parties_complete")
+                # Assign coordinates from the input DataArray to the output
+                adjusted_popularity = adjusted_popularity.assign_coords(district_latent_mean_at_date.coords)
 
 
                 print(f"Successfully calculated popularity adjusted for district '{district}'.")
@@ -1022,210 +987,6 @@ class DynamicGPElectionModel(BaseElectionModel):
             # Return the national popularity if no district was specified
             print("Returning national latent popularity (no district specified).")
             return national_pop_at_date
-
-    def get_district_vote_share_posterior(self, idata: az.InferenceData, date_mode: str = 'election_day', target_date: Optional[pd.Timestamp] = None) -> Optional[xr.DataArray]:
-        """
-        Calculates the posterior distribution of vote shares for ALL districts at a specific time point.
-
-        This function performs post-processing using the posterior samples from the InferenceData object.
-
-        Args:
-            idata (az.InferenceData): InferenceData object with posterior samples. Must contain
-                                      'national_trend_pt', 'base_offset_p', 'beta_p', and coordinates.
-            date_mode (str): Defines the time point: 'election_day', 'last_poll', 'today', or 'specific_date'.
-            target_date (pd.Timestamp, optional): Specific date. Used if date_mode is 'specific_date'.
-
-        Returns:
-            xr.DataArray or None: Posterior samples of district vote shares (probabilities).
-                                  Dimensions: (chain, draw, districts, parties_complete).
-                                  Returns None on error or if required data/coords are missing.
-        """
-        if idata is None or 'posterior' not in idata:
-            print("Error: Valid InferenceData with posterior samples required."); return None
-
-        # --- Determine Target Date based on mode ---
-        actual_target_date = None
-        # Use similar logic as get_latent_popularity to find the date
-        if date_mode == 'election_day':
-            if hasattr(self, 'election_date') and self.election_date:
-                 actual_target_date = pd.Timestamp(self.election_date).normalize()
-            else: print("Error: election_date not available for 'election_day' mode."); return None
-        elif date_mode == 'last_poll':
-             if hasattr(self.dataset, 'polls_train') and not self.dataset.polls_train.empty:
-                  actual_target_date = pd.Timestamp(self.dataset.polls_train['date'].max()).normalize()
-             else: print("Error: Cannot determine last poll date from dataset."); return None
-        elif date_mode == 'today':
-             actual_target_date = pd.Timestamp.now().normalize()
-        elif date_mode == 'specific_date':
-             if target_date is None: print("Error: target_date must be provided for 'specific_date' mode."); return None
-             actual_target_date = pd.Timestamp(target_date).normalize()
-        else:
-            print(f"Error: Invalid date_mode '{date_mode}'."); return None
-        print(f"DEBUG get_district_shares: Calculating for target date: {actual_target_date.date()} (mode: {date_mode})")
-        # --- End Determine Target Date ---
-
-        # --- Check for required variables and coordinates ---
-        required_vars = ["national_trend_pt", "base_offset_p", "beta_p"]
-        required_coords = ["calendar_time", "districts", "parties_complete"]
-
-        missing_vars = [v for v in required_vars if v not in idata.posterior]
-        if missing_vars: print(f"Error: Missing required posterior variables: {missing_vars}"); return None
-
-        missing_coords = [c for c in required_coords if c not in idata.posterior.coords]
-        if missing_coords: print(f"Error: Missing required coordinates: {missing_coords}"); return None
-
-        # Also need national average trend (or calculate it)
-        if "national_avg_trend_p" not in idata.posterior:
-             print("Warning: 'national_avg_trend_p' not found. Calculating from 'national_trend_pt'.")
-             try:
-                  # Calculate and add to idata for potential future use (be cautious modifying idata)
-                  # This calculation happens in memory here, doesn't modify the stored idata object persistently unless saved later
-                  idata.posterior["national_avg_trend_p"] = idata.posterior["national_trend_pt"].mean(dim="calendar_time")
-             except Exception as e:
-                  print(f"Error calculating 'national_avg_trend_p': {e}"); return None
-        # --- End Check ---
-
-        try:
-            # --- Prepare Coordinates and DataArrays ---
-            calendar_coords = pd.to_datetime(idata.posterior['calendar_time'].values).normalize()
-            district_coords = idata.posterior['districts'].values
-            party_coords = idata.posterior['parties_complete'].values
-
-            national_trend_da = idata.posterior["national_trend_pt"].copy()
-            national_trend_da['calendar_time'] = calendar_coords # Assign converted coords
-
-            national_avg_trend_da = idata.posterior["national_avg_trend_p"] # Should have dims (chain, draw, party)
-
-            base_offset_da = idata.posterior["base_offset_p"] # Dims (chain, draw, party, district)
-            beta_da = idata.posterior["beta_p"] # Dims (chain, draw, party, district)
-
-            # --- Select National Trend at Target Date ---
-            min_cal_date = calendar_coords.min()
-            max_cal_date = calendar_coords.max()
-            if not (min_cal_date <= actual_target_date <= max_cal_date):
-                 print(f"Warning: Target date {actual_target_date.date()} outside modeled range ({min_cal_date.date()} to {max_cal_date.date()}). Using nearest.")
-
-            # Select national trend at the target date
-            # Result dims: (chain, draw, parties_complete)
-            national_trend_at_date = national_trend_da.sel(
-                calendar_time=actual_target_date,
-                method="nearest",
-                tolerance=pd.Timedelta(days=1)
-            )
-            selected_date = pd.Timestamp(national_trend_at_date.calendar_time.item()).normalize()
-            print(f"Using national trend from nearest date: {selected_date.date()}")
-
-            # --- Calculate District Latent Support ---
-            # national_trend_at_date: (chain, draw, party)
-            # national_avg_trend_da: (chain, draw, party)
-            # base_offset_da:       (chain, draw, party, district)
-            # beta_da:              (chain, draw, party, district)
-
-            # Calculate deviation: (national_trend_at_date - national_avg_trend_da)
-            # Need to add a 'district' dimension for broadcasting
-            national_dev_at_date = national_trend_at_date - national_avg_trend_da
-            # national_dev_at_date: (chain, draw, party)
-
-            # Reshape/transpose for broadcasting:
-            # base_offset_da already (chain, draw, party, district)
-            # beta_da already (chain, draw, party, district)
-            # Need national_trend_at_date as (chain, draw, party, district=1) ? No, easier to broadcast other way.
-            # Need national_dev_at_date as (chain, draw, party, district=1)? Yes.
-
-            # Let's align dimensions:
-            # national_trend_at_date_b = national_trend_at_date.expand_dims(dim={"districts": district_coords}, axis=-1) # Add district dim
-            # base_offset_da_t = base_offset_da # Already correct dims (c,d,p,di) -> (c,d,di,p)? Check dims again.
-                # base_offset_p = pm.Deterministic("base_offset_p", ..., dims=("parties_complete", "districts"))
-                # So base_offset_da is (chain, draw, parties_complete, districts)
-            # beta_da also (chain, draw, parties_complete, districts)
-
-            # Recalculate district adjustment (similar to model build but using posterior samples)
-            # national_dev_at_date has dims (chain, draw, party)
-            # base_offset_da has dims (chain, draw, party, district)
-            # beta_da has dims (chain, draw, party, district)
-
-            # We need to multiply (beta - 1) by national_dev_at_date.
-            # Add district dim to national_dev_at_date for broadcasting
-            national_dev_at_date_b = national_dev_at_date.expand_dims(dim={"districts": district_coords}, axis=-1)
-            # Now national_dev_at_date_b has dims (chain, draw, party, district)
-
-            # Calculate dynamic adjustment term: (beta - 1) * national_dev_at_date_b
-            dynamic_adjustment = (beta_da - 1) * national_dev_at_date_b # Element-wise ok
-
-            # Calculate total district adjustment: base_offset + dynamic_adjustment
-            district_adjustment = base_offset_da + dynamic_adjustment # Element-wise ok
-            # district_adjustment has dims (chain, draw, party, district)
-
-            # Add national trend at date to district adjustment
-            # Need to add district dim to national_trend_at_date for broadcasting
-            national_trend_at_date_b = national_trend_at_date.expand_dims(dim={"districts": district_coords}, axis=-1)
-            # national_trend_at_date_b has dims (chain, draw, party, district)
-
-            latent_district_support = national_trend_at_date_b + district_adjustment
-            # latent_district_support has dims (chain, draw, party, district)
-
-            # --- Apply Softmax (MANUAL LOOP METHOD) ---
-            # Apply softmax across the 'parties_complete' dimension manually
-            # Get dimensions and values
-            latent_vals = latent_district_support.values
-            n_chains, n_draws, n_parties, n_districts = latent_vals.shape
-            
-            # Initialize output array
-            share_vals = np.empty_like(latent_vals)
-            
-            print("Applying softmax manually (looping through samples/districts)...")
-            loop_start = time.time() # Import time at top if not already present
-            for c in range(n_chains):
-                # Add progress print if needed
-                # if (c + 1) % (n_chains // 4) == 0: print(f"  Softmax loop progress: Chain {c+1}/{n_chains}")
-                for d in range(n_draws):
-                    for k in range(n_districts):
-                        # Apply softmax along the party dimension (axis=2)
-                        share_vals[c, d, :, k] = softmax(latent_vals[c, d, :, k])
-            loop_end = time.time()
-            print(f"Manual softmax loop finished in {loop_end - loop_start:.2f} seconds.")
-
-            # Reconstruct DataArray
-            district_vote_shares = xr.DataArray(
-                share_vals,
-                coords=latent_district_support.coords, # Use original coords
-                dims=latent_district_support.dims,     # Use original dims
-                name="district_vote_shares"
-            )
-            
-            # --- Old apply_ufunc method (commented out) ---
-            # district_vote_shares = xr.apply_ufunc(
-            #     softmax, # from scipy.special import softmax
-            #     latent_district_support,
-            #     input_core_dims=[["parties_complete"]],
-            #     output_core_dims=[["parties_complete"]],
-            #     exclude_dims=set(("parties_complete",)),
-            #     # dask="parallelized", # <--- REMOVED THIS
-            #     output_dtypes=[latent_district_support.dtype]
-            # ).rename("district_vote_shares").assign_coords(latent_district_support.coords)
-
-            # Ensure coordinates are preserved and dimensions are in desired order (c, d, di, p)
-            # Check if transpose is still necessary with the manual method
-            # The manual method should preserve the original (c, d, p, di) order, let's verify dims before transpose
-            print(f"DEBUG: district_vote_shares dims before potential transpose: {district_vote_shares.dims}")
-            # Transpose to ensure standard (c, d, di, p) order if needed
-            target_dims = ("chain", "draw", "districts", "parties_complete")
-            if district_vote_shares.dims != target_dims:
-                 print(f"Transposing dimensions from {district_vote_shares.dims} to {target_dims}")
-                 district_vote_shares = district_vote_shares.transpose(*target_dims)
-            else:
-                 print("Dimensions already in target order.")
-
-            print(f"Successfully calculated district vote shares for date {selected_date.date()}.")
-            return district_vote_shares
-
-        except KeyError as e:
-             print(f"Error: Key error during calculation (likely missing variable/coordinate): {e}"); return None
-        except Exception as e:
-             print(f"Unexpected error calculating district vote shares: {e}")
-             import traceback
-             traceback.print_exc()
-             return None
 
 # ... (rest of the file remains the same - placeholders, etc.) ...
 
