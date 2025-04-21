@@ -204,6 +204,20 @@ def calculate_calibration_data(
         - 'bin_edges': The edges of the bins used.
         Returns dict with NaNs if shapes mismatch or calculation fails.
     """
+    # --- REMOVE DEBUG PRINT ---
+    # print(f"DEBUG CALIBRATION: Received posterior_probs dimensions: {posterior_probs.dims}") 
+    # --- END REMOVE DEBUG PRINT ---
+
+    # 1. Input Validation
+    if not isinstance(posterior_probs, xr.DataArray):
+        print(f"Error: posterior_probs must be an xarray DataArray.")
+        return {
+            "mean_predicted_prob": np.full(n_bins, np.nan),
+            "mean_observed_prob": np.full(n_bins, np.nan),
+            "bin_counts": np.zeros(n_bins, dtype=int),
+            "bin_edges": np.linspace(0, 1, n_bins + 1)[:-1]
+        }
+
     if posterior_probs.dims != ('chain', 'draw', 'observations', 'parties_complete') or \
        posterior_probs.shape[2:] != observed_counts.shape or \
        posterior_probs.shape[2] != total_n.shape[0]:

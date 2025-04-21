@@ -186,9 +186,16 @@ def fit_model(args):
             print("DEBUG FIT: Calling generate_diagnostic_plots...")
             elections_model.generate_diagnostic_plots(diag_plot_dir)
             print("DEBUG FIT: Finished generate_diagnostic_plots.")
-            # If there are model-specific diagnostic plots, call them here:
-            # if hasattr(model_instance, 'generate_specific_diagnostics'):
-            #    model_instance.generate_specific_diagnostics(diag_plot_dir)
+
+            # --- Call model-specific swing plots ---
+            if isinstance(model_instance, DynamicGPElectionModel) and hasattr(model_instance, 'generate_swing_diagnostic_plots'):
+                 try:
+                      print("DEBUG FIT: Calling generate_swing_diagnostic_plots...")
+                      model_instance.generate_swing_diagnostic_plots(elections_model.trace, diag_plot_dir)
+                      print("DEBUG FIT: Finished generate_swing_diagnostic_plots.")
+                 except Exception as swing_plot_err:
+                      print(f"Warning: Failed to generate swing diagnostic plots: {swing_plot_err}")
+            # --- End model-specific swing plots ---
         else:
             print("Skipping diagnostic plot generation as trace is not available.")
         
@@ -723,8 +730,16 @@ def diagnose_model(args):
         print(f"Generating diagnostic plots for trace loaded from {model_dir}")
         elections_model.generate_diagnostic_plots(diag_plot_dir)
 
-        # Add call to new plot function for diagnostics mode as well
-        plot_poll_bias_forest(elections_model, diag_plot_dir)
+        # --- Call model-specific swing plots ---
+        model_instance = elections_model.model_instance # Get the instance
+        if isinstance(model_instance, DynamicGPElectionModel) and hasattr(model_instance, 'generate_swing_diagnostic_plots'):
+             try:
+                  print("DEBUG DIAGNOSE: Calling generate_swing_diagnostic_plots...")
+                  model_instance.generate_swing_diagnostic_plots(elections_model.trace, diag_plot_dir)
+                  print("DEBUG DIAGNOSE: Finished generate_swing_diagnostic_plots.")
+             except Exception as swing_plot_err:
+                  print(f"Warning: Failed to generate swing diagnostic plots: {swing_plot_err}")
+        # --- End model-specific swing plots ---
 
         print(f"Diagnostic plots saved to {diag_plot_dir}")
 

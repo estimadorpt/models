@@ -8,6 +8,7 @@ import pymc as pm
 import pytensor.tensor as pt
 import xarray as xr
 from scipy.special import softmax
+import matplotlib.pyplot as plt
 
 from src.data.dataset import ElectionDataset # Assuming dataset structure
 from src.models.base_model import BaseElectionModel
@@ -93,12 +94,14 @@ class DynamicGPElectionModel(BaseElectionModel):
         self.calendar_time_result_district_id = None # Index mapping district result obs to calendar_time
         self.result_cycle_district_idx = None    # Index mapping district result obs to cycle
         self.observed_district_result_indices = None # Row index of district result observations
+        # --- New Attribute ---
+        self.cycle_start_reference_indices = None # Calendar time index for start ref of each cycle
 
 
     def _build_coords(self, polls: pd.DataFrame = None) -> Tuple[
         np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray,
         np.ndarray, np.ndarray, np.ndarray, np.ndarray,
-        np.ndarray, Dict, np.ndarray]:
+        np.ndarray, np.ndarray, Dict, np.ndarray]:
         """
         Build coordinates for the PyMC model, including calendar time, election cycles,
         districts, and days_to_election.
@@ -119,6 +122,7 @@ class DynamicGPElectionModel(BaseElectionModel):
             - result_district_idx (Mapping district result obs to district ID)
             - calendar_time_result_district_id (Mapping district result obs to calendar time)
             - result_cycle_district_idx (Mapping district result obs to cycle)
+            - cycle_start_reference_indices (Calendar time index for the start reference date of each cycle)
             - COORDS dictionary
             - observed_district_result_indices (Indices of the district results used)
         """
@@ -138,6 +142,15 @@ class DynamicGPElectionModel(BaseElectionModel):
         calendar_time_numeric = (unique_dates - min_date).days.values
         self.calendar_time_numeric = calendar_time_numeric
         date_to_calendar_index = {date: i for i, date in enumerate(unique_dates)}
+
+        # --- Map Election Dates (Cycle Boundaries) to Calendar Time Indices ---
+        cycle_boundaries_dt = pd.to_datetime(sorted(self.all_election_dates)) # Moved up
+        cycle_boundary_indices = []
+        for date in cycle_boundaries_dt:
+             if date in date_to_calendar_index:
+                 cycle_boundary_indices.append(date_to_calendar_index[date])
+             else:
+                 raise ValueError(f"Election date {date} not found in unique calendar dates.")
 
         # --- Define Election Cycles & Mappings ---
         cycle_boundaries_dt = pd.to_datetime(sorted(self.all_election_dates))
@@ -203,6 +216,12 @@ class DynamicGPElectionModel(BaseElectionModel):
             self.result_district_idx = self.district_id # Direct mapping from the factorized result
             self.observed_district_result_indices = historical_results_district.index.values # Use DF index
 
+        # --- Calculate Cycle Start Reference Indices ---
+        # Use previous election date index as reference, first cycle uses index 0
+        num_cycles = len(cycle_names)
+        self.cycle_start_reference_indices = np.zeros(num_cycles, dtype=int)
+        self.cycle_start_reference_indices[1:] = cycle_boundary_indices[:-1]
+
         # --- Define Coordinates ---
         COORDS = {
             "observations": data_polls.index, # Poll observations
@@ -231,6 +250,7 @@ class DynamicGPElectionModel(BaseElectionModel):
                 self.calendar_time_cycle_idx, self.calendar_time_days_numeric,
                 self.district_id, self.result_district_idx,
                 self.calendar_time_result_district_id, self.result_cycle_district_idx,
+                self.cycle_start_reference_indices,
                 COORDS, self.observed_district_result_indices)
 
 
@@ -247,7 +267,8 @@ class DynamicGPElectionModel(BaseElectionModel):
         if self.pollster_id is None or self.calendar_time_poll_id is None or \
            self.poll_cycle_idx is None or self.calendar_time_cycle_idx is None or \
            self.calendar_time_days_numeric is None or self.result_district_idx is None or \
-           self.calendar_time_result_district_id is None or self.result_cycle_district_idx is None:
+           self.calendar_time_result_district_id is None or self.result_cycle_district_idx is None or \
+           self.cycle_start_reference_indices is None:
             raise ValueError("Indices/mappings not set. Ensure _build_coords runs first.")
 
         # Prepare district result data
@@ -277,6 +298,7 @@ class DynamicGPElectionModel(BaseElectionModel):
         print(f"  Shape observed_N_results_district: {results_N_district.shape}")
         print(f"  Shape observed_results_district: {observed_results_district.shape}")
         print(f"  Shape calendar_time_result_district_idx_data: {calendar_time_result_district_idx_data.shape}")
+        print(f"  Shape cycle_start_reference_indices: {self.cycle_start_reference_indices.shape}") # Debug print
         print(f"  Shape result_cycle_district_idx_data: {result_cycle_district_idx_data.shape}")
         print(f"  Shape result_district_idx_data: {result_district_idx_data.shape}")
         print("--- End Debugging Data Containers ---")
@@ -302,6 +324,8 @@ class DynamicGPElectionModel(BaseElectionModel):
             # --- Observed Result Data (District) ---
             observed_N_results_district=pm.Data("observed_N_results_district", results_N_district, dims="elections_observed_district"),
             observed_results_district=pm.Data("observed_results_district", observed_results_district, dims=("elections_observed_district", "parties_complete")),
+            # Mapping from cycle index to its start reference point in calendar_time
+            cycle_start_ref_idx=pm.Data("cycle_start_ref_idx", self.cycle_start_reference_indices, dims="election_cycles"),
         )
         return data_containers
 
@@ -311,13 +335,14 @@ class DynamicGPElectionModel(BaseElectionModel):
         Build the PyMC model with two GPs over calendar time, house effects,
         and dynamic district effects (base offset + beta sensitivity).
         """
-        # Unpacking expects 12 values now
+        # Unpacking expects 13 values now (added cycle_start_reference_indices)
         (
             self.pollster_id, self.calendar_time_poll_id,
             self.poll_days_numeric, self.poll_cycle_idx,
             self.calendar_time_cycle_idx, self.calendar_time_days_numeric,
             self.district_id, self.result_district_idx,
             self.calendar_time_result_district_id, self.result_cycle_district_idx,
+            self.cycle_start_reference_indices,
             self.coords, self.observed_district_result_indices # Renamed from observed_election_indices
         ) = self._build_coords(polls)
 
@@ -329,13 +354,13 @@ class DynamicGPElectionModel(BaseElectionModel):
             # --------------------------------------------------------
             #        1. BASELINE GP (Long Trend over Calendar Time)
             # --------------------------------------------------------
-            baseline_gp_ls = pm.LogNormal("baseline_gp_ls", mu=np.log(365*2.5), sigma=0.3)
-            baseline_gp_amp_sd = pm.HalfNormal("baseline_gp_amp_sd", sigma=0.2)
+            baseline_gp_lengthscale = pm.LogNormal("baseline_gp_lengthscale", mu=np.log(365*2.5), sigma=0.3)
+            baseline_gp_amplitude_sd = pm.HalfNormal("baseline_gp_amplitude_sd", sigma=0.2)
 
             if self.baseline_gp_config["kernel"] == "Matern52":
-                 cov_func_baseline = baseline_gp_amp_sd**2 * pm.gp.cov.Matern52(input_dim=1, ls=baseline_gp_ls)
+                 cov_func_baseline = baseline_gp_amplitude_sd**2 * pm.gp.cov.Matern52(input_dim=1, ls=baseline_gp_lengthscale)
             elif self.baseline_gp_config["kernel"] == "ExpQuad":
-                 cov_func_baseline = baseline_gp_amp_sd**2 * pm.gp.cov.ExpQuad(input_dim=1, ls=baseline_gp_ls)
+                 cov_func_baseline = baseline_gp_amplitude_sd**2 * pm.gp.cov.ExpQuad(input_dim=1, ls=baseline_gp_lengthscale)
             else: raise ValueError(f"Unsupported Baseline GP kernel: {self.baseline_gp_config['kernel']}")
 
             baseline_hsgp_m = self.baseline_gp_config["hsgp_m"]
@@ -366,15 +391,15 @@ class DynamicGPElectionModel(BaseElectionModel):
             short_term_gp_ls_prior_mu = self.short_term_gp_config.get("lengthscale", 30) # Default 30 days
             short_term_gp_amp_sd_prior_scale = self.short_term_gp_config.get("amp_sd", 0.1) # Default 0.1
 
-            short_term_gp_ls = pm.LogNormal("short_term_gp_ls", mu=np.log(short_term_gp_ls_prior_mu), sigma=0.5)
-            short_term_gp_amp_sd = pm.HalfNormal("short_term_gp_amp_sd", sigma=short_term_gp_amp_sd_prior_scale)
+            short_term_gp_lengthscale = pm.LogNormal("short_term_gp_lengthscale", mu=np.log(short_term_gp_ls_prior_mu), sigma=0.5)
+            short_term_gp_amplitude_sd = pm.HalfNormal("short_term_gp_amplitude_sd", sigma=short_term_gp_amp_sd_prior_scale)
 
             short_term_gp_kernel = self.short_term_gp_config.get("kernel", "Matern52") # Default Matern52
 
             if short_term_gp_kernel == "Matern52":
-                 cov_func_short_term = short_term_gp_amp_sd**2 * pm.gp.cov.Matern52(input_dim=1, ls=short_term_gp_ls)
+                 cov_func_short_term = short_term_gp_amplitude_sd**2 * pm.gp.cov.Matern52(input_dim=1, ls=short_term_gp_lengthscale)
             elif short_term_gp_kernel == "ExpQuad":
-                 cov_func_short_term = short_term_gp_amp_sd**2 * pm.gp.cov.ExpQuad(input_dim=1, ls=short_term_gp_ls)
+                 cov_func_short_term = short_term_gp_amplitude_sd**2 * pm.gp.cov.ExpQuad(input_dim=1, ls=short_term_gp_lengthscale)
             else: raise ValueError(f"Unsupported Short-Term GP kernel: {short_term_gp_kernel}")
 
             # Use HSGP parameters from short_term_gp_config
@@ -434,38 +459,34 @@ class DynamicGPElectionModel(BaseElectionModel):
             # --------------------------------------------------------
             #          4. DISTRICT EFFECTS (Dynamic: Base Offset + Beta)
             # --------------------------------------------------------
-            # Check if districts coordinate exists and has members
+            # Check if districts coordinate exists and has members (district coords derived from results)
             has_districts = "districts" in self.coords and len(self.coords["districts"]) > 0
             if has_districts:
-                 # --- Base Offset ---
-                 sigma_base_offset_p = pm.HalfNormal("sigma_base_offset", 
-                                                     sigma=self.district_offset_sd_prior_scale,
-                                                     dims="parties_complete")
-                 # Define with shape (parties, districts) for easier broadcasting later
-                 base_offset_raw_p = pm.Normal("base_offset_raw", mu=0, sigma=1,
-                                                dims=("parties_complete", "districts"))
-                 # Apply scale and ensure sums to zero across parties for each district
-                 base_offset_p_noncentered = base_offset_raw_p * sigma_base_offset_p[:, None]
-                 base_offset_p = pm.Deterministic("base_offset_p", 
-                                                   base_offset_p_noncentered - base_offset_p_noncentered.mean(axis=0, keepdims=True), 
-                                                   dims=("parties_complete", "districts"))
+                 # --- Static District Offset ---
+                 sigma_static_district_offset = pm.HalfNormal("sigma_static_district_offset", sigma=self.district_offset_sd_prior_scale, dims="parties_complete")
+                 # Define offset with shape (districts, parties)
+                 # Zero-sum constraint across parties for each district is handled later if needed, or implicitly by softmax
+                 static_district_offset_raw = pm.Normal("static_district_offset_raw", mu=0, sigma=1,
+                                                         dims=("districts", "parties_complete"))
+                 static_district_offset = pm.Deterministic("static_district_offset",
+                                                            static_district_offset_raw * sigma_static_district_offset[None, :], # Multiply by sigma broadcasted
+                                                            dims=("districts", "parties_complete"))
+                 # Optional: Enforce zero-sum constraint if desired
+                 # static_district_offset = pm.Deterministic("static_district_offset",
+                 #                                            static_district_offset_noncentered - static_district_offset_noncentered.mean(axis=1, keepdims=True),
+                 #                                            dims=("districts", "parties_complete"))
 
-                 # --- Beta Sensitivity --- COMMENTED OUT BLOCK --- START
-                 # sigma_beta_p = pm.HalfNormal("sigma_beta",
-                 #                              sigma=0.5, # Using a slightly wider prior than before, was district_offset_sd_prior_scale
-                 #                              dims="parties_complete")
-                 # # Define beta centered around 1, shape (parties, districts)
-                 # beta_raw_p = pm.Normal("beta_raw", mu=0, sigma=1, # Non-centered around zero
-                 #                        dims=("parties_complete", "districts"))
-                 # # Center beta around 1 after scaling
-                 # beta_p = pm.Deterministic("beta_p",
-                 #                            1 + beta_raw_p * sigma_beta_p[:, None],
-                 #                            dims=("parties_complete", "districts"))
-                 # # --- Save beta_p for debugging ---
-                 # pm.Deterministic("debug_beta_p", beta_p, dims=("parties_complete", "districts"))
-                 # --- Beta Sensitivity --- COMMENTED OUT BLOCK --- END
-                 # Note: We are NOT forcing beta to sum to zero or one across parties.
-                 # Each party's sensitivity in a district is modeled relative to its own national trend.
+                 # --- District Sensitivity (Beta) ---
+                 sigma_district_sensitivity = pm.HalfNormal("sigma_district_sensitivity", sigma=0.1, dims="parties_complete") # Add dims
+                 # Define sensitivity centered around 1, shape (parties, districts) for easier math later
+                 # A value of 1 means the district moves exactly with the national trend for that party
+                 # A value > 1 means it swings more; < 1 means it swings less
+                 district_sensitivity_raw = pm.Normal("district_sensitivity_raw", mu=0, sigma=1, # Non-centered around zero
+                                                       dims=("parties_complete", "districts"))
+                 # Center sensitivity around 1 after scaling
+                 district_sensitivity = pm.Deterministic("district_sensitivity",
+                                                         1 + district_sensitivity_raw * sigma_district_sensitivity[:, None],
+                                                         dims=("parties_complete", "districts"))
 
             # --------------------------------------------------------
             #          5. LATENT VOTE INTENTIONS
@@ -487,48 +508,60 @@ class DynamicGPElectionModel(BaseElectionModel):
             # Apply softmax
             poll_probs = pm.Deterministic("poll_probs", pm.math.softmax(latent_polls, axis=1))
 
-            # --- Latent intention for District Results ---
-            if has_districts and data_containers["observed_results_district"].get_value(borrow=True).shape[0] > 0:
-                 # National trend indexed by district result observation time
-                 national_trend_results = national_trend_pt[data_containers["calendar_time_result_district_idx"], :]
+            # --- Calculate Latent Values for District Results (Using Swing) ---
+            # Perform calculations directly, ensuring consistent shapes for addition
+            if has_districts: # Only calculate if districts exist
+                 # --- Calculate Latent Values for District Results (Using Swing) ---
+                 # Get static offset for each observation (districts, parties) -> (obs, parties)
+                 result_district_idx = data_containers["result_district_idx"]
+                 _static_offset_indexed = static_district_offset[result_district_idx, :] # Shape (100, 8)
 
-                 # --- Calculate Dynamic District Adjustment ---
-                 # Deviation of national trend from its average at result times
-                 # national_avg_trend_p has shape (1, n_parties) due to keepdims=True
-                 national_dev_results = national_trend_results - national_avg_trend_p # Broadcasting works
-                 # --- Save national deviation for debugging (Can keep this if desired, or remove) ---
-                 # pm.Deterministic("debug_national_dev_results", national_dev_results, dims=("elections_observed_district", "parties_complete"))
+                 # --- Calculate Cycle Swing ---
+                 calendar_time_result_idx = data_containers["calendar_time_result_district_idx"]
+                 result_cycle_idx = data_containers["result_cycle_district_idx"]
+                 cycle_start_ref_idx = data_containers["cycle_start_ref_idx"]
 
-                 # --- Apply Beta Term --- COMMENTED OUT
-                 # beta_term = beta_p[:, data_containers["result_district_idx"]] # Shape (parties, results_obs)
-                 # # --- Save beta term for debugging ---
-                 # pm.Deterministic("debug_beta_term", beta_term, dims=("parties_complete", "elections_observed_district"))
-                 # # Use beta_term to scale the deviation
-                 # dynamic_adjustment_term = (beta_term - 1) * national_dev_results.T
-                 # # --- Save dynamic adjustment for debugging ---
-                 # pm.Deterministic("debug_dynamic_adjustment_term", dynamic_adjustment_term, dims=("parties_complete", "elections_observed_district"))
-                 # --- End Apply Beta Term --- COMMENTED OUT
+                 # National trend at the time of the result (obs, parties) -> (100, 8)
+                 national_trend_at_result = national_trend_pt[calendar_time_result_idx]
+                 # National trend at the start reference point of the result's cycle (obs, parties) -> (100, 8)
+                 relevant_cycle_start_indices = cycle_start_ref_idx[result_cycle_idx]
+                 national_trend_at_cycle_start = national_trend_pt[relevant_cycle_start_indices]
 
-                 # Use only base offset for district adjustment
-                 district_adjustment_results_untransposed = base_offset_p[:, data_containers["result_district_idx"]] # Shape (parties, results_obs)
-                 # --- Save base offset term for debugging (Can keep this) ---
-                 # pm.Deterministic("debug_base_offset_term", district_adjustment_results_untransposed, dims=("parties_complete", "elections_observed_district"))
-                 # total_district_adjustment = district_adjustment_results_untransposed # Use ONLY base offset
-                 # # --- Save total adjustment for debugging (Would just be base offset) ---
-                 # pm.Deterministic("debug_total_district_adjustment", total_district_adjustment, dims=("parties_complete", "elections_observed_district"))
+                 # Swing = Trend at result - Trend at cycle start (obs, parties) -> (100, 8)
+                 _cycle_swing = national_trend_at_result - national_trend_at_cycle_start
 
-                 # Transpose back to (results_obs, parties) to add to national_trend_results
-                 # Use the untransposed base offset term, transpose it
-                 total_district_adjustment_transposed = district_adjustment_results_untransposed.T # Shape (results_obs, parties)
+                 # Get the sensitivity for the specific district of each observation (parties, obs) -> (8, 100)
+                 _sensitivity_indexed = district_sensitivity[:, result_district_idx]
 
-                 # --- Combine for final latent results --- Only National Trend + Base Offset
-                 latent_results = national_trend_results + total_district_adjustment_transposed # Use ONLY base offset adjustment
-                 p_results_district = pm.Deterministic("p_results_district",
-                                                      pm.math.softmax(latent_results, axis=1),
-                                                      dims=("elections_observed_district", "parties_complete"))
+                 # Calculate the dynamic adjustment (parties, obs) -> (8, 100)
+                 # Note: _cycle_swing is (100, 8), so need to transpose it
+                 _dynamic_adjustment = _sensitivity_indexed * _cycle_swing.T # Elementwise product
+
+                 # Combine terms: Trend at Result Time + Static Offset + Dynamic Swing Adjustment
+                 # All terms need to be (obs, parties)
+                 # national_trend_at_result: (100, 8)
+                 # _static_offset_indexed:   (100, 8)
+                 # _dynamic_adjustment.T:    (100, 8)
+                 _latent_terms_obs_parties = national_trend_at_result + _static_offset_indexed + _dynamic_adjustment.T
+
+                 # Store final result and intermediates if needed for debugging/saving
+                 latent_district_result_mean = pm.Deterministic("latent_district_result_mean", 
+                                                                 _latent_terms_obs_parties, 
+                                                                 dims=("elections_observed_district", "parties_complete"))
+                 # --- ADDED: Explicitly save the district probabilities --- 
+                 p_results_district = pm.Deterministic("p_results_district", 
+                                                        pm.math.softmax(latent_district_result_mean, axis=1), 
+                                                        dims=("elections_observed_district", "parties_complete"))
+                 
+                 # Optionally recreate debug deterministics if needed
+                 pm.Deterministic("debug_static_offset_term", _static_offset_indexed.T) # Save transposed version
+                 pm.Deterministic("cycle_swing", _cycle_swing)
+                 pm.Deterministic("debug_sensitivity_term", _sensitivity_indexed)
+                 pm.Deterministic("debug_dynamic_adjustment", _dynamic_adjustment)
+                 # The mean itself is already saved, no need for debug_latent_district_result_mean
             else:
-                 # Define placeholder if no districts or no results
-                 p_results_district = None # Or handle differently if needed later
+                # Define placeholder if no districts
+                latent_district_result_mean = None # Will be handled by likelihood check
 
             # --------------------------------------------------------
             #          6. LIKELIHOODS
@@ -545,14 +578,15 @@ class DynamicGPElectionModel(BaseElectionModel):
             )
 
             # --- District Result Likelihood (Dirichlet Multinomial) --- 
-            # Only add if there are districts and observed district results and p_results_district is defined
-            if has_districts and data_containers["observed_results_district"].get_value(borrow=True).shape[0] > 0 and p_results_district is not None:
-                 concentration_results = pm.Gamma("concentration_results", alpha=100, beta=0.05) # Reintroduce concentration (can be separate or shared)
+            # Only add if there are districts and observed district results
+            # AND the probability variable has been defined
+            if has_districts and 'p_results_district' in locals() and p_results_district is not None and data_containers["observed_results_district"].get_value(borrow=True).shape[0] > 0:
+                 concentration_district_results = pm.Gamma("concentration_district_results", alpha=100, beta=0.1) # Use descriptive name
                  pm.DirichletMultinomial(
-                     "observed_district", # Name matches data container, but it's the likelihood RV.
-                                          # If this causes issues, rename to observed_district_lik
+                     "result_district_likelihood", # Renamed RV likelihood name
                      n=data_containers["observed_N_results_district"],
-                     a=concentration_results * p_results_district, # Use concentration * probability
+                     # Use softmax to get probabilities, then scale by concentration
+                     a=concentration_district_results * p_results_district, # Use the explicitly saved probability
                      observed=data_containers["observed_results_district"],
                      dims=("elections_observed_district", "parties_complete"),
                  )
@@ -594,8 +628,8 @@ class DynamicGPElectionModel(BaseElectionModel):
         if "p_polls" in self.model.deterministics:
             vars_to_sample_predictions.append("p_polls")
 
-        if "observed_district" in self.model.named_vars:
-             vars_to_sample_observed.append("observed_district")
+        if "result_district_likelihood" in self.model.named_vars: # Use corrected RV name
+             vars_to_sample_observed.append("result_district_likelihood") # Use corrected RV name
         if "p_results_district" in self.model.deterministics:
              vars_to_sample_predictions.append("p_results_district")
              print("DEBUG PPC: Added 'p_results_district' to prediction sampling list.") # Debug print
@@ -697,24 +731,25 @@ class DynamicGPElectionModel(BaseElectionModel):
         # --- Polls --- 
         try:
             # Get predicted probabilities directly from posterior
-            if "p_polls" not in idata.posterior:
-                 raise KeyError("'p_polls' missing from posterior. Cannot calculate probability-based metrics.")
-            posterior_poll_prob_da = idata.posterior["p_polls"] # Shape (chain, draw, obs, party)
+            poll_prob_key = "poll_probs"
+            poll_obs_key = "poll_likelihood"
+            poll_n_key = "observed_N_polls"
+            poll_prob_da = idata.posterior[poll_prob_key] # Shape (chain, draw, obs, party)
             # Calculate mean probability for MAE, RMSE etc.
-            pred_poll_probs = posterior_poll_prob_da.mean(dim=["chain", "draw"]).values
+            pred_poll_probs = poll_prob_da.mean(dim=["chain", "draw"]).values
 
             # Use observed data name 'observed_polls' for counts
-            if "poll_likelihood" not in idata.observed_data:
-                 raise KeyError("'poll_likelihood' missing from observed_data.")
-            obs_poll_counts = idata.observed_data["poll_likelihood"].values
+            if poll_obs_key not in idata.observed_data:
+                 raise KeyError(f"{poll_obs_key} missing from observed_data.")
+            obs_poll_counts = idata.observed_data[poll_obs_key].values
             # Ensure counts are integer for log_score
             obs_poll_counts_int = obs_poll_counts.astype(int)
 
             # Get total poll counts directly from model's data containers
-            if "observed_N_polls" not in self.data_containers:
-                 raise KeyError("'observed_N_polls' not found in self.data_containers")
+            if poll_n_key not in self.data_containers:
+                 raise KeyError(f"{poll_n_key} not found in self.data_containers")
             # Ensure obs_poll_n is a numpy array and float for division
-            obs_poll_n = self.data_containers["observed_N_polls"].get_value() # Keep as original dtype (likely int)
+            obs_poll_n = self.data_containers[poll_n_key].get_value() # Keep as original dtype (likely int)
             # We don't need obs_poll_probs here anymore
             # with np.errstate(divide='ignore', invalid='ignore'):
             #    obs_poll_probs = obs_poll_counts / obs_poll_n[:, np.newaxis]
@@ -722,7 +757,7 @@ class DynamicGPElectionModel(BaseElectionModel):
             
             print("\n[Poll Data]")
             print(f"  Shape pred_poll_probs (mean): {pred_poll_probs.shape}")
-            print(f"  Shape posterior_poll_prob_da (samples): {posterior_poll_prob_da.shape}")
+            print(f"  Shape posterior_poll_prob_da (samples): {poll_prob_da.shape}")
             print(f"  Shape obs_poll_counts: {obs_poll_counts.shape}")
 
             if obs_poll_counts.shape[0] > 0:
@@ -734,7 +769,28 @@ class DynamicGPElectionModel(BaseElectionModel):
                 metrics["poll_log_score"] = np.mean(individual_poll_log_scores[np.isfinite(individual_poll_log_scores)])
                 metrics["poll_rps"] = calculate_rps(pred_poll_probs, obs_poll_counts_int, obs_poll_n)
                 # Pass the full posterior distribution, counts, and N for calibration
-                metrics["poll_calibration"] = calculate_calibration_data(posterior_poll_prob_da, obs_poll_counts_int, obs_poll_n)
+                # metrics["poll_calibration"] = calculate_calibration_data(posterior_poll_prob_da, obs_poll_counts_int, obs_poll_n)
+ 
+                # --- Calibration Input Renaming (Polls) ---
+                print("  Preparing data for poll calibration...")
+                posterior_poll_prob_da_original: xr.DataArray = idata.posterior[poll_prob_key]
+                # Define the expected dimension names
+                expected_dims = ('chain', 'draw', 'observations', 'parties_complete')
+                # Create a mapping from current dims to expected dims
+                current_dims_poll = posterior_poll_prob_da_original.dims
+                if len(current_dims_poll) == len(expected_dims):
+                    rename_map_poll = {current_dims_poll[i]: expected_dims[i] for i in range(len(expected_dims))}
+                    print(f"  Poll calibration rename map: {rename_map_poll}")
+                    posterior_poll_prob_da_renamed = posterior_poll_prob_da_original.rename(rename_map_poll)
+                    print(f"  Poll posterior dims after rename: {posterior_poll_prob_da_renamed.dims}")
+                    # Pass the renamed DataArray
+                    metrics["poll_calibration"] = calculate_calibration_data(posterior_poll_prob_da_renamed, obs_poll_counts_int, obs_poll_n)
+                else:
+                    print(f"  Error: Poll posterior dims length mismatch. Expected {len(expected_dims)}, got {len(current_dims_poll)}. Skipping calibration.")
+                    metrics["poll_calibration"] = {"mean_predicted_prob": np.full(10, np.nan), "mean_observed_prob": np.full(10, np.nan), "bin_counts": np.zeros(10, dtype=int), "bin_edges": np.linspace(0, 1, 10 + 1)[:-1]} # Default empty/nan
+                # --- End Calibration Input Renaming ---
+
+                print("  Finished calculating poll metrics.")
             else:
                 print("Warning: No poll observations found. Skipping poll metrics.")
                 metrics["poll_mae"] = np.nan
@@ -755,7 +811,7 @@ class DynamicGPElectionModel(BaseElectionModel):
         # --- District Results --- 
         # Check if district probabilities and observed counts are available
         district_probs_available = "p_results_district" in idata.posterior
-        district_counts_available = "observed_district" in idata.observed_data
+        district_counts_available = "result_district_likelihood" in idata.observed_data # Use corrected RV name
 
         if district_probs_available and district_counts_available:
             try:
@@ -763,7 +819,7 @@ class DynamicGPElectionModel(BaseElectionModel):
                 # Calculate mean probability for MAE, RMSE etc.
                 pred_result_probs = posterior_result_prob_da.mean(dim=["chain", "draw"]).values
                 
-                obs_result_counts = idata.observed_data["observed_district"].values
+                obs_result_counts = idata.observed_data["result_district_likelihood"].values # Get observed data via corrected RV name
                 # Ensure counts are integer for log_score
                 obs_result_counts_int = obs_result_counts.astype(int)
 
@@ -790,7 +846,51 @@ class DynamicGPElectionModel(BaseElectionModel):
                     metrics["result_district_log_score"] = np.mean(individual_result_log_scores[np.isfinite(individual_result_log_scores)])
                     metrics["result_district_rps"] = calculate_rps(pred_result_probs, obs_result_counts_int, obs_result_n)
                     # Pass the full posterior distribution, counts, and N for calibration
-                    metrics["result_district_calibration"] = calculate_calibration_data(posterior_result_prob_da, obs_result_counts_int, obs_result_n)
+                    # metrics["result_district_calibration"] = calculate_calibration_data(posterior_result_prob_da, obs_result_counts_int, obs_result_n)
+ 
+                    # --- Calibration Input Renaming (District Results) ---
+                    print("  Preparing data for district result calibration...") # DEBUG
+                    district_prob_key = "p_results_district"
+                    posterior_result_prob_da_original: xr.DataArray = idata.posterior[district_prob_key]
+                    # Define the expected dimension names - NOTE: The third dim name should match the dim in observed_data
+                    # Check the name used for the district results observation dimension (e.g., elections_observed_district)
+                    # Assuming 'elections_observed_district' based on model build coords, but calibration fn expects 'observations'
+                    expected_dims_district = ('chain', 'draw', 'observations', 'parties_complete') # Match calibration function expectation
+                    # Create a mapping from current dims to expected dims
+                    current_dims_district = posterior_result_prob_da_original.dims
+                    print(f"    Original posterior dims: {current_dims_district}") # DEBUG
+
+                    if len(current_dims_district) == len(expected_dims_district):
+                        rename_map_district = {current_dims_district[i]: expected_dims_district[i] for i in range(len(expected_dims_district))}
+                        print(f"    District calibration rename map: {rename_map_district}") # DEBUG
+                        try:
+                            posterior_result_prob_da_renamed = posterior_result_prob_da_original.rename(rename_map_district)
+                            print(f"    District posterior dims after rename attempt: {posterior_result_prob_da_renamed.dims}") # DEBUG
+                        except Exception as rename_err:
+                            print(f"    ERROR during dimension renaming: {rename_err}") # DEBUG
+                            # Assign original if rename fails to potentially see shape error in calibration func
+                            posterior_result_prob_da_renamed = posterior_result_prob_da_original
+
+                        # Retrieve obs counts using the correct key for the check inside calibration func
+                        # obs_district_counts_da: xr.DataArray = idata.observed_data[district_obs_key]
+                        obs_counts_np = obs_result_counts_int # Use already retrieved and casted counts
+                        obs_n_np = obs_result_n # Already retrieved
+
+                        print(f"    Passing posterior shape: {posterior_result_prob_da_renamed.shape}") # DEBUG
+                        print(f"    Passing obs_counts shape: {obs_counts_np.shape}") # DEBUG
+                        print(f"    Passing N shape: {obs_n_np.shape}") # DEBUG
+
+                        metrics["result_district_calibration"] = calculate_calibration_data(
+                            posterior_result_prob_da_renamed, # Renamed posterior
+                            obs_counts_np,    # Pass numpy array of observed counts
+                            obs_n_np          # Pass numpy array of N
+                        )
+                    else:
+                        print(f"  Error: District posterior dims length mismatch. Expected {len(expected_dims_district)}, got {len(current_dims_district)}. Skipping calibration.")
+                        metrics["result_district_calibration"] = {"mean_predicted_prob": np.full(10, np.nan), "mean_observed_prob": np.full(10, np.nan), "bin_counts": np.zeros(10, dtype=int), "bin_edges": np.linspace(0, 1, 10 + 1)[:-1]}
+                    # --- End Calibration Input Renaming ---
+
+                    print("  Finished calculating district result metrics.")
                 else:
                     print("Warning: No district result observations found. Skipping district result metrics.")
                     metrics["result_district_mae"] = np.nan
@@ -807,7 +907,7 @@ class DynamicGPElectionModel(BaseElectionModel):
                  # ... (set other district metrics to nan/default) ...
                  metrics["result_district_calibration"] = {"mean_predicted_prob": [], "mean_observed_prob": [], "bin_counts": [], "bin_edges": []} # Default empty
         else:
-            missing_var = "'p_results_district' in posterior" if not district_probs_available else "'observed_district' in observed_data"
+            missing_var = "'p_results_district' in posterior" if not district_probs_available else "'result_district_likelihood' in observed_data"
             print(f"Warning: {missing_var} not found. Skipping district result metrics.")
             metrics["result_district_mae"] = np.nan
             # ... (set other district metrics to nan/default) ...
@@ -816,6 +916,122 @@ class DynamicGPElectionModel(BaseElectionModel):
         print("--- End Debugging Metric Calculation Inputs ---")
         # Return the original idata, as we didn't modify it here
         return metrics, idata
+
+
+    def generate_swing_diagnostic_plots(self, idata: az.InferenceData, output_dir: str):
+        """
+        Generates diagnostic plots specifically for swing-related components.
+
+        Args:
+            idata: The InferenceData object containing the posterior trace.
+            output_dir: Directory to save the generated plots.
+        """
+        if idata is None or "posterior" not in idata:
+            print("Warning: No posterior data found in idata. Skipping swing diagnostic plots.")
+            return
+
+        print(f"\nGenerating swing-specific diagnostic plots in: {output_dir}")
+        os.makedirs(output_dir, exist_ok=True)
+
+        required_vars = ["cycle_swing", "district_sensitivity", "debug_dynamic_adjustment", "static_district_offset"]
+        available_vars = list(idata.posterior.keys())
+
+        # --- Plot Static District Offset (Forest Plot) ---
+        var_name = "static_district_offset"
+        if var_name in available_vars:
+            if 'parties_complete' in idata.posterior[var_name].dims:
+                parties = idata.posterior['parties_complete'].values
+                print(f"Splitting forest plot for {var_name} by party ({len(parties)} plots)...")
+                for party in parties:
+                    try:
+                        # Select data for the current party. Shape is likely (chains, draws, districts)
+                        # Need to ensure the dimensions are correctly handled by plot_forest
+                        party_data = idata.posterior[var_name].sel(parties_complete=party)
+ 
+                        # Plotting offset for one party across districts
+                        az.plot_forest(party_data, combined=True, hdi_prob=0.94)
+                        plt.suptitle(f"Forest Plot: {var_name} (Party: {party})", y=1.02)
+                        plt.savefig(os.path.join(output_dir, f"diagnostic_forest_{var_name}_party_{party}.png"), bbox_inches='tight')
+                        plt.close()
+                    except Exception as e:
+                        print(f"Warning: Failed to generate forest plot for {var_name}, party {party}: {e}")
+            else:
+                print(f"Warning: Dimension 'parties_complete' not found for {var_name}. Plotting combined forest plot.")
+                try:
+                    # Fallback to plotting everything if dimension missing
+                    # (Adjust figsize similar to previous attempt)
+                    n_params = idata.posterior[var_name].shape[-2] * idata.posterior[var_name].shape[-1]
+                    fig_height = max(8, n_params * 0.2) # Keep dynamic height for combined
+                    az.plot_forest(idata, var_names=[var_name], combined=True, hdi_prob=0.94, figsize=(10, fig_height))
+                    plt.suptitle(f"Forest Plot: {var_name} (Combined)", y=1.005)
+                    plt.tight_layout(rect=[0, 0, 1, 0.99])
+                    plt.savefig(os.path.join(output_dir, f"diagnostic_forest_{var_name}_combined.png"), bbox_inches='tight')
+                    plt.close()
+                except Exception as e:
+                    print(f"Warning: Failed to generate combined forest plot for {var_name}: {e}")
+        else:
+             print(f"Variable '{var_name}' not found in posterior. Skipping forest plot.")
+
+        # --- Plot District Sensitivity (Split Forest Plot by Party) ---
+        var_name = "district_sensitivity"
+        if var_name in available_vars:
+            # Check if 'parties_complete' dimension exists
+            if 'parties_complete' in idata.posterior[var_name].dims:
+                parties = idata.posterior['parties_complete'].values
+                print(f"Splitting forest plot for {var_name} by party ({len(parties)} plots)...")
+                for party in parties:
+                    try:
+                        party_data = idata.posterior[var_name].sel(parties_complete=party)
+                        # Plotting sensitivity for one party across districts
+                        az.plot_forest(party_data, combined=True, hdi_prob=0.94)
+                        plt.suptitle(f"Forest Plot: {var_name} (Party: {party})", y=1.02)
+                        plt.savefig(os.path.join(output_dir, f"diagnostic_forest_{var_name}_party_{party}.png"), bbox_inches='tight')
+                        plt.close()
+                    except Exception as e:
+                        print(f"Warning: Failed to generate forest plot for {var_name}, party {party}: {e}")
+            else:
+                print(f"Warning: Dimension 'parties_complete' not found for {var_name}. Plotting combined forest plot.")
+                try:
+                    # Fallback to plotting everything if dimension missing
+                    az.plot_forest(idata, var_names=[var_name], combined=True, hdi_prob=0.94)
+                    plt.suptitle(f"Forest Plot: {var_name} (Combined)", y=1.02)
+                    plt.savefig(os.path.join(output_dir, f"diagnostic_forest_{var_name}_combined.png"), bbox_inches='tight')
+                    plt.close()
+                except Exception as e:
+                    print(f"Warning: Failed to generate combined forest plot for {var_name}: {e}")
+        else:
+            print(f"Variable '{var_name}' not found in posterior. Skipping forest plot.")
+
+        # Plot Cycle Swing (Trace Plot) - Might be large, consider alternatives if needed
+        var_name = "cycle_swing"
+        if var_name in available_vars:
+            try:
+                print(f"Plotting trace plot for {var_name}...")
+                # Consider plotting only a summary or specific indices if trace is too large
+                az.plot_trace(idata, var_names=[var_name])
+                plt.suptitle(f"Trace Plot: {var_name}", y=1.02) # Add title
+                plt.savefig(os.path.join(output_dir, f"diagnostic_trace_{var_name}.png"), bbox_inches='tight')
+                plt.close()
+            except Exception as e:
+                print(f"Warning: Failed to generate trace plot for {var_name}: {e}")
+        else:
+             print(f"Variable '{var_name}' not found in posterior. Skipping trace plot.")
+
+        # Plot Dynamic Adjustment Term (Trace or Posterior)
+        var_name = "debug_dynamic_adjustment"
+        if var_name in available_vars:
+            try:
+                 print(f"Plotting posterior plot for {var_name}...")
+                 az.plot_posterior(idata, var_names=[var_name])
+                 plt.suptitle(f"Posterior Plot: {var_name}", y=1.02) # Add title
+                 plt.savefig(os.path.join(output_dir, f"diagnostic_posterior_{var_name}.png"), bbox_inches='tight')
+                 plt.close()
+            except Exception as e:
+                 print(f"Warning: Failed to generate posterior plot for {var_name}: {e}")
+        else:
+             print(f"Variable '{var_name}' not found in posterior. Skipping posterior plot.")
+
+        print("Finished generating swing-specific plots.")
 
 
     def predict_latent_trajectory(self, idata: az.InferenceData, start_date: pd.Timestamp, end_date: pd.Timestamp) -> az.InferenceData:
