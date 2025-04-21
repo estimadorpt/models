@@ -99,6 +99,8 @@ class ElectionsFacade:
             dataset=self.dataset,
             **self.model_config_full
         )
+        # Pass the election date to the model instance
+        self.model_instance.election_date = self.election_date
         # <<< After Model Instance Debug >>>
         print(f"DEBUG FACADE INIT: Finished instantiating model instance. Type: {type(self.model_instance)}") 
         # <<< End After Model Instance Debug >>>

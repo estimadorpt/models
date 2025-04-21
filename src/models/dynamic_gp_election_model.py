@@ -482,11 +482,11 @@ class DynamicGPElectionModel(BaseElectionModel):
                  # A value of 1 means the district moves exactly with the national trend for that party
                  # A value > 1 means it swings more; < 1 means it swings less
                  district_sensitivity_raw = pm.Normal("district_sensitivity_raw", mu=0, sigma=1, # Non-centered around zero
-                                                       dims=("parties_complete", "districts"))
+                                                dims=("parties_complete", "districts"))
                  # Center sensitivity around 1 after scaling
                  district_sensitivity = pm.Deterministic("district_sensitivity",
                                                          1 + district_sensitivity_raw * sigma_district_sensitivity[:, None],
-                                                         dims=("parties_complete", "districts"))
+                                                   dims=("parties_complete", "districts"))
 
             # --------------------------------------------------------
             #          5. LATENT VOTE INTENTIONS
@@ -508,60 +508,80 @@ class DynamicGPElectionModel(BaseElectionModel):
             # Apply softmax
             poll_probs = pm.Deterministic("poll_probs", pm.math.softmax(latent_polls, axis=1))
 
-            # --- Calculate Latent Values for District Results (Using Swing) ---
-            # Perform calculations directly, ensuring consistent shapes for addition
-            if has_districts: # Only calculate if districts exist
-                 # --- Calculate Latent Values for District Results (Using Swing) ---
-                 # Get static offset for each observation (districts, parties) -> (obs, parties)
-                 result_district_idx = data_containers["result_district_idx"]
-                 _static_offset_indexed = static_district_offset[result_district_idx, :] # Shape (100, 8)
+            # --- Calculate Latent Values for District Results (Likelihood) ---
+            if has_districts:
+                # --- Calculate Latent Values for District Results (Using Swing) ---
+                result_district_idx = data_containers["result_district_idx"]
+                _static_offset_indexed = static_district_offset[result_district_idx, :] # Shape (obs, parties)
 
-                 # --- Calculate Cycle Swing ---
-                 calendar_time_result_idx = data_containers["calendar_time_result_district_idx"]
-                 result_cycle_idx = data_containers["result_cycle_district_idx"]
-                 cycle_start_ref_idx = data_containers["cycle_start_ref_idx"]
+                calendar_time_result_idx = data_containers["calendar_time_result_district_idx"]
+                result_cycle_idx = data_containers["result_cycle_district_idx"]
+                cycle_start_ref_idx = data_containers["cycle_start_ref_idx"]
 
-                 # National trend at the time of the result (obs, parties) -> (100, 8)
-                 national_trend_at_result = national_trend_pt[calendar_time_result_idx]
-                 # National trend at the start reference point of the result's cycle (obs, parties) -> (100, 8)
-                 relevant_cycle_start_indices = cycle_start_ref_idx[result_cycle_idx]
-                 national_trend_at_cycle_start = national_trend_pt[relevant_cycle_start_indices]
+                national_trend_at_result = national_trend_pt[calendar_time_result_idx] # Shape (obs, parties)
+                relevant_cycle_start_indices = cycle_start_ref_idx[result_cycle_idx]
+                national_trend_at_cycle_start = national_trend_pt[relevant_cycle_start_indices] # Shape (obs, parties)
 
-                 # Swing = Trend at result - Trend at cycle start (obs, parties) -> (100, 8)
-                 _cycle_swing = national_trend_at_result - national_trend_at_cycle_start
+                _cycle_swing_results = national_trend_at_result - national_trend_at_cycle_start # Shape (obs, parties)
 
-                 # Get the sensitivity for the specific district of each observation (parties, obs) -> (8, 100)
-                 _sensitivity_indexed = district_sensitivity[:, result_district_idx]
+                _sensitivity_indexed = district_sensitivity[:, result_district_idx] # Shape (parties, obs)
+                _dynamic_adjustment_results = _sensitivity_indexed * _cycle_swing_results.T # Shape (parties, obs)
 
-                 # Calculate the dynamic adjustment (parties, obs) -> (8, 100)
-                 # Note: _cycle_swing is (100, 8), so need to transpose it
-                 _dynamic_adjustment = _sensitivity_indexed * _cycle_swing.T # Elementwise product
+                _latent_terms_obs_parties = national_trend_at_result + _static_offset_indexed + _dynamic_adjustment_results.T # Shape (obs, parties)
 
-                 # Combine terms: Trend at Result Time + Static Offset + Dynamic Swing Adjustment
-                 # All terms need to be (obs, parties)
-                 # national_trend_at_result: (100, 8)
-                 # _static_offset_indexed:   (100, 8)
-                 # _dynamic_adjustment.T:    (100, 8)
-                 _latent_terms_obs_parties = national_trend_at_result + _static_offset_indexed + _dynamic_adjustment.T
-
-                 # Store final result and intermediates if needed for debugging/saving
-                 latent_district_result_mean = pm.Deterministic("latent_district_result_mean", 
-                                                                 _latent_terms_obs_parties, 
-                                                                 dims=("elections_observed_district", "parties_complete"))
-                 # --- ADDED: Explicitly save the district probabilities --- 
-                 p_results_district = pm.Deterministic("p_results_district", 
-                                                        pm.math.softmax(latent_district_result_mean, axis=1), 
+                latent_district_result_mean = pm.Deterministic("latent_district_result_mean",
+                                                                _latent_terms_obs_parties,
+                                                                dims=("elections_observed_district", "parties_complete"))
+                p_results_district = pm.Deterministic("p_results_district",
+                                                        pm.math.softmax(latent_district_result_mean, axis=1),
                                                         dims=("elections_observed_district", "parties_complete"))
-                 
-                 # Optionally recreate debug deterministics if needed
-                 pm.Deterministic("debug_static_offset_term", _static_offset_indexed.T) # Save transposed version
-                 pm.Deterministic("cycle_swing", _cycle_swing)
-                 pm.Deterministic("debug_sensitivity_term", _sensitivity_indexed)
-                 pm.Deterministic("debug_dynamic_adjustment", _dynamic_adjustment)
-                 # The mean itself is already saved, no need for debug_latent_district_result_mean
             else:
-                # Define placeholder if no districts
-                latent_district_result_mean = None # Will be handled by likelihood check
+                latent_district_result_mean = None # Handled by likelihood check
+                p_results_district = None # Handled by likelihood check
+
+            # --- Calculate District Probabilities for ALL Calendar Dates --- 
+            if has_districts:
+                 # 1. Get cycle start reference index for each calendar time point
+                 calendar_cycle_idx = data_containers["calendar_time_cycle_idx"] # Shape (calendar_time,)
+                 cycle_start_ref_idx_data = data_containers["cycle_start_ref_idx"] # Shape (election_cycles,)
+                 calendar_cycle_start_indices = cycle_start_ref_idx_data[calendar_cycle_idx] # Shape (calendar_time,)
+
+                 # 2. Get national trend at each calendar time point and its cycle start
+                 national_trend_calendar = national_trend_pt # Shape (calendar_time, parties)
+                 national_trend_cycle_start_calendar = national_trend_pt[calendar_cycle_start_indices] # Shape (calendar_time, parties)
+
+                 # 3. Calculate cycle swing for all calendar dates
+                 cycle_swing_calendar = national_trend_calendar - national_trend_cycle_start_calendar # Shape (calendar_time, parties)
+
+                 # 4. Combine with district effects (static offset + dynamic adjustment)
+                 #    static_district_offset: (districts, parties)
+                 #    district_sensitivity: (parties, districts)
+                 #    national_trend_calendar: (calendar_time, parties)
+                 #    cycle_swing_calendar: (calendar_time, parties)
+
+                 # Transpose sensitivity for broadcasting: (districts, parties)
+                 sensitivity_dist_party = district_sensitivity.transpose(1, 0) # Use integer axes (swap axis 0 and 1)
+
+                 # Broadcasting dimensions needed:
+                 # Trend needs district dim: (calendar_time, 1, parties)
+                 # Offset needs calendar dim: (1, districts, parties)
+                 # Sensitivity needs calendar dim: (1, districts, parties)
+                 # Swing needs district dim: (calendar_time, 1, parties)
+
+                 trend_b_cal = national_trend_calendar[:, None, :] # Add district dim
+                 offset_b_cal = static_district_offset[None, :, :] # Add calendar dim
+                 sensitivity_b_cal = sensitivity_dist_party[None, :, :] # Add calendar dim
+                 swing_b_cal = cycle_swing_calendar[:, None, :] # Add district dim
+
+                 # Latent mean = trend + offset + sensitivity * swing
+                 latent_district_calendar_mean = trend_b_cal + offset_b_cal + sensitivity_b_cal * swing_b_cal
+                 # Result shape should be (calendar_time, districts, parties)
+
+                 # 5. Apply softmax and save
+                 pm.Deterministic("p_district_calendar",
+                                  pm.math.softmax(latent_district_calendar_mean, axis=2), # Softmax across party dim (axis=2)
+                                  dims=("calendar_time", "districts", "parties_complete"))
+                 print("DEBUG build_model: Added p_district_calendar Deterministic.")
 
             # --------------------------------------------------------
             #          6. LIKELIHOODS
@@ -1204,6 +1224,85 @@ class DynamicGPElectionModel(BaseElectionModel):
             print("Returning national latent popularity (no district specified).")
             return national_pop_at_date
 
-# ... (rest of the file remains the same - placeholders, etc.) ...
+    def get_district_vote_share_posterior(self, idata: xr.Dataset, target_date: Optional[str] = None, date_mode: str = 'election_day') -> xr.DataArray:
+        """Retrieve the posterior distribution of vote shares for all districts at a specific time point.
+
+        Args:
+            idata (xr.Dataset): The InferenceData object containing the posterior samples.
+            target_date (Optional[str]): The specific date for which to retrieve predictions (YYYY-MM-DD).
+                                      Used only if date_mode is 'specific_date'.
+            date_mode (str): Specifies which date to retrieve predictions for.
+                              Options: 'election_day', 'last_poll', 'specific_date'.
+
+        Returns:
+            xr.DataArray: A DataArray with dimensions (chain, draw, districts, parties_complete)
+                          containing the posterior samples of district vote shares.
+        """
+        print(f"DEBUG get_district_vote_share_posterior called with date_mode={date_mode}, target_date={target_date}")
+
+        if 'posterior' not in idata:
+            raise ValueError("InferenceData object must contain a 'posterior' group.")
+
+        posterior = idata.posterior
+
+        # Check if the new deterministic variable exists
+        if "p_district_calendar" not in posterior:
+            raise ValueError("Posterior trace does not contain the required 'p_district_calendar' variable. "
+                             "The model may need retraining with the updated definition.")
+
+        # Get the full district probabilities across all calendar time
+        district_shares_all_time = posterior["p_district_calendar"]
+
+        # Determine the target calendar_time index
+        calendar_times = pd.to_datetime(district_shares_all_time.coords["calendar_time"].values)
+
+        if date_mode == 'election_day':
+            if not hasattr(self, 'election_date') or self.election_date is None:
+                 raise ValueError("Model instance does not have 'election_date' set for date_mode='election_day'.")
+            target_dt = pd.Timestamp(self.election_date).normalize()
+            date_description = f"election day ({target_dt.date()})"
+        elif date_mode == 'last_poll':
+            if not hasattr(self.dataset, 'polls_train') or self.dataset.polls_train.empty:
+                raise ValueError("No polls data available to determine 'last_poll' date.")
+            target_dt = pd.to_datetime(self.dataset.polls_train['date']).max().normalize()
+            date_description = f"last poll date ({target_dt.date()})"
+        elif date_mode == 'specific_date':
+            if target_date is None:
+                raise ValueError("target_date must be provided when date_mode is 'specific_date'.")
+            try:
+                target_dt = pd.Timestamp(target_date).normalize()
+                date_description = f"specific date ({target_dt.date()})"
+            except ValueError:
+                raise ValueError(f"Invalid target_date format: '{target_date}'. Please use YYYY-MM-DD.")
+        else:
+            raise ValueError(f"Invalid date_mode: '{date_mode}'. Choose from 'election_day', 'last_poll', 'specific_date'.")
+
+        # Find the closest index in calendar_time coordinates
+        target_cal_idx = np.argmin(np.abs(calendar_times - target_dt))
+        selected_cal_date = calendar_times[target_cal_idx]
+
+        print(f"DEBUG: Requested date ({date_description}) maps to closest calendar_time index {target_cal_idx} ({selected_cal_date.date()}).")
+        if abs(selected_cal_date - target_dt) > pd.Timedelta(days=1):
+            print(f"Warning: Closest calendar date {selected_cal_date.date()} is more than 1 day from target {target_dt.date()}.")
+
+        # Select the slice corresponding to the target date index
+        district_shares = district_shares_all_time.isel(calendar_time=target_cal_idx)
+
+        # Expected dimensions: (chain, draw, districts, parties_complete)
+        expected_dims = ('chain', 'draw', 'districts', 'parties_complete')
+        if district_shares.dims == expected_dims:
+             print(f"DEBUG: Retrieved district shares with expected dims {expected_dims}.")
+             return district_shares
+        else:
+             # Attempt to transpose if dimensions are merely swapped, otherwise raise error
+             print(f"Warning: Retrieved district shares have unexpected dims {district_shares.dims}. Expected {expected_dims}.")
+             try:
+                 transposed_shares = district_shares.transpose(*expected_dims)
+                 print("DEBUG: Transposed shares to match expected dimensions.")
+                 return transposed_shares
+             except ValueError as e:
+                 raise ValueError(f"Could not transpose district shares to expected dimensions {expected_dims}. Error: {e}") from e
+
+    # ... rest of the class ...
 
         # ... (rest of the file remains the same - placeholders, etc.) ... 
