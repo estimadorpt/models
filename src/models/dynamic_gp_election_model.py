@@ -478,26 +478,16 @@ class DynamicGPElectionModel(BaseElectionModel):
 
                  # static_district_offset now has shape (districts, parties_complete)
 
-                 # --- District Sensitivity (Beta) --- COMMENTED OUT ---
-                 # sigma_district_sensitivity = pm.HalfNormal("sigma_district_sensitivity", sigma=0.3, dims="parties_complete") # Widen prior based on analysis
-                 # district_sensitivity_raw = pm.Normal("district_sensitivity_raw", mu=0, sigma=1, # Non-centered around zero
-                 # dims=("parties_complete", "districts"))
-
-                 # --- Store intermediate calculation for debugging --- 
-                 debug_sigma_times_raw = pm.Deterministic("debug_sigma_times_raw", 
-                                                          sigma_district_sensitivity[:, None] * district_sensitivity_raw,
-                                                          dims=("parties_complete", "districts"))
-                 # --- End Debug --- 
-
-                 # Original Exponential Definition
-                 district_sensitivity = pm.Deterministic("district_sensitivity",
-                                                         pm.math.exp(debug_sigma_times_raw), # Use the debug var here for clarity
-                                                         dims=("parties_complete", "districts"))
-
-                 # --- Additive/Linear version (Commented Out) ---
+                 # --- District Sensitivity (Beta) --- FULLY COMMENTED OUT ---
+                 # sigma_district_sensitivity = pm.HalfNormal("sigma_district_sensitivity", sigma=0.3, dims="parties_complete")
+                 # district_sensitivity_raw = pm.Normal("district_sensitivity_raw", mu=0, sigma=1, dims=("parties_complete", "districts"))
+                 # debug_sigma_times_raw = pm.Deterministic("debug_sigma_times_raw",
+                 #                                          sigma_district_sensitivity[:, None] * district_sensitivity_raw,
+                 #                                          dims=("parties_complete", "districts"))
                  # district_sensitivity = pm.Deterministic("district_sensitivity",
-                 #                                         1.0 + district_sensitivity_raw * sigma_district_sensitivity[:, None], # NEW ADDITIVE/LINEAR
+                 #                                         pm.math.exp(debug_sigma_times_raw),
                  #                                         dims=("parties_complete", "districts"))
+                 # --- End Sensitivity Section ---
 
             # --------------------------------------------------------
             #          5. LATENT VOTE INTENTIONS
@@ -526,19 +516,19 @@ class DynamicGPElectionModel(BaseElectionModel):
                 _static_offset_indexed = static_district_offset[result_district_idx, :] # Shape (obs, parties)
 
                 calendar_time_result_idx = data_containers["calendar_time_result_district_idx"]
-                result_cycle_idx = data_containers["result_cycle_district_idx"]
-                cycle_start_ref_idx = data_containers["cycle_start_ref_idx"]
+#                 result_cycle_idx = data_containers["result_cycle_district_idx"]
+#                 cycle_start_ref_idx = data_containers["cycle_start_ref_idx"]
 
                 national_trend_at_result = national_trend_pt[calendar_time_result_idx] # Shape (obs, parties)
-                relevant_cycle_start_indices = cycle_start_ref_idx[result_cycle_idx]
-                national_trend_at_cycle_start = national_trend_pt[relevant_cycle_start_indices] # Shape (obs, parties)
+#                 relevant_cycle_start_indices = cycle_start_ref_idx[result_cycle_idx]
+#                 national_trend_at_cycle_start = national_trend_pt[relevant_cycle_start_indices] # Shape (obs, parties)
+#
+#                 _cycle_swing_results = national_trend_at_result - national_trend_at_cycle_start # Shape (obs, parties)
 
-                _cycle_swing_results = national_trend_at_result - national_trend_at_cycle_start # Shape (obs, parties)
-
-                # --- REMOVED SENSITIVITY CALCULATION --- 
-                # _sensitivity_indexed = district_sensitivity[:, result_district_idx] # Shape (parties, obs)
-                # _dynamic_adjustment_results = _sensitivity_indexed * _cycle_swing_results.T # Shape (parties, obs)
-                # --- END REMOVAL --- 
+                 # --- REMOVED SENSITIVITY CALCULATION --- 
+                 # _sensitivity_indexed = district_sensitivity[:, result_district_idx] # Shape (parties, obs)
+                 # _dynamic_adjustment_results = _sensitivity_indexed * _cycle_swing_results.T # Shape (parties, obs)
+                 # --- END REMOVAL --- 
 
                 # _latent_terms_obs_parties = national_trend_at_result + _static_offset_indexed + _dynamic_adjustment_results.T # Shape (obs, parties)
                 _latent_terms_obs_parties = national_trend_at_result + _static_offset_indexed # Keep only static offset
@@ -557,15 +547,15 @@ class DynamicGPElectionModel(BaseElectionModel):
             if has_districts:
                  # 1. Get cycle start reference index for each calendar time point
                  calendar_cycle_idx = data_containers["calendar_time_cycle_idx"] # Shape (calendar_time,)
-                 cycle_start_ref_idx_data = data_containers["cycle_start_ref_idx"] # Shape (election_cycles,)
-                 calendar_cycle_start_indices = cycle_start_ref_idx_data[calendar_cycle_idx] # Shape (calendar_time,)
+#                 cycle_start_ref_idx_data = data_containers["cycle_start_ref_idx"] # Shape (election_cycles,)
+#                 calendar_cycle_start_indices = cycle_start_ref_idx_data[calendar_cycle_idx] # Shape (calendar_time,)
 
                  # 2. Get national trend at each calendar time point and its cycle start
                  national_trend_calendar = national_trend_pt # Shape (calendar_time, parties)
-                 national_trend_cycle_start_calendar = national_trend_pt[calendar_cycle_start_indices] # Shape (calendar_time, parties)
+#                 national_trend_cycle_start_calendar = national_trend_pt[calendar_cycle_start_indices] # Shape (calendar_time, parties)
 
                  # 3. Calculate cycle swing for all calendar dates
-                 cycle_swing_calendar = national_trend_calendar - national_trend_cycle_start_calendar # Shape (calendar_time, parties)
+#                 cycle_swing_calendar = national_trend_calendar - national_trend_cycle_start_calendar # Shape (calendar_time, parties)
 
                  # 4. Combine with district effects (static offset + dynamic adjustment)
                  #    static_district_offset: (districts, parties)
@@ -574,7 +564,7 @@ class DynamicGPElectionModel(BaseElectionModel):
                  #    cycle_swing_calendar: (calendar_time, parties)
 
                  # Transpose sensitivity for broadcasting: (districts, parties)
-                 sensitivity_dist_party = district_sensitivity.transpose(1, 0) # Use integer axes (swap axis 0 and 1)
+                 # sensitivity_dist_party = district_sensitivity.transpose(1, 0) # Use integer axes (swap axis 0 and 1)
 
                  # Broadcasting dimensions needed:
                  # Trend needs district dim: (calendar_time, 1, parties)
@@ -584,12 +574,11 @@ class DynamicGPElectionModel(BaseElectionModel):
 
                  trend_b_cal = national_trend_calendar[:, None, :] # Add district dim
                  offset_b_cal = static_district_offset[None, :, :] # Add calendar dim
-                 sensitivity_b_cal = sensitivity_dist_party[None, :, :] # Add calendar dim
-                 swing_b_cal = cycle_swing_calendar[:, None, :] # Add district dim
+                 # sensitivity_b_cal = sensitivity_dist_party[None, :, :] # Add calendar dim
+                 # swing_b_cal = cycle_swing_calendar[:, None, :] # Add district dim
 
                  # Latent mean = trend + offset + sensitivity * swing
-                 latent_district_calendar_mean = trend_b_cal + offset_b_cal + sensitivity_b_cal * swing_b_cal
-                 # latent_district_calendar_mean = trend_b_cal + offset_b_cal # Keep only static offset
+                 latent_district_calendar_mean = trend_b_cal + offset_b_cal # Keep only static offset
                  # Result shape should be (calendar_time, districts, parties)
 
                  # 5. Apply softmax and save
@@ -597,6 +586,11 @@ class DynamicGPElectionModel(BaseElectionModel):
                                   pm.math.softmax(latent_district_calendar_mean, axis=2), # Softmax across party dim (axis=2)
                                   dims=("calendar_time", "districts", "parties_complete"))
                  print("DEBUG build_model: Added p_district_calendar Deterministic.")
+            else:
+                 # Need to define p_district_calendar even if no districts, perhaps as None or empty?
+                 # For now, let's explicitly define it as None to avoid potential errors later
+                 pm.Deterministic("p_district_calendar", None) # Or handle dimension appropriately if needed elsewhere
+                 print("DEBUG build_model: No districts, p_district_calendar set to None.")
 
             # --------------------------------------------------------
             #          6. LIKELIHOODS
@@ -953,122 +947,6 @@ class DynamicGPElectionModel(BaseElectionModel):
         return metrics, idata
 
 
-    def generate_swing_diagnostic_plots(self, idata: az.InferenceData, output_dir: str):
-        """
-        Generates diagnostic plots specifically for swing-related components.
-
-        Args:
-            idata: The InferenceData object containing the posterior trace.
-            output_dir: Directory to save the generated plots.
-        """
-        if idata is None or "posterior" not in idata:
-            print("Warning: No posterior data found in idata. Skipping swing diagnostic plots.")
-            return
-
-        print(f"\nGenerating swing-specific diagnostic plots in: {output_dir}")
-        os.makedirs(output_dir, exist_ok=True)
-
-        required_vars = ["cycle_swing", "district_sensitivity", "debug_dynamic_adjustment", "static_district_offset"]
-        available_vars = list(idata.posterior.keys())
-
-        # --- Plot Static District Offset (Forest Plot) ---
-        var_name = "static_district_offset"
-        if var_name in available_vars:
-            if 'parties_complete' in idata.posterior[var_name].dims:
-                parties = idata.posterior['parties_complete'].values
-                print(f"Splitting forest plot for {var_name} by party ({len(parties)} plots)...")
-                for party in parties:
-                    try:
-                        # Select data for the current party. Shape is likely (chains, draws, districts)
-                        # Need to ensure the dimensions are correctly handled by plot_forest
-                        party_data = idata.posterior[var_name].sel(parties_complete=party)
- 
-                        # Plotting offset for one party across districts
-                        az.plot_forest(party_data, combined=True, hdi_prob=0.94)
-                        plt.suptitle(f"Forest Plot: {var_name} (Party: {party})", y=1.02)
-                        plt.savefig(os.path.join(output_dir, f"diagnostic_forest_{var_name}_party_{party}.png"), bbox_inches='tight')
-                        plt.close()
-                    except Exception as e:
-                        print(f"Warning: Failed to generate forest plot for {var_name}, party {party}: {e}")
-            else:
-                print(f"Warning: Dimension 'parties_complete' not found for {var_name}. Plotting combined forest plot.")
-                try:
-                    # Fallback to plotting everything if dimension missing
-                    # (Adjust figsize similar to previous attempt)
-                    n_params = idata.posterior[var_name].shape[-2] * idata.posterior[var_name].shape[-1]
-                    fig_height = max(8, n_params * 0.2) # Keep dynamic height for combined
-                    az.plot_forest(idata, var_names=[var_name], combined=True, hdi_prob=0.94, figsize=(10, fig_height))
-                    plt.suptitle(f"Forest Plot: {var_name} (Combined)", y=1.005)
-                    plt.tight_layout(rect=[0, 0, 1, 0.99])
-                    plt.savefig(os.path.join(output_dir, f"diagnostic_forest_{var_name}_combined.png"), bbox_inches='tight')
-                    plt.close()
-                except Exception as e:
-                    print(f"Warning: Failed to generate combined forest plot for {var_name}: {e}")
-        else:
-             print(f"Variable '{var_name}' not found in posterior. Skipping forest plot.")
-
-        # --- Plot District Sensitivity (Split Forest Plot by Party) ---
-        var_name = "district_sensitivity"
-        if var_name in available_vars:
-            # Check if 'parties_complete' dimension exists
-            if 'parties_complete' in idata.posterior[var_name].dims:
-                parties = idata.posterior['parties_complete'].values
-                print(f"Splitting forest plot for {var_name} by party ({len(parties)} plots)...")
-                for party in parties:
-                    try:
-                        party_data = idata.posterior[var_name].sel(parties_complete=party)
-                        # Plotting sensitivity for one party across districts
-                        az.plot_forest(party_data, combined=True, hdi_prob=0.94)
-                        plt.suptitle(f"Forest Plot: {var_name} (Party: {party})", y=1.02)
-                        plt.savefig(os.path.join(output_dir, f"diagnostic_forest_{var_name}_party_{party}.png"), bbox_inches='tight')
-                        plt.close()
-                    except Exception as e:
-                        print(f"Warning: Failed to generate forest plot for {var_name}, party {party}: {e}")
-            else:
-                print(f"Warning: Dimension 'parties_complete' not found for {var_name}. Plotting combined forest plot.")
-                try:
-                    # Fallback to plotting everything if dimension missing
-                    az.plot_forest(idata, var_names=[var_name], combined=True, hdi_prob=0.94)
-                    plt.suptitle(f"Forest Plot: {var_name} (Combined)", y=1.02)
-                    plt.savefig(os.path.join(output_dir, f"diagnostic_forest_{var_name}_combined.png"), bbox_inches='tight')
-                    plt.close()
-                except Exception as e:
-                    print(f"Warning: Failed to generate combined forest plot for {var_name}: {e}")
-        else:
-            print(f"Variable '{var_name}' not found in posterior. Skipping forest plot.")
-
-        # Plot Cycle Swing (Trace Plot) - Might be large, consider alternatives if needed
-        var_name = "cycle_swing"
-        if var_name in available_vars:
-            try:
-                print(f"Plotting trace plot for {var_name}...")
-                # Consider plotting only a summary or specific indices if trace is too large
-                az.plot_trace(idata, var_names=[var_name])
-                plt.suptitle(f"Trace Plot: {var_name}", y=1.02) # Add title
-                plt.savefig(os.path.join(output_dir, f"diagnostic_trace_{var_name}.png"), bbox_inches='tight')
-                plt.close()
-            except Exception as e:
-                print(f"Warning: Failed to generate trace plot for {var_name}: {e}")
-        else:
-             print(f"Variable '{var_name}' not found in posterior. Skipping trace plot.")
-
-        # Plot Dynamic Adjustment Term (Trace or Posterior)
-        var_name = "debug_dynamic_adjustment"
-        if var_name in available_vars:
-            try:
-                 print(f"Plotting posterior plot for {var_name}...")
-                 az.plot_posterior(idata, var_names=[var_name])
-                 plt.suptitle(f"Posterior Plot: {var_name}", y=1.02) # Add title
-                 plt.savefig(os.path.join(output_dir, f"diagnostic_posterior_{var_name}.png"), bbox_inches='tight')
-                 plt.close()
-            except Exception as e:
-                 print(f"Warning: Failed to generate posterior plot for {var_name}: {e}")
-        else:
-             print(f"Variable '{var_name}' not found in posterior. Skipping posterior plot.")
-
-        print("Finished generating swing-specific plots.")
-
-
     def predict_latent_trajectory(self, idata: az.InferenceData, start_date: pd.Timestamp, end_date: pd.Timestamp) -> az.InferenceData:
         # This method currently returns the *national* trajectory.
         # Needs adaptation if district-specific trajectories are required.
@@ -1317,7 +1195,3 @@ class DynamicGPElectionModel(BaseElectionModel):
                  return transposed_shares
              except ValueError as e:
                  raise ValueError(f"Could not transpose district shares to expected dimensions {expected_dims}. Error: {e}") from e
-
-    # ... rest of the class ...
-
-        # ... (rest of the file remains the same - placeholders, etc.) ... 
