@@ -14,7 +14,8 @@ import json
 import numbers
 import re
 from pprint import pprint
-
+import pytensor
+pytensor.config.cxx = '/usr/bin/clang++'
 from src.models.elections_facade import ElectionsFacade
 from src.models.static_baseline_election_model import StaticBaselineElectionModel
 from src.models.dynamic_gp_election_model import DynamicGPElectionModel
