@@ -724,6 +724,46 @@ def diagnose_model(args):
             print(f"No trace found in {model_dir}. Cannot generate diagnostics.")
             return
 
+        # <<<--- ADDED DEBUG INSPECTION CODE --- >>>
+        print("\\n--- Debug: Inspecting raw district_sensitivity values ---")
+        if "posterior" in elections_model.trace:
+            posterior_data = elections_model.trace.posterior
+            variables_to_check = ["district_sensitivity", "district_sensitivity_raw"]
+
+            for var_name in variables_to_check:
+                print(f"\n  Checking variable: {var_name}")
+                if var_name in posterior_data:
+                    sensitivity_da = posterior_data[var_name]
+                    if 'parties_complete' in sensitivity_da.coords:
+                        all_parties = sensitivity_da.coords['parties_complete'].values
+                        parties_to_check = ['CH', 'IL']
+                        print(f"    Available parties: {all_parties}")
+                        for party in parties_to_check:
+                            if party in all_parties:
+                                try:
+                                    party_sens = sensitivity_da.sel(parties_complete=party)
+                                    min_val = party_sens.min().item()
+                                    max_val = party_sens.max().item()
+                                    mean_val = party_sens.mean().item()
+                                    sample_vals = party_sens.values.flatten()[:10] # First 10 raw values
+                                    print(f"    Party {party}:")
+                                    print(f"      Min: {min_val:.4f}")
+                                    print(f"      Max: {max_val:.4f}")
+                                    print(f"      Mean: {mean_val:.4f}")
+                                    print(f"      Sample Values: {np.round(sample_vals, 4)}")
+                                except Exception as inspect_err:
+                                    print(f"    Error inspecting party {party} for {var_name}: {inspect_err}")
+                            else:
+                                print(f"    Party {party}: Not found in coordinates for {var_name}.")
+                    else:
+                        print(f"    'parties_complete' coordinate not found for {var_name}.")
+                else:
+                    print(f"    Variable '{var_name}' not found in posterior trace.")
+        else:
+            print("  Posterior group not found in trace.")
+        print("--- End Debug Inspection ---")
+        # <<<--- END ADDED CODE --- >>>
+
         # Define output directory for plots within the loaded model's directory
         diag_plot_dir = os.path.join(model_dir, "diagnostics")
         os.makedirs(diag_plot_dir, exist_ok=True)

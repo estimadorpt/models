@@ -462,7 +462,7 @@ class DynamicGPElectionModel(BaseElectionModel):
             # Check if districts coordinate exists and has members (district coords derived from results)
             has_districts = "districts" in self.coords and len(self.coords["districts"]) > 0
             if has_districts:
-                 # --- Static District Offset ---
+                 # --- Static District Offset --- (Reverted to non-random walk)
                  sigma_static_district_offset = pm.HalfNormal("sigma_static_district_offset", sigma=self.district_offset_sd_prior_scale, dims="parties_complete")
                  # Define offset with shape (districts, parties)
                  # Zero-sum constraint across parties for each district is handled later if needed, or implicitly by softmax
@@ -476,17 +476,28 @@ class DynamicGPElectionModel(BaseElectionModel):
                  #                                            static_district_offset_noncentered - static_district_offset_noncentered.mean(axis=1, keepdims=True),
                  #                                            dims=("districts", "parties_complete"))
 
-                 # --- District Sensitivity (Beta) ---
-                 sigma_district_sensitivity = pm.HalfNormal("sigma_district_sensitivity", sigma=0.1, dims="parties_complete") # Add dims
-                 # Define sensitivity centered around 1, shape (parties, districts) for easier math later
-                 # A value of 1 means the district moves exactly with the national trend for that party
-                 # A value > 1 means it swings more; < 1 means it swings less
-                 district_sensitivity_raw = pm.Normal("district_sensitivity_raw", mu=0, sigma=1, # Non-centered around zero
-                                                dims=("parties_complete", "districts"))
-                 # Center sensitivity around 1 after scaling
+                 # static_district_offset now has shape (districts, parties_complete)
+
+                 # --- District Sensitivity (Beta) --- COMMENTED OUT ---
+                 # sigma_district_sensitivity = pm.HalfNormal("sigma_district_sensitivity", sigma=0.3, dims="parties_complete") # Widen prior based on analysis
+                 # district_sensitivity_raw = pm.Normal("district_sensitivity_raw", mu=0, sigma=1, # Non-centered around zero
+                 # dims=("parties_complete", "districts"))
+
+                 # --- Store intermediate calculation for debugging --- 
+                 debug_sigma_times_raw = pm.Deterministic("debug_sigma_times_raw", 
+                                                          sigma_district_sensitivity[:, None] * district_sensitivity_raw,
+                                                          dims=("parties_complete", "districts"))
+                 # --- End Debug --- 
+
+                 # Original Exponential Definition
                  district_sensitivity = pm.Deterministic("district_sensitivity",
-                                                         1 + district_sensitivity_raw * sigma_district_sensitivity[:, None],
-                                                   dims=("parties_complete", "districts"))
+                                                         pm.math.exp(debug_sigma_times_raw), # Use the debug var here for clarity
+                                                         dims=("parties_complete", "districts"))
+
+                 # --- Additive/Linear version (Commented Out) ---
+                 # district_sensitivity = pm.Deterministic("district_sensitivity",
+                 #                                         1.0 + district_sensitivity_raw * sigma_district_sensitivity[:, None], # NEW ADDITIVE/LINEAR
+                 #                                         dims=("parties_complete", "districts"))
 
             # --------------------------------------------------------
             #          5. LATENT VOTE INTENTIONS
@@ -524,10 +535,13 @@ class DynamicGPElectionModel(BaseElectionModel):
 
                 _cycle_swing_results = national_trend_at_result - national_trend_at_cycle_start # Shape (obs, parties)
 
-                _sensitivity_indexed = district_sensitivity[:, result_district_idx] # Shape (parties, obs)
-                _dynamic_adjustment_results = _sensitivity_indexed * _cycle_swing_results.T # Shape (parties, obs)
+                # --- REMOVED SENSITIVITY CALCULATION --- 
+                # _sensitivity_indexed = district_sensitivity[:, result_district_idx] # Shape (parties, obs)
+                # _dynamic_adjustment_results = _sensitivity_indexed * _cycle_swing_results.T # Shape (parties, obs)
+                # --- END REMOVAL --- 
 
-                _latent_terms_obs_parties = national_trend_at_result + _static_offset_indexed + _dynamic_adjustment_results.T # Shape (obs, parties)
+                # _latent_terms_obs_parties = national_trend_at_result + _static_offset_indexed + _dynamic_adjustment_results.T # Shape (obs, parties)
+                _latent_terms_obs_parties = national_trend_at_result + _static_offset_indexed # Keep only static offset
 
                 latent_district_result_mean = pm.Deterministic("latent_district_result_mean",
                                                                 _latent_terms_obs_parties,
@@ -575,6 +589,7 @@ class DynamicGPElectionModel(BaseElectionModel):
 
                  # Latent mean = trend + offset + sensitivity * swing
                  latent_district_calendar_mean = trend_b_cal + offset_b_cal + sensitivity_b_cal * swing_b_cal
+                 # latent_district_calendar_mean = trend_b_cal + offset_b_cal # Keep only static offset
                  # Result shape should be (calendar_time, districts, parties)
 
                  # 5. Apply softmax and save
