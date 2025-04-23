@@ -43,92 +43,87 @@ When the model forecasts an upcoming election, it projects these components forw
 
 ## Technical Components of the Model
 
-Let's examine each major component of the model:
+Let's examine each major component of the model from a statistical perspective:
 
 ### 1. Baseline GP over Calendar Time
 
-The foundation of our model is a long-term trajectory for each party's support, modeled using a Gaussian Process. This captures gradual shifts in the political landscape over time.
+The foundation of the model is a smooth, long-term trend representing the baseline national support for each party. This is modeled as a Gaussian Process evolving over calendar time. The properties of this GP (specifically its covariance structure) are chosen to reflect assumptions about the slow, gradual nature of fundamental political shifts, capturing dependencies over multiple years.
 
-We use a covariance kernel with a lengthscale parameter of roughly 2.5 years, meaning that support levels separated by this much time have a correlation of approximately 0.2. This captures the intuition that political support evolves gradually, with changes spanning multiple years.
+### 2. Short-Term GP over Calendar Time
 
-The amplitude parameter determines how much variation we expect to see in this long-term trend. Together, these parameters define how the model understands the smooth, long-term evolution of party support.
+Superimposed on the baseline trend is a second Gaussian Process, also evolving over calendar time. This component is designed with a shorter correlation length, allowing it to capture more rapid fluctuations and deviations from the long-term baseline. This could reflect campaign effects, responses to specific events, or other medium-term dynamics.
 
-### 2. Short-Term GP for Campaign Dynamics
-
-Elections often see rapid shifts during campaign periods. We model this with a separate short-term GP that has a shorter lengthscale.
-
-With a typical lengthscale of 30-45 days, this component captures rapid changes in support that occur during campaign periods, such as responses to debates, scandals, or policy announcements. The amplitude parameter controls the magnitude of these fluctuations.
-
-These two GPs work together to create a flexible model of temporal dynamics: the baseline captures long-term shifts in the electorate, while the short-term component captures the more volatile campaign period.
+The sum of these two processes forms the latent (unobserved) national support trajectory for each party.
 
 ### 3. District-Level Effects
 
-One of the most important innovations in our model is how it handles district-level variation. Rather than assuming uniform change across all districts, we model each district as having:
+To account for Portugal's district-based system, the model incorporates district-specific deviations from the national trend. This is achieved through estimated **base offset** parameters for each district and party. These parameters represent the persistent, time-invariant tendency for a district's support for a given party to be higher or lower than the national average, learned from historical election results at the district level.
 
-1. A **base offset** that represents its persistent deviation from the national average
-2. A **sensitivity parameter (beta)** that determines how strongly the district responds to national trends
+### 4. House Effects (Pollster Biases) and Poll Bias
 
-When beta equals 1, the district follows the national trend exactly. When beta is greater than 1, the district amplifies national changes; when less than 1, it dampens them.
+The model explicitly accounts for systematic variations between polling firms. These "house effects" are modeled as parameters specific to each pollster and party, constrained such that they represent relative deviations (i.e., summing to zero across parties for a given pollster). This captures the tendency of some pollsters to relatively overestimate or underestimate certain parties.
 
-This formulation allows us to capture how, for example, rural districts might respond more strongly to changes in support for conservative parties, while urban districts might be more responsive to shifts among progressive parties.
+Additionally, an overall poll bias term, also constrained to sum to zero across parties, is included. This captures any average systematic deviation of poll results from the underlying national trend, distinct from individual pollster effects.
 
-### 4. House Effects (Pollster Biases)
+### 5. Latent Score, Transformation, and Likelihood
 
-Different polling firms often show systematic biases. Some consistently overestimate certain parties, while others underestimate them. Our model explicitly accounts for these "house effects."
+The national trend components (sum of GPs) are combined with the relevant bias terms (house effects and poll bias for poll observations, or district offsets for district predictions) to produce a latent score representing underlying support.
 
-These effects are constrained to sum to zero across parties for each pollster, meaning they represent relative biases rather than absolute shifts in the total. The magnitude of these effects is controlled by a standard deviation parameter, which can vary by party to reflect that some parties may be harder to poll accurately than others.
+A softmax transformation converts these unbounded latent scores into a set of probabilities (vote shares) for each party that necessarily sum to one.
 
-### 5. Softmax Transformation and Likelihood
-
-All these components combine to form a latent score for each party. We then apply a softmax transformation to ensure the vote shares sum to 1, creating the national latent popularity.
-
-Finally, we model the observed poll and election result counts using Dirichlet-Multinomial distributions. This likelihood function connects our latent support models to the actual observed data, accounting for the additional variation in poll results beyond simple sampling error through concentration parameters.
+Finally, the observed data—vote counts from polls and district-level election results—are linked to these modeled probabilities through a statistical likelihood function. The chosen likelihood (a Dirichlet-Multinomial distribution) is suitable for count data representing proportions and includes parameters to accommodate potential overdispersion, meaning more variability in the observed counts than predicted by simpler sampling models.
 
 ## Statistical Methodology
 
-The statistical machinery behind our model relies on several advanced techniques:
+The inference and structure rely on key statistical concepts:
 
-### Gaussian Processes and HSGP Approximation
+### Gaussian Processes
 
-Gaussian Processes provide a flexible way to model functions over time without specifying a particular parametric form. However, exact GPs become computationally infeasible for large datasets. We use the Hilbert Space Gaussian Process (HSGP) approximation, which represents the GP using a finite set of basis functions.
+Gaussian Processes provide a flexible, non-parametric Bayesian approach to function estimation. Here, they are used to model the unobserved national support trends over time without imposing rigid functional forms. The choice of covariance kernel and its parameters (lengthscale, amplitude) encode prior beliefs about the smoothness and variability of these trends.
 
-This approach dramatically improves computational efficiency while maintaining excellent approximation quality. The model uses coefficients and basis functions to represent both the long-term and short-term temporal patterns.
+### Hierarchical Modeling
 
-### Non-centered Parameterization
+The model employs a hierarchical structure, particularly for house effects and district offsets. Parameters for individual pollsters or districts are assumed to be drawn from common distributions, allowing the model to borrow strength across units and make more robust estimates, especially for units with less data.
 
-To improve sampling efficiency, we use non-centered parameterizations for hierarchical parameters like house effects. Instead of directly sampling the house effects, we sample standardized values and then multiply by a scale parameter. This approach helps the MCMC sampler navigate the posterior distribution more efficiently.
+### Bayesian Inference
 
-### Concentration Parameters
+The model parameters are estimated within a Bayesian framework, typically using Markov Chain Monte Carlo (MCMC) methods. This yields a full posterior distribution for all parameters and derived quantities (like vote shares and seat predictions), naturally quantifying uncertainty.
 
-The Dirichlet-Multinomial likelihood includes concentration parameters that capture extra-multinomial variation. Higher concentration values indicate polls that closely follow the expected multinomial distribution, while lower values suggest additional sources of variation beyond sampling error.
+### Computational Techniques
+
+To make Bayesian inference computationally feasible, the model utilizes:
+*   **GP Approximations:** Efficient methods (like basis function expansions) are used to approximate the full Gaussian Processes, reducing the computational complexity.
+*   **Reparameterization:** Techniques like non-centered parameterization are used for certain hierarchical parameters to improve the geometry of the posterior distribution and the efficiency of MCMC sampling algorithms.
+
+### Overdispersion Modeling
+
+The use of a likelihood function that explicitly models overdispersion (like the Dirichlet-Multinomial) is crucial for realistically capturing the noise characteristics of polling and election data.
 
 ## Making Predictions
 
-Our model generates predictions in several steps:
+Generating forecasts involves several steps:
 
-1. For a given date (election day, last poll date, or current date), we extract the posterior distribution of national latent support.
-2. We apply district-specific adjustments based on the base offset and beta sensitivity parameters.
-3. We convert these to vote shares using the softmax function.
-4. We simulate the D'Hondt seat allocation method thousands of times to generate a distribution of possible seat outcomes.
+1.  Draw samples from the joint posterior distribution of all model parameters obtained via Bayesian inference.
+2.  For each sample, compute the latent national support trend at the desired future date(s) by projecting the Gaussian Processes.
+3.  Apply the relevant district-specific base offset parameters to the national latent trend to get district-level latent scores.
+4.  Convert these latent scores into predicted vote share probabilities using the softmax transformation.
+5.  Simulate the seat allocation process (D'Hondt method) using these predicted vote shares for each posterior sample.
 
-The result is not a single prediction but a probability distribution over possible outcomes, reflecting all sources of uncertainty in the model.
+Aggregating the results across all posterior samples provides a probabilistic forecast for vote shares and seat counts, inherently reflecting model uncertainty.
 
 ### District Vote Share Prediction
 
-The core of our prediction methodology combines national trends with district-specific adjustments. We first extract the national trend at the target date and calculate how it deviates from the long-term average. We then apply district-specific adjustments by:
+District-level vote share predictions are derived by combining the posterior distribution of the national latent trend with the posterior distribution of the district base offsets.
 
-1. Calculating the dynamic adjustment as (beta - 1) multiplied by the national deviation
-2. Adding the base offset to get the total district adjustment
-3. Applying this adjustment to the national trend
-4. Converting to vote shares using softmax
+Specifically, for each posterior sample and each district:
+1.  The estimated **base offset** for that district and party is added to the national latent trend value for that party at the target date.
+2.  The resulting adjusted latent scores are transformed into probabilities (vote shares summing to 1) via the softmax function.
 
-This approach allows districts to respond differently to national trends while maintaining a coherent overall structure.
+This procedure yields a full posterior distribution of predicted vote shares for each party within each district.
 
 ### Seat Allocation
 
 Once we have vote share predictions, we simulate the election outcome using the D'Hondt method, which allocates seats proportionally based on each party's votes. By running this simulation thousands of times across our posterior samples, we generate a probability distribution over possible seat outcomes for each party.
-
-
 
 ## Limitations and Future Improvements
 
