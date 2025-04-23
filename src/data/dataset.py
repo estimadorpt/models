@@ -72,7 +72,9 @@ class ElectionDataset:
         
         # Load data
         self.polls = self._load_polls()
-        self.results_mult = self._load_results()
+        self.results_mult = self._load_results(aggregate_national=True)
+        # Load district results separately
+        self.results_mult_district = self._load_results(aggregate_national=False)
         
         # Ensure results_mult has a unique DatetimeIndex based on election_date
         if not self.results_mult.empty:
@@ -90,6 +92,15 @@ class ElectionDataset:
                 print(f"Error processing results_mult index: {e}")
         else:
             print("Warning: results_mult is empty.")
+        
+        # --- Add District Coordinate ---
+        self.unique_districts = []
+        if not self.results_mult_district.empty and 'Circulo' in self.results_mult_district.columns:
+             self.unique_districts = sorted(self.results_mult_district['Circulo'].unique())
+             print(f"\nLoaded {len(self.unique_districts)} unique districts: {self.unique_districts}")
+        else:
+             print("\nWarning: Could not extract unique districts from results_mult_district.")
+        # --- End Add District Coordinate ---
         
         # Convert ALL polls to multinomial format first
         all_polls_mult = self.cast_as_multinomial(self.polls)
@@ -222,9 +233,9 @@ class ElectionDataset:
         filtered_dates = [date for date in election_datetime if date > row_date]
         return min(filtered_dates, default=pd.NaT)
 
-    def _load_results(self):
+    def _load_results(self, aggregate_national=True):
         """Load election results"""
-        return load_election_results(self.election_dates, self.political_families)
+        return load_election_results(self.election_dates, self.political_families, aggregate_national)
 
     def cast_as_multinomial(self, df: pd.DataFrame) -> pd.DataFrame:
         """Convert percentages to counts for multinomial modeling"""
