@@ -72,26 +72,46 @@ class ElectionDataset:
         
         # Load data
         self.polls = self._load_polls()
-        self.results_mult = self._load_results(aggregate_national=True)
+        # self.results_mult = self._load_results(aggregate_national=True) # This was loading national results into results_mult
+        # Load national results explicitly
+        self.results_national = self._load_results(aggregate_national=True)
         # Load district results separately
         self.results_mult_district = self._load_results(aggregate_national=False)
         
-        # Ensure results_mult has a unique DatetimeIndex based on election_date
-        if not self.results_mult.empty:
+        # Ensure results_national has a unique DatetimeIndex based on election_date (NEW)
+        if not self.results_national.empty:
             try:
-                self.results_mult['election_date'] = pd.to_datetime(self.results_mult['election_date'])
+                self.results_national['election_date'] = pd.to_datetime(self.results_national['election_date'])
                 # Keep the first occurrence if duplicates exist based on date
-                self.results_mult = self.results_mult.drop_duplicates(subset=['election_date'], keep='first')
-                self.results_mult = self.results_mult.set_index('election_date', drop=False) # Keep column too
+                self.results_national = self.results_national.drop_duplicates(subset=['election_date'], keep='first')
+                self.results_national = self.results_national.set_index('election_date', drop=False) # Keep column too
                 # Sort index just in case
-                self.results_mult = self.results_mult.sort_index()
-                print(f"Processed results_mult index: Is unique? {self.results_mult.index.is_unique}")
+                self.results_national = self.results_national.sort_index()
+                print(f"Processed results_national index: Is unique? {self.results_national.index.is_unique}")
             except KeyError:
-                print("Error: 'election_date' column not found in results_mult. Cannot set index.")
+                print("Error: 'election_date' column not found in results_national. Cannot set index.")
             except Exception as e:
-                print(f"Error processing results_mult index: {e}")
+                print(f"Error processing results_national index: {e}")
         else:
-            print("Warning: results_mult is empty.")
+            print("Warning: results_national is empty.")
+        
+        # Ensure results_mult_district is processed (Existing logic, ensure it's still relevant)
+        # This logic might now be redundant if results_mult is no longer used directly, but let's keep for now
+        # RENAME: self.results_mult -> self.results_mult_district
+        if not self.results_mult_district.empty:
+            try:
+                self.results_mult_district['election_date'] = pd.to_datetime(self.results_mult_district['election_date'])
+                # District results NEED the district key, so we don't drop duplicates here based on date alone
+                # Instead, ensure index is set if needed elsewhere (though model uses specific indices now)
+                # self.results_mult_district = self.results_mult_district.set_index(['election_date', 'Circulo'], drop=False) # Example if multi-index needed
+                # self.results_mult_district = self.results_mult_district.sort_index()
+                print(f"Processed results_mult_district index: Is unique? {self.results_mult_district.index.is_unique}") # Check original index
+            except KeyError:
+                print("Error: 'election_date' column not found in results_mult_district. Cannot set index.")
+            except Exception as e:
+                print(f"Error processing results_mult_district index: {e}")
+        else:
+            print("Warning: results_mult_district is empty.")
         
         # --- Add District Coordinate ---
         self.unique_districts = []
@@ -131,14 +151,14 @@ class ElectionDataset:
             self.unique_pollsters = pd.Index([])
             
         # For inference, results_oos should contain only HISTORICAL results
-        self.results_oos = self.results_mult.copy()
+        self.results_oos = self.results_national.copy()
         
         # Ensure results_oos dates align with historical dates
         self.results_oos = self.results_oos[self.results_oos['election_date'].isin(pd.to_datetime(self.historical_election_dates))]
         
         # Debug info about results
         print(f"\n=== RESULTS DATA ===")
-        print(f"All results shape: {self.results_mult.shape}, dates: {self.results_mult['election_date'].unique()}")
+        print(f"All results shape: {self.results_national.shape}, dates: {self.results_national['election_date'].unique()}")
         print(f"Historical elections: {self.historical_election_dates}")
         print(f"All election cycles (for model coords): {self.all_election_dates}")
         print(f"Results_oos shape: {self.results_oos.shape}, dates: {self.results_oos['election_date'].unique()}")
@@ -160,7 +180,7 @@ class ElectionDataset:
         for name, df in [
             ("polls", self.polls), 
             ("polls_mult", all_polls_mult),
-            ("results_mult", self.results_mult),
+            ("results_national", self.results_national),
             ("polls_train", self.polls_train),
             ("polls_test", self.polls_test),
             ("results_oos", self.results_oos),
@@ -260,7 +280,7 @@ class ElectionDataset:
         )
         """
         # Add empty gdp column to avoid errors
-        for df in [self.polls_train, self.polls_test, self.results_mult]:
+        for df in [self.polls_train, self.polls_test, self.results_national]:
             if 'gdp' not in df.columns:
                 df['gdp'] = 0.0  # Use float constant value instead of NaN
         return
@@ -271,7 +291,7 @@ class ElectionDataset:
         
         # Add a 'type' column to distinguish polls from results
         polls_data = self.polls_train[["date"] + continuous_predictors].assign(type='poll')
-        results_data = self.results_mult[["date"] + continuous_predictors].assign(type='result')
+        results_data = self.results_national[["date"] + continuous_predictors].assign(type='result')
         
         self.continuous_predictors = (
             pd.concat([polls_data, results_data])
@@ -292,11 +312,11 @@ class ElectionDataset:
     def prepare_observed_data(self):
         """Prepare observed poll results for posterior predictive checks"""
         observed_data = pd.DataFrame({
-            'date': self.results_mult['date'],
-            'pollster': self.results_mult['pollster'],
+            'date': self.results_national['date'],
+            'pollster': self.results_national['pollster'],
         })
         for party in self.political_families:
-            observed_data[party] = self.results_mult[party] / self.results_mult['sample_size']
+            observed_data[party] = self.results_national[party] / self.results_national['sample_size']
         return observed_data
 
     def generate_oos_data(self, posterior):

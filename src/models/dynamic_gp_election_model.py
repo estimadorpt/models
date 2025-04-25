@@ -62,7 +62,9 @@ class DynamicGPElectionModel(BaseElectionModel):
 
         # Configuration for the GPs
         self.baseline_gp_config = baseline_gp_config
-        self.short_term_gp_config = short_term_gp_config
+        self.medium_term_gp_config = short_term_gp_config # Use the old short_term config for medium
+        self.very_short_term_gp_config = {"kernel": "Matern32", "hsgp_m": [20], "hsgp_c": 1.5, "amp_sd": 0.10} # Increased amp sd default
+
         self.house_effect_sd_prior_scale = house_effect_sd_prior_scale
         self.district_offset_sd_prior_scale = district_offset_sd_prior_scale
         # self.beta_sd_prior_scale = beta_sd_prior_scale # Store the new parameter --- COMMENTED OUT
@@ -71,9 +73,12 @@ class DynamicGPElectionModel(BaseElectionModel):
         if not isinstance(self.baseline_gp_config.get("hsgp_m"), (list, tuple)):
             print("Warning: baseline_gp_config['hsgp_m'] was not a list. Wrapping.")
             self.baseline_gp_config["hsgp_m"] = [self.baseline_gp_config["hsgp_m"]]
-        if not isinstance(self.short_term_gp_config.get("hsgp_m"), (list, tuple)):
-             print("Warning: short_term_gp_config['hsgp_m'] was not a list. Wrapping.")
-             self.short_term_gp_config["hsgp_m"] = [self.short_term_gp_config["hsgp_m"]]
+        if not isinstance(self.medium_term_gp_config.get("hsgp_m"), (list, tuple)):
+             print("Warning: medium_term_gp_config['hsgp_m'] was not a list. Wrapping.")
+             self.medium_term_gp_config["hsgp_m"] = [self.medium_term_gp_config["hsgp_m"]]
+        if not isinstance(self.very_short_term_gp_config.get("hsgp_m"), (list, tuple)):
+            print("Warning: very_short_term_gp_config['hsgp_m'] was not a list. Wrapping.")
+            self.very_short_term_gp_config["hsgp_m"] = [self.very_short_term_gp_config["hsgp_m"]]
 
         # Attributes to be set
         self.pollster_id = None
@@ -96,16 +101,21 @@ class DynamicGPElectionModel(BaseElectionModel):
         self.observed_district_result_indices = None # Row index of district result observations
         # --- New Attribute ---
         self.cycle_start_reference_indices = None # Calendar time index for start ref of each cycle
+        # --- National Result Attributes ---
+        self.calendar_time_result_national_id = None # Index mapping national result obs to calendar_time
+        self.observed_national_result_indices = None # Row index of national result observations
 
 
     def _build_coords(self, polls: pd.DataFrame = None) -> Tuple[
         np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray,
         np.ndarray, np.ndarray, np.ndarray, np.ndarray,
-        np.ndarray, np.ndarray, Dict, np.ndarray]:
+        np.ndarray, np.ndarray, np.ndarray, # Added calendar_time_result_national_id
+        Dict, np.ndarray, np.ndarray # Added observed_national_result_indices
+        ]:
         """
         Build coordinates for the PyMC model, including calendar time, election cycles,
         districts, and days_to_election.
-        Calculates mappings for polls, district-level results, and the full calendar time axis.
+        Calculates mappings for polls, district-level results, NATIONAL RESULTS, and the full calendar time axis.
 
         Args:
             polls: Optional DataFrame of polls to use instead of self.polls_train.
@@ -123,19 +133,25 @@ class DynamicGPElectionModel(BaseElectionModel):
             - calendar_time_result_district_id (Mapping district result obs to calendar time)
             - result_cycle_district_idx (Mapping district result obs to cycle)
             - cycle_start_reference_indices (Calendar time index for the start reference date of each cycle)
+            - calendar_time_result_national_id (Mapping national result obs to calendar time)
             - COORDS dictionary
             - observed_district_result_indices (Indices of the district results used)
+            - observed_national_result_indices (Indices of the national results used)
         """
         data_polls = polls if polls is not None else self.polls_train
         historical_results_district = self.dataset.results_mult_district # Use district results
+        historical_results_national = self.dataset.results_national # Use national results
 
         # --- Create Unified Calendar Time Coordinate ---
         poll_dates_dt = pd.to_datetime(data_polls['date']).unique()
         all_election_dates_dt = pd.to_datetime(self.all_election_dates).unique()
-        # Include district result dates in calendar time coord calculation
         district_result_dates_dt = pd.to_datetime(historical_results_district['election_date']).unique()
+        national_result_dates_dt = pd.to_datetime(historical_results_national['election_date']).unique() # NEW
         unique_dates = pd.to_datetime(
-             np.union1d(np.union1d(poll_dates_dt, all_election_dates_dt), district_result_dates_dt)
+             np.union1d(
+                 np.union1d(np.union1d(poll_dates_dt, all_election_dates_dt), district_result_dates_dt),
+                 national_result_dates_dt # Include national result dates
+             )
         ).unique().sort_values()
 
         min_date = unique_dates.min()
@@ -144,7 +160,7 @@ class DynamicGPElectionModel(BaseElectionModel):
         date_to_calendar_index = {date: i for i, date in enumerate(unique_dates)}
 
         # --- Map Election Dates (Cycle Boundaries) to Calendar Time Indices ---
-        cycle_boundaries_dt = pd.to_datetime(sorted(self.all_election_dates)) # Moved up
+        cycle_boundaries_dt = pd.to_datetime(sorted(self.all_election_dates))
         cycle_boundary_indices = []
         for date in cycle_boundaries_dt:
              if date in date_to_calendar_index:
@@ -216,6 +232,19 @@ class DynamicGPElectionModel(BaseElectionModel):
             self.result_district_idx = self.district_id # Direct mapping from the factorized result
             self.observed_district_result_indices = historical_results_district.index.values # Use DF index
 
+        # --- Map National Results to Calendar Time --- NEW SECTION ---
+        if historical_results_national.empty:
+            print("Warning: No historical national results found.")
+            self.calendar_time_result_national_id = np.array([], dtype=int)
+            self.observed_national_result_indices = np.array([], dtype=int)
+            national_result_coord_indices = []
+        else:
+            national_results_dates_dt = pd.to_datetime(historical_results_national['election_date'])
+            self.calendar_time_result_national_id = national_results_dates_dt.map(date_to_calendar_index).values.astype(int)
+            self.observed_national_result_indices = historical_results_national.index.values # Use DF index
+            national_result_coord_indices = self.observed_national_result_indices # Use index for coord dim
+
+
         # --- Calculate Cycle Start Reference Indices ---
         # Use previous election date index as reference, first cycle uses index 0
         num_cycles = len(cycle_names)
@@ -231,11 +260,13 @@ class DynamicGPElectionModel(BaseElectionModel):
             "districts": district_coords if 'district_coords' in locals() else [], # Use factorized districts
             # Dimension for observed district results (rows in results_mult_district)
             "elections_observed_district": self.observed_district_result_indices if self.observed_district_result_indices.size > 0 else [],
+            # Dimension for observed national results (rows in results_national) - NEW
+            "elections_observed_national": national_result_coord_indices if len(national_result_coord_indices) > 0 else [],
         }
 
         self.pollster_id, COORDS["pollsters"] = data_polls["pollster"].factorize(sort=True)
 
-        print("\n=== MODEL COORDINATES (with Districts) ===")
+        print("\n=== MODEL COORDINATES (with Districts + National Results) ===")
         for key, value in COORDS.items():
             print(f"{key}: length={len(value)}")
         print(f"DEBUG: district_id shape: {self.district_id.shape if self.district_id is not None else 'None'}")
@@ -243,6 +274,8 @@ class DynamicGPElectionModel(BaseElectionModel):
         print(f"DEBUG: calendar_time_result_district_id shape: {self.calendar_time_result_district_id.shape if self.calendar_time_result_district_id is not None else 'None'}")
         print(f"DEBUG: result_cycle_district_idx shape: {self.result_cycle_district_idx.shape if self.result_cycle_district_idx is not None else 'None'}")
         print(f"DEBUG: observed_district_result_indices shape: {self.observed_district_result_indices.shape if self.observed_district_result_indices is not None else 'None'}")
+        print(f"DEBUG: calendar_time_result_national_id shape: {self.calendar_time_result_national_id.shape if self.calendar_time_result_national_id is not None else 'None'}")
+        print(f"DEBUG: observed_national_result_indices shape: {self.observed_national_result_indices.shape if self.observed_national_result_indices is not None else 'None'}")
 
 
         return (self.pollster_id, self.calendar_time_poll_id,
@@ -251,24 +284,29 @@ class DynamicGPElectionModel(BaseElectionModel):
                 self.district_id, self.result_district_idx,
                 self.calendar_time_result_district_id, self.result_cycle_district_idx,
                 self.cycle_start_reference_indices,
-                COORDS, self.observed_district_result_indices)
+                self.calendar_time_result_national_id, # Added
+                COORDS, self.observed_district_result_indices,
+                self.observed_national_result_indices) # Added
 
 
     def _build_data_containers(self,
                               polls: pd.DataFrame = None
                              ) -> Dict[str, pm.Data]:
         """
-        Build the data containers for the PyMC model, using district-level results.
+        Build the data containers for the PyMC model, using district-level
+        and NATIONAL results.
         """
         current_polls = polls if polls is not None else self.polls_train
         results_district = self.dataset.results_mult_district # Use district results
+        results_national = self.dataset.results_national # Use national results
 
         # Ensure indices are set
         if self.pollster_id is None or self.calendar_time_poll_id is None or \
            self.poll_cycle_idx is None or self.calendar_time_cycle_idx is None or \
            self.calendar_time_days_numeric is None or self.result_district_idx is None or \
            self.calendar_time_result_district_id is None or self.result_cycle_district_idx is None or \
-           self.cycle_start_reference_indices is None:
+           self.cycle_start_reference_indices is None or \
+           self.calendar_time_result_national_id is None: # Added check
             raise ValueError("Indices/mappings not set. Ensure _build_coords runs first.")
 
         # Prepare district result data
@@ -303,6 +341,26 @@ class DynamicGPElectionModel(BaseElectionModel):
         print(f"  Shape result_district_idx_data: {result_district_idx_data.shape}")
         print("--- End Debugging Data Containers ---")
 
+        # Prepare national result data - NEW SECTION
+        if results_national.empty:
+            print("Warning: results_national is empty. Creating empty data containers for national results.")
+            results_N_national = np.array([], dtype=float)
+            observed_results_national = np.empty((0, len(self.political_families)), dtype=float)
+            calendar_time_result_national_idx_data = np.array([], dtype=int)
+        else:
+            if len(self.observed_national_result_indices) != len(results_national):
+                 raise ValueError(f"Mismatch between observed_national_result_indices ({len(self.observed_national_result_indices)}) and results_national ({len(results_national)}). Check _build_coords.")
+
+            results_N_national = results_national.loc[self.observed_national_result_indices, "sample_size"].to_numpy()
+            observed_results_national = results_national.loc[self.observed_national_result_indices, self.political_families].to_numpy()
+            calendar_time_result_national_idx_data = self.calendar_time_result_national_id
+
+        print("\n--- Debugging Data Containers (National Results) ---")
+        print(f"  Shape observed_N_results_national: {results_N_national.shape}")
+        print(f"  Shape observed_results_national: {observed_results_national.shape}")
+        print(f"  Shape calendar_time_result_national_idx_data: {calendar_time_result_national_idx_data.shape}")
+        print("--- End Debugging Data Containers ---")
+
 
         data_containers = dict(
             # --- Poll Indices ---
@@ -313,6 +371,8 @@ class DynamicGPElectionModel(BaseElectionModel):
             calendar_time_result_district_idx=pm.Data("calendar_time_result_district_idx", calendar_time_result_district_idx_data, dims="elections_observed_district"),
             result_cycle_district_idx=pm.Data("result_cycle_district_idx", result_cycle_district_idx_data, dims="elections_observed_district"),
             result_district_idx=pm.Data("result_district_idx", result_district_idx_data, dims="elections_observed_district"),
+            # --- Result Indices (National) - NEW ---
+            calendar_time_result_national_idx=pm.Data("calendar_time_result_national_idx", calendar_time_result_national_idx_data, dims="elections_observed_national"),
             # --- Calendar Time Indices ---
             calendar_time_cycle_idx=pm.Data("calendar_time_cycle_idx", self.calendar_time_cycle_idx, dims="calendar_time"),
             # --- GP Inputs ---
@@ -324,6 +384,9 @@ class DynamicGPElectionModel(BaseElectionModel):
             # --- Observed Result Data (District) ---
             observed_N_results_district=pm.Data("observed_N_results_district", results_N_district, dims="elections_observed_district"),
             observed_results_district=pm.Data("observed_results_district", observed_results_district, dims=("elections_observed_district", "parties_complete")),
+            # --- Observed Result Data (National) - NEW ---
+            observed_N_results_national=pm.Data("observed_N_results_national", results_N_national, dims="elections_observed_national"),
+            observed_results_national=pm.Data("observed_results_national", observed_results_national, dims=("elections_observed_national", "parties_complete")),
             # Mapping from cycle index to its start reference point in calendar_time
             cycle_start_ref_idx=pm.Data("cycle_start_ref_idx", self.cycle_start_reference_indices, dims="election_cycles"),
         )
@@ -332,10 +395,10 @@ class DynamicGPElectionModel(BaseElectionModel):
 
     def build_model(self, polls: pd.DataFrame = None) -> pm.Model:
         """
-        Build the PyMC model with two GPs over calendar time, house effects,
-        and dynamic district effects (base offset + beta sensitivity).
+        Build the PyMC model with three GPs over calendar time, house effects,
+        dynamic district effects, and a likelihood for NATIONAL results.
         """
-        # Unpacking expects 13 values now (added cycle_start_reference_indices)
+        # Unpacking expects 15 values now (added national result indices)
         (
             self.pollster_id, self.calendar_time_poll_id,
             self.poll_days_numeric, self.poll_cycle_idx,
@@ -343,7 +406,9 @@ class DynamicGPElectionModel(BaseElectionModel):
             self.district_id, self.result_district_idx,
             self.calendar_time_result_district_id, self.result_cycle_district_idx,
             self.cycle_start_reference_indices,
-            self.coords, self.observed_district_result_indices # Renamed from observed_election_indices
+            self.calendar_time_result_national_id, # Added
+            self.coords, self.observed_district_result_indices,
+            self.observed_national_result_indices # Added
         ) = self._build_coords(polls)
 
         with pm.Model(coords=self.coords) as model:
@@ -354,7 +419,7 @@ class DynamicGPElectionModel(BaseElectionModel):
             # --------------------------------------------------------
             #        1. BASELINE GP (Long Trend over Calendar Time)
             # --------------------------------------------------------
-            baseline_gp_lengthscale = pm.LogNormal("baseline_gp_lengthscale", mu=np.log(365*2.5), sigma=0.3)
+            baseline_gp_lengthscale = pm.LogNormal("baseline_gp_lengthscale", mu=np.log(365*2), sigma=0.3)
             baseline_gp_amplitude_sd = pm.HalfNormal("baseline_gp_amplitude_sd", sigma=0.2)
 
             if self.baseline_gp_config["kernel"] == "Matern52":
@@ -385,49 +450,90 @@ class DynamicGPElectionModel(BaseElectionModel):
             )
 
             # --------------------------------------------------------
-            #        2. SHORT-TERM GP (Over Calendar Time)
+            #        2. MEDIUM-TERM GP (Over Calendar Time)
             # --------------------------------------------------------
-            # Ensure short_term_gp_config has the right keys from __init__
-            short_term_gp_ls_prior_mu = self.short_term_gp_config.get("lengthscale", 30) # Default 30 days
-            short_term_gp_amp_sd_prior_scale = self.short_term_gp_config.get("amp_sd", 0.1) # Default 0.1
+            medium_term_gp_ls_prior_mu = self.medium_term_gp_config.get("lengthscale", 90)
+            medium_term_gp_amp_sd_prior_scale = self.medium_term_gp_config.get("amp_sd", 0.1) # Default 0.1
 
-            short_term_gp_lengthscale = pm.LogNormal("short_term_gp_lengthscale", mu=np.log(short_term_gp_ls_prior_mu), sigma=0.5)
-            short_term_gp_amplitude_sd = pm.HalfNormal("short_term_gp_amplitude_sd", sigma=short_term_gp_amp_sd_prior_scale)
+            medium_term_gp_lengthscale = pm.LogNormal("medium_term_gp_lengthscale", mu=np.log(medium_term_gp_ls_prior_mu), sigma=0.5)
+            medium_term_gp_amplitude_sd = pm.HalfNormal("medium_term_gp_amplitude_sd", sigma=medium_term_gp_amp_sd_prior_scale)
 
-            short_term_gp_kernel = self.short_term_gp_config.get("kernel", "Matern52") # Default Matern52
+            medium_term_gp_kernel = self.medium_term_gp_config.get("kernel", "Matern52") # Default Matern52
 
-            if short_term_gp_kernel == "Matern52":
-                 cov_func_short_term = short_term_gp_amplitude_sd**2 * pm.gp.cov.Matern52(input_dim=1, ls=short_term_gp_lengthscale)
-            elif short_term_gp_kernel == "ExpQuad":
-                 cov_func_short_term = short_term_gp_amplitude_sd**2 * pm.gp.cov.ExpQuad(input_dim=1, ls=short_term_gp_lengthscale)
-            else: raise ValueError(f"Unsupported Short-Term GP kernel: {short_term_gp_kernel}")
+            if medium_term_gp_kernel == "Matern52":
+                 cov_func_medium_term = medium_term_gp_amplitude_sd**2 * pm.gp.cov.Matern52(input_dim=1, ls=medium_term_gp_lengthscale)
+            elif medium_term_gp_kernel == "ExpQuad":
+                 cov_func_medium_term = medium_term_gp_amplitude_sd**2 * pm.gp.cov.ExpQuad(input_dim=1, ls=medium_term_gp_lengthscale)
+            else: raise ValueError(f"Unsupported Medium-Term GP kernel: {medium_term_gp_kernel}")
 
-            # Use HSGP parameters from short_term_gp_config
-            short_term_hsgp_m = self.short_term_gp_config.get("hsgp_m", [25]) # Default 25 basis vectors
-            short_term_hsgp_c = self.short_term_gp_config.get("hsgp_c", 1.5) # Default expansion factor
+            medium_term_hsgp_m = self.medium_term_gp_config.get("hsgp_m", [25]) # Default 25 basis vectors
+            medium_term_hsgp_c = self.medium_term_gp_config.get("hsgp_c", 1.5) # Default expansion factor
 
-            self.gp_short_term_time = pm.gp.HSGP(
-                cov_func=cov_func_short_term, m=short_term_hsgp_m, c=short_term_hsgp_c
+            self.gp_medium_term_time = pm.gp.HSGP(
+                cov_func=cov_func_medium_term, m=medium_term_hsgp_m, c=medium_term_hsgp_c
             )
-            phi_short_term, sqrt_psd_short_term = self.gp_short_term_time.prior_linearized(X=self.calendar_time_numeric[:, None])
+            phi_medium_term, sqrt_psd_medium_term = self.gp_medium_term_time.prior_linearized(X=self.calendar_time_numeric[:, None])
 
-            coord_name_gp_basis_short = "gp_basis_short_term"
-            if coord_name_gp_basis_short not in model.coords:
-                 model.add_coords({coord_name_gp_basis_short: np.arange(self.gp_short_term_time.n_basis_vectors)})
+            coord_name_gp_basis_medium = "gp_basis_medium_term"
+            if coord_name_gp_basis_medium not in model.coords:
+                 model.add_coords({coord_name_gp_basis_medium: np.arange(self.gp_medium_term_time.n_basis_vectors)})
 
-            short_term_gp_coef_raw = pm.Normal("short_term_gp_coef_raw", mu=0, sigma=1,
-                                              dims=(coord_name_gp_basis_short, "parties_complete"))
-            short_term_gp_coef = pm.Deterministic("short_term_gp_coef",
-                                                 short_term_gp_coef_raw - short_term_gp_coef_raw.mean(axis=1, keepdims=True),
-                                                 dims=(coord_name_gp_basis_short, "parties_complete"))
-            short_term_effect_calendar = pm.Deterministic("short_term_effect_calendar",
-                pt.einsum('cb,bp->cp', phi_short_term, short_term_gp_coef * sqrt_psd_short_term[:, None]),
+            medium_term_gp_coef_raw = pm.Normal("medium_term_gp_coef_raw", mu=0, sigma=1,
+                                              dims=(coord_name_gp_basis_medium, "parties_complete"))
+            medium_term_gp_coef = pm.Deterministic("medium_term_gp_coef",
+                                                 medium_term_gp_coef_raw - medium_term_gp_coef_raw.mean(axis=1, keepdims=True),
+                                                 dims=(coord_name_gp_basis_medium, "parties_complete"))
+            medium_term_effect_calendar = pm.Deterministic("medium_term_effect_calendar",
+                pt.einsum('cb,bp->cp', phi_medium_term, medium_term_gp_coef * sqrt_psd_medium_term[:, None]),
+                dims=("calendar_time", "parties_complete")
+            )
+
+            # --------------------------------------------------------
+            #        3. VERY SHORT-TERM GP (Over Calendar Time)
+            # --------------------------------------------------------
+            # SET PRIOR: mu=log(14), sigma=0.3
+            # PREVIOUS: very_short_term_gp_lengthscale = pm.LogNormal("very_short_term_gp_lengthscale", mu=np.log(7), sigma=0.3)
+            very_short_term_gp_lengthscale = pm.LogNormal("very_short_term_gp_lengthscale", mu=np.log(14), sigma=0.3)
+            # SET PRIOR: amp_sd = 0.10 (from config)
+            # PREVIOUS: very_short_term_gp_amp_sd_prior_scale = self.very_short_term_gp_config.get("amp_sd", 0.05)
+            very_short_term_gp_amp_sd_prior_scale = self.very_short_term_gp_config.get("amp_sd", 0.10)
+            very_short_term_gp_amplitude_sd = pm.HalfNormal("very_short_term_gp_amplitude_sd", sigma=very_short_term_gp_amp_sd_prior_scale)
+
+            very_short_term_gp_kernel = self.very_short_term_gp_config.get("kernel", "Matern32") # Using Matern32 for faster decay
+
+            if very_short_term_gp_kernel == "Matern52":
+                 cov_func_very_short_term = very_short_term_gp_amplitude_sd**2 * pm.gp.cov.Matern52(input_dim=1, ls=very_short_term_gp_lengthscale)
+            elif very_short_term_gp_kernel == "Matern32":
+                 cov_func_very_short_term = very_short_term_gp_amplitude_sd**2 * pm.gp.cov.Matern32(input_dim=1, ls=very_short_term_gp_lengthscale)
+            elif very_short_term_gp_kernel == "ExpQuad":
+                 cov_func_very_short_term = very_short_term_gp_amplitude_sd**2 * pm.gp.cov.ExpQuad(input_dim=1, ls=very_short_term_gp_lengthscale)
+            else: raise ValueError(f"Unsupported Very Short-Term GP kernel: {very_short_term_gp_kernel}")
+
+            very_short_term_hsgp_m = self.very_short_term_gp_config.get("hsgp_m", [20]) # Default 20 basis vectors
+            very_short_term_hsgp_c = self.very_short_term_gp_config.get("hsgp_c", 1.5) # Default expansion factor
+
+            self.gp_very_short_term_time = pm.gp.HSGP(
+                cov_func=cov_func_very_short_term, m=very_short_term_hsgp_m, c=very_short_term_hsgp_c
+            )
+            phi_very_short_term, sqrt_psd_very_short_term = self.gp_very_short_term_time.prior_linearized(X=self.calendar_time_numeric[:, None])
+
+            coord_name_gp_basis_very_short = "gp_basis_very_short_term"
+            if coord_name_gp_basis_very_short not in model.coords:
+                 model.add_coords({coord_name_gp_basis_very_short: np.arange(self.gp_very_short_term_time.n_basis_vectors)})
+
+            very_short_term_gp_coef_raw = pm.Normal("very_short_term_gp_coef_raw", mu=0, sigma=1,
+                                              dims=(coord_name_gp_basis_very_short, "parties_complete"))
+            very_short_term_gp_coef = pm.Deterministic("very_short_term_gp_coef",
+                                                 very_short_term_gp_coef_raw - very_short_term_gp_coef_raw.mean(axis=1, keepdims=True),
+                                                 dims=(coord_name_gp_basis_very_short, "parties_complete"))
+            very_short_term_effect_calendar = pm.Deterministic("very_short_term_effect_calendar",
+                pt.einsum('cb,bp->cp', phi_very_short_term, very_short_term_gp_coef * sqrt_psd_very_short_term[:, None]),
                 dims=("calendar_time", "parties_complete")
             )
 
             # --- Combine GPs for National Trend ---
             national_trend_pt = pm.Deterministic("national_trend_pt",
-                                                  baseline_effect_calendar + short_term_effect_calendar,
+                                                  baseline_effect_calendar + medium_term_effect_calendar + very_short_term_effect_calendar,
                                                   dims=("calendar_time", "parties_complete"))
 
             # --- Calculate Softmax Probabilities (National) ---
@@ -443,7 +549,7 @@ class DynamicGPElectionModel(BaseElectionModel):
             # national_avg_trend_p shape will be (1, n_parties)
 
             # --------------------------------------------------------
-            #          3. HOUSE EFFECTS (Pollster Bias)
+            #          4. HOUSE EFFECTS (Pollster Bias)
             # --------------------------------------------------------
             house_effects_sd = pm.HalfNormal("house_effects_sd", sigma=self.house_effect_sd_prior_scale, dims="parties_complete")
             # Non-centered parameterization - Remove sum_axis, use default ZeroSumNormal behavior for now
@@ -457,7 +563,7 @@ class DynamicGPElectionModel(BaseElectionModel):
             poll_bias = pm.Deterministic("poll_bias", poll_bias_raw * sigma_poll_bias, dims="parties_complete")
 
             # --------------------------------------------------------
-            #          4. DISTRICT EFFECTS (Dynamic: Base Offset + Beta)
+            #          5. DISTRICT EFFECTS (Dynamic: Base Offset + Beta)
             # --------------------------------------------------------
             # Check if districts coordinate exists and has members (district coords derived from results)
             has_districts = "districts" in self.coords and len(self.coords["districts"]) > 0
@@ -490,7 +596,7 @@ class DynamicGPElectionModel(BaseElectionModel):
                  # --- End Sensitivity Section ---
 
             # --------------------------------------------------------
-            #          5. LATENT VOTE INTENTIONS
+            #          6. LATENT VOTE INTENTIONS
             # --------------------------------------------------------
 
             # --- Latent intention for Polls ---
@@ -593,32 +699,56 @@ class DynamicGPElectionModel(BaseElectionModel):
                  print("DEBUG build_model: No districts, p_district_calendar set to None.")
 
             # --------------------------------------------------------
-            #          6. LIKELIHOODS
+            #          7. LIKELIHOODS
             # --------------------------------------------------------
 
-            # --- Poll Likelihood (Dirichlet Multinomial) --- 
+            # --- Poll Likelihood (Dirichlet Multinomial) ---
             concentration_polls = pm.Gamma("concentration_polls", alpha=100, beta=0.1) # Reintroduce concentration
             pm.DirichletMultinomial(
-                "poll_likelihood", # Renamed variable from original N_approve
+                "poll_likelihood",
                 n=data_containers["observed_N_polls"],
-                a=concentration_polls * poll_probs, # Use concentration * probability
-                observed=data_containers["observed_polls"], 
+                a=concentration_polls * poll_probs,
+                observed=data_containers["observed_polls"],
                 dims=("observations", "parties_complete"),
             )
 
-            # --- District Result Likelihood (Dirichlet Multinomial) --- 
+            # --- District Result Likelihood (Dirichlet Multinomial) ---
             # Only add if there are districts and observed district results
             # AND the probability variable has been defined
             if has_districts and 'p_results_district' in locals() and p_results_district is not None and data_containers["observed_results_district"].get_value(borrow=True).shape[0] > 0:
                  concentration_district_results = pm.Gamma("concentration_district_results", alpha=100, beta=0.1) # Use descriptive name
                  pm.DirichletMultinomial(
-                     "result_district_likelihood", # Renamed RV likelihood name
+                     "result_district_likelihood",
                      n=data_containers["observed_N_results_district"],
                      # Use softmax to get probabilities, then scale by concentration
                      a=concentration_district_results * p_results_district, # Use the explicitly saved probability
                      observed=data_containers["observed_results_district"],
                      dims=("elections_observed_district", "parties_complete"),
                  )
+
+            # --- National Result Likelihood (Dirichlet Multinomial) --- NEW SECTION ---
+            # Only add if there are national results observed
+            # Check based on the observed data container dimension length
+            if data_containers["observed_N_results_national"].get_value(borrow=True).shape[0] > 0:
+
+                 print("DEBUG build_model: Adding National Result Likelihood.") # Debug print
+
+                 # Concentration parameter for national results
+                 concentration_national_results = pm.Gamma("concentration_national_results", alpha=100, beta=0.1)
+
+                 # Get the national latent probability at the times of the national results
+                 p_results_national = latent_popularity_national[data_containers["calendar_time_result_national_idx"]]
+
+                 pm.DirichletMultinomial(
+                     "result_national_likelihood",
+                     n=data_containers["observed_N_results_national"],
+                     # Use softmax probabilities from national trend, scaled by concentration
+                     a=concentration_national_results * p_results_national,
+                     observed=data_containers["observed_results_national"],
+                     dims=("elections_observed_national", "parties_complete"),
+                 )
+            else:
+                 print("DEBUG build_model: Skipping National Result Likelihood (no observed national results).")
 
         return model
 
@@ -1069,10 +1199,10 @@ class DynamicGPElectionModel(BaseElectionModel):
                 if latent_mean_var not in idata.posterior:
                      # Try calculating it if missing (e.g., from older trace)
                      print(f"Warning: '{latent_mean_var}' not found. Attempting calculation...")
-                     if "baseline_effect_calendar" in idata.posterior and "short_term_effect_calendar" in idata.posterior:
-                          idata.posterior[latent_mean_var] = idata.posterior["baseline_effect_calendar"] + idata.posterior["short_term_effect_calendar"]
+                     if "baseline_effect_calendar" in idata.posterior and "medium_term_effect_calendar" in idata.posterior:
+                          idata.posterior[latent_mean_var] = idata.posterior["baseline_effect_calendar"] + idata.posterior["medium_term_effect_calendar"]
                      else:
-                          print(f"Error: Cannot calculate '{latent_mean_var}'. Baseline or short-term effect missing."); return None
+                          print(f"Error: Cannot calculate '{latent_mean_var}'. Baseline or medium-term effect missing."); return None
 
 
                 latent_mean_da = idata.posterior[latent_mean_var].copy()

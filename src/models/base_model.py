@@ -34,7 +34,7 @@ class BaseElectionModel(abc.ABC):
         self.all_election_dates = dataset.all_election_dates
         self.historical_election_dates = dataset.historical_election_dates
         self.polls_train = dataset.polls_train
-        self.results_mult = dataset.results_mult # Usually historical results + target election placeholder
+        self.results_national = dataset.results_national # Usually historical results + target election placeholder
         self.results_oos = dataset.results_oos # Strictly historical results for likelihood evaluation
         self.government_status = dataset.government_status
         self.campaign_preds = dataset.campaign_preds # Predictors aligned with polls
@@ -61,9 +61,9 @@ class BaseElectionModel(abc.ABC):
         self.is_here_polls_base = is_here_polls.astype(int).to_numpy()
 
         # --- Non-competing masks for results (aligned with ALL election dates) ---
-        # Reindex results_mult (which includes historical+target) to all election dates
+        # Reindex results_national (which includes historical+target) to all election dates
         reindexed_results = (
-            self.results_mult[self.political_families]
+            self.results_national[self.political_families]
             .reindex(pd.to_datetime(self.all_election_dates))
         )
         # is_competing_mask is True only for parties with > 0 votes in historical results
@@ -81,8 +81,8 @@ class BaseElectionModel(abc.ABC):
         calendar_dates_dt = calendar_dates_dt.sort_values()
         self.all_calendar_dates_dt = calendar_dates_dt # Store if needed elsewhere
 
-        # Determine first appearance date for each party based on results_mult > 0
-        first_appearance = self.results_mult[self.political_families].gt(0).idxmax()
+        # Determine first appearance date for each party based on results_national > 0
+        first_appearance = self.results_national[self.political_families].gt(0).idxmax()
         # Create a boolean mask: True if calendar date >= first appearance date
         is_present_calendar = pd.DataFrame(
             {party: calendar_dates_dt >= first_appearance[party] for party in self.political_families},
