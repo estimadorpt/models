@@ -31,9 +31,9 @@ class DynamicGPElectionModel(BaseElectionModel):
     def __init__(
         self,
         dataset: ElectionDataset,
-        baseline_gp_config: Dict = {"kernel": "ExpQuad", "hsgp_m": [25], "hsgp_c": 1.5}, # Wrap hsgp_m in list
-        short_term_gp_config: Dict = {"kernel": "Matern52", "hsgp_m": [25], "hsgp_c": 1.5}, # Wrap hsgp_m in list
-        house_effect_sd_prior_scale: float = 0.1, # Adjusted default
+        baseline_gp_config: Dict = {"kernel": "ExpQuad", "hsgp_m": [35], "hsgp_c": 1.5}, # Wrap hsgp_m in list
+        short_term_gp_config: Dict = {"kernel": "Matern52", "hsgp_m": [25], "hsgp_c": 1.5, "amp_sd": 0.2}, # Wrap hsgp_m in list, LOOSENED amp_sd default
+        house_effect_sd_prior_scale: float = 0.05, # Adjusted default
         district_offset_sd_prior_scale: float = 0.1, # Adjusted default
         # beta_sd_prior_scale: float = 0.5, # NEW sensitivity parameter scale --- COMMENTED OUT
         cycle_gp_max_days: int = 90,
@@ -63,7 +63,9 @@ class DynamicGPElectionModel(BaseElectionModel):
         # Configuration for the GPs
         self.baseline_gp_config = baseline_gp_config
         self.medium_term_gp_config = short_term_gp_config # Use the old short_term config for medium
-        self.very_short_term_gp_config = {"kernel": "Matern32", "hsgp_m": [20], "hsgp_c": 1.5, "amp_sd": 0.10} # Increased amp sd default
+        # LOOSEN PRIOR FURTHER for very short term GP amplitude
+        # INCREASE BASIS FUNCTIONS for very short term GP
+        self.very_short_term_gp_config = {"kernel": "Matern32", "hsgp_m": [40], "hsgp_c": 1.5, "amp_sd": 0.30} # LOOSENED amp sd default, INCREASED m
 
         self.house_effect_sd_prior_scale = house_effect_sd_prior_scale
         self.district_offset_sd_prior_scale = district_offset_sd_prior_scale
@@ -419,7 +421,8 @@ class DynamicGPElectionModel(BaseElectionModel):
             # --------------------------------------------------------
             #        1. BASELINE GP (Long Trend over Calendar Time)
             # --------------------------------------------------------
-            baseline_gp_lengthscale = pm.LogNormal("baseline_gp_lengthscale", mu=np.log(365*2), sigma=0.3)
+            # ADJUSTED PRIOR: Center around 4 years (1460 days)
+            baseline_gp_lengthscale = pm.LogNormal("baseline_gp_lengthscale", mu=np.log(1460), sigma=0.3)
             baseline_gp_amplitude_sd = pm.HalfNormal("baseline_gp_amplitude_sd", sigma=0.2)
 
             if self.baseline_gp_config["kernel"] == "Matern52":
@@ -452,8 +455,11 @@ class DynamicGPElectionModel(BaseElectionModel):
             # --------------------------------------------------------
             #        2. MEDIUM-TERM GP (Over Calendar Time)
             # --------------------------------------------------------
-            medium_term_gp_ls_prior_mu = self.medium_term_gp_config.get("lengthscale", 90)
-            medium_term_gp_amp_sd_prior_scale = self.medium_term_gp_config.get("amp_sd", 0.1) # Default 0.1
+            # ADJUSTED PRIOR: Center around 1 year (365 days)
+            # PREVIOUS: medium_term_gp_ls_prior_mu = self.medium_term_gp_config.get("lengthscale", 90)
+            medium_term_gp_ls_prior_mu = self.medium_term_gp_config.get("lengthscale", 365) # Default 365
+            # Use potentially updated config value (default now 0.2)
+            medium_term_gp_amp_sd_prior_scale = self.medium_term_gp_config.get("amp_sd", 0.2) # Default 0.2
 
             medium_term_gp_lengthscale = pm.LogNormal("medium_term_gp_lengthscale", mu=np.log(medium_term_gp_ls_prior_mu), sigma=0.5)
             medium_term_gp_amplitude_sd = pm.HalfNormal("medium_term_gp_amplitude_sd", sigma=medium_term_gp_amp_sd_prior_scale)
@@ -494,9 +500,9 @@ class DynamicGPElectionModel(BaseElectionModel):
             # SET PRIOR: mu=log(14), sigma=0.3
             # PREVIOUS: very_short_term_gp_lengthscale = pm.LogNormal("very_short_term_gp_lengthscale", mu=np.log(7), sigma=0.3)
             very_short_term_gp_lengthscale = pm.LogNormal("very_short_term_gp_lengthscale", mu=np.log(14), sigma=0.3)
-            # SET PRIOR: amp_sd = 0.10 (from config)
-            # PREVIOUS: very_short_term_gp_amp_sd_prior_scale = self.very_short_term_gp_config.get("amp_sd", 0.05)
-            very_short_term_gp_amp_sd_prior_scale = self.very_short_term_gp_config.get("amp_sd", 0.10)
+            # Use potentially updated config value (default now 0.3)
+            # PREVIOUS: very_short_term_gp_amp_sd_prior_scale = self.very_short_term_gp_config.get("amp_sd", 0.20)
+            very_short_term_gp_amp_sd_prior_scale = self.very_short_term_gp_config.get("amp_sd", 0.30)
             very_short_term_gp_amplitude_sd = pm.HalfNormal("very_short_term_gp_amplitude_sd", sigma=very_short_term_gp_amp_sd_prior_scale)
 
             very_short_term_gp_kernel = self.very_short_term_gp_config.get("kernel", "Matern32") # Using Matern32 for faster decay
@@ -509,7 +515,7 @@ class DynamicGPElectionModel(BaseElectionModel):
                  cov_func_very_short_term = very_short_term_gp_amplitude_sd**2 * pm.gp.cov.ExpQuad(input_dim=1, ls=very_short_term_gp_lengthscale)
             else: raise ValueError(f"Unsupported Very Short-Term GP kernel: {very_short_term_gp_kernel}")
 
-            very_short_term_hsgp_m = self.very_short_term_gp_config.get("hsgp_m", [20]) # Default 20 basis vectors
+            very_short_term_hsgp_m = self.very_short_term_gp_config.get("hsgp_m", [40]) # Default 40 basis vectors
             very_short_term_hsgp_c = self.very_short_term_gp_config.get("hsgp_c", 1.5) # Default expansion factor
 
             self.gp_very_short_term_time = pm.gp.HSGP(
@@ -558,6 +564,7 @@ class DynamicGPElectionModel(BaseElectionModel):
 
             # --- Average Poll Bias (Zero-Sum across parties) ---
             # Represents systematic relative over/underestimation in polls on average
+            # REVERTED PRIOR: Loosen back to 0.1
             sigma_poll_bias = pm.HalfNormal("sigma_poll_bias", 0.1) # Single sigma for overall magnitude
             poll_bias_raw = pm.ZeroSumNormal("poll_bias_raw", sigma=1.0, dims="parties_complete")
             poll_bias = pm.Deterministic("poll_bias", poll_bias_raw * sigma_poll_bias, dims="parties_complete")
@@ -703,7 +710,9 @@ class DynamicGPElectionModel(BaseElectionModel):
             # --------------------------------------------------------
 
             # --- Poll Likelihood (Dirichlet Multinomial) ---
-            concentration_polls = pm.Gamma("concentration_polls", alpha=100, beta=0.1) # Reintroduce concentration
+            # WEAKENED PRIOR: Was pm.Gamma(100, 0.1), mean=1000
+            # New prior: pm.Gamma(2, 0.01), mean=200, more variance
+            concentration_polls = pm.Gamma("concentration_polls", alpha=2, beta=0.01) # Reintroduce concentration
             pm.DirichletMultinomial(
                 "poll_likelihood",
                 n=data_containers["observed_N_polls"],
