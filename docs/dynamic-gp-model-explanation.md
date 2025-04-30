@@ -49,29 +49,33 @@ Let's examine each major component of the model from a statistical perspective:
 
 The foundation of the model is a smooth, long-term trend representing the baseline national support for each party. This is modeled as a Gaussian Process evolving over calendar time. The properties of this GP (specifically its covariance structure) are chosen to reflect assumptions about the slow, gradual nature of fundamental political shifts, capturing dependencies over multiple years.
 
-### 2. Short-Term GP over Calendar Time
+### 2. Medium-Term GP over Calendar Time
 
-Superimposed on the baseline trend is a second Gaussian Process, also evolving over calendar time. This component is designed with a shorter correlation length, allowing it to capture more rapid fluctuations and deviations from the long-term baseline. This could reflect campaign effects, responses to specific events, or other medium-term dynamics.
+Superimposed on the baseline trend is a second Gaussian Process, also evolving over calendar time. This component is designed with a moderate correlation length (e.g., centered around a year), allowing it to capture deviations from the long-term baseline over medium timescales. This could reflect evolving responses to specific events or other medium-term dynamics.
 
-The sum of these two processes forms the latent (unobserved) national support trajectory for each party.
+### 3. Very Short-Term GP over Calendar Time
 
-### 3. District-Level Effects
+A third Gaussian Process, again over calendar time, is added to capture even more rapid fluctuations. This GP has a very short correlation length (e.g., centered around a few weeks). It is designed to model fast-moving campaign dynamics, late shifts in public opinion, or reactions to breaking news closer to an election.
 
-To account for Portugal's district-based system, the model incorporates district-specific deviations from the national trend. This is achieved through estimated **base offset** parameters for each district and party. These parameters represent the persistent, time-invariant tendency for a district's support for a given party to be higher or lower than the national average, learned from historical election results at the district level.
+The sum of these three processes (baseline, medium-term, very short-term) forms the latent (unobserved) national support trajectory for each party.
 
-### 4. House Effects (Pollster Biases) and Poll Bias
+### 4. District-Level Effects
+
+To account for Portugal's district-based system, the model incorporates district-specific deviations from the national trend. In the current implementation, this is achieved solely through estimated **static base offset** parameters for each district and party. These parameters represent the persistent, time-invariant tendency for a district's support for a given party to be higher or lower than the national average, relative to the average trend. These offsets are learned primarily from historical election results at the district level. Unlike previous experimental versions, this model *currently uses only these static offsets*. It assumes that district deviations from the national trend do not dynamically change based on the magnitude of national swings within a single election cycle (i.e., the sensitivity or 'beta' component is not currently active).
+
+### 5. House Effects (Pollster Biases) and Poll Bias
 
 The model explicitly accounts for systematic variations between polling firms. These "house effects" are modeled as parameters specific to each pollster and party, constrained such that they represent relative deviations (i.e., summing to zero across parties for a given pollster). This captures the tendency of some pollsters to relatively overestimate or underestimate certain parties.
 
 Additionally, an overall poll bias term, also constrained to sum to zero across parties, is included. This captures any average systematic deviation of poll results from the underlying national trend, distinct from individual pollster effects.
 
-### 5. Latent Score, Transformation, and Likelihood
+### 6. Latent Score, Transformation, and Likelihood
 
-The national trend components (sum of GPs) are combined with the relevant bias terms (house effects and poll bias for poll observations, or district offsets for district predictions) to produce a latent score representing underlying support.
+The national trend components (sum of the three calendar-time GPs) are combined with the relevant bias terms (house effects and poll bias for poll observations, or the static district base offsets for district predictions) to produce a latent score representing underlying support.
 
 A softmax transformation converts these unbounded latent scores into a set of probabilities (vote shares) for each party that necessarily sum to one.
 
-Finally, the observed data—vote counts from polls and district-level election results—are linked to these modeled probabilities through a statistical likelihood function. The chosen likelihood (a Dirichlet-Multinomial distribution) is suitable for count data representing proportions and includes parameters to accommodate potential overdispersion, meaning more variability in the observed counts than predicted by simpler sampling models.
+Finally, the observed data—vote counts from polls, district-level election results, **and national-level election results**—are linked to these modeled probabilities through a statistical likelihood function. The chosen likelihood (typically a Dirichlet-Multinomial distribution) is suitable for count data representing proportions and includes parameters to accommodate potential overdispersion (more variability than predicted by simpler models). The inclusion of both district and national results helps anchor the national trend prediction and inform the district offsets.
 
 ## Statistical Methodology
 
@@ -104,8 +108,8 @@ The use of a likelihood function that explicitly models overdispersion (like the
 Generating forecasts involves several steps:
 
 1.  Draw samples from the joint posterior distribution of all model parameters obtained via Bayesian inference.
-2.  For each sample, compute the latent national support trend at the desired future date(s) by projecting the Gaussian Processes.
-3.  Apply the relevant district-specific base offset parameters to the national latent trend to get district-level latent scores.
+2.  For each sample, compute the latent national support trend (sum of the three calendar-time GPs) at the desired future date(s).
+3.  Apply the relevant district-specific **static base offset** parameters (as estimated from the posterior) to the national latent trend to get district-level latent scores.
 4.  Convert these latent scores into predicted vote share probabilities using the softmax transformation.
 5.  Simulate the seat allocation process (D'Hondt method) using these predicted vote shares for each posterior sample.
 
@@ -113,10 +117,10 @@ Aggregating the results across all posterior samples provides a probabilistic fo
 
 ### District Vote Share Prediction
 
-District-level vote share predictions are derived by combining the posterior distribution of the national latent trend with the posterior distribution of the district base offsets.
+District-level vote share predictions are derived by combining the posterior distribution of the national latent trend (sum of the three calendar-time GPs) with the posterior distribution of the **static** district base offsets.
 
 Specifically, for each posterior sample and each district:
-1.  The estimated **base offset** for that district and party is added to the national latent trend value for that party at the target date.
+1.  The estimated **static base offset** for that district and party is added to the national latent trend value (sum of the three GPs) for that party at the target date.
 2.  The resulting adjusted latent scores are transformed into probabilities (vote shares summing to 1) via the softmax function.
 
 This procedure yields a full posterior distribution of predicted vote shares for each party within each district.
@@ -127,10 +131,10 @@ Once we have vote share predictions, we simulate the election outcome using the 
 
 ## Limitations and Future Improvements
 
-Like all models, ours has limitations:
+Like all models, ours has limitations based on its current structure:
 
-1. It assumes that historical patterns of district behavior will continue into the future.
+1. It assumes that historical patterns of *static* district behavior (relative to the nation, captured by the base offsets) will continue into the future. The model currently does not account for potential dynamic changes in how districts respond to national swings within a cycle.
 2. It does not incorporate non-polling data such as economic indicators or government approval ratings.
-3. The district effects model could potentially be enhanced with spatial correlation structure.
+3. The district effects model could potentially be enhanced in future versions by re-introducing dynamic components (like sensitivity/beta), adding district-level covariates, or incorporating spatial correlation structures.
 
-Future versions may address these limitations by incorporating additional data sources and more sophisticated spatial modeling techniques.
+Future versions may address these limitations by incorporating additional data sources (like economic indicators), activating dynamic district effects, using district-level covariates (such as demographics or past voting patterns) to better model the static offsets, or implementing spatial modeling techniques to capture correlations between neighboring districts.

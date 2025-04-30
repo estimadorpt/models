@@ -168,8 +168,9 @@ class ElectionsFacade:
                 draws=draws, 
                 tune=tune, 
                 target_accept=target_accept,
-            **sampler_kwargs
-        )
+                init='adapt_diag',
+                **sampler_kwargs
+            )
             # --- End Main Sampling ---
             
             # --- Posterior Predictive Checks --- 

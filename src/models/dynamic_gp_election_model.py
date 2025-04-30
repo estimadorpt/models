@@ -543,7 +543,7 @@ class DynamicGPElectionModel(BaseElectionModel):
                                                   dims=("calendar_time", "parties_complete"))
 
             # --- Calculate Softmax Probabilities (National) ---
-            latent_popularity_national = pm.Deterministic(
+            latent_popularity_national = pm.Deterministic( # Reverted name
                 "latent_popularity_national",
                 pm.math.softmax(national_trend_pt, axis=1), # Apply softmax along party axis (axis=1)
                 dims=("calendar_time", "parties_complete")
@@ -588,6 +588,10 @@ class DynamicGPElectionModel(BaseElectionModel):
                  # static_district_offset = pm.Deterministic("static_district_offset",
                  #                                            static_district_offset_noncentered - static_district_offset_noncentered.mean(axis=1, keepdims=True),
                  #                                            dims=("districts", "parties_complete"))
+
+                 # --- Define district_effects based on static offset (Kept for clarity/future) ---
+                 district_effects = pm.Deterministic("district_effects", static_district_offset, dims=("districts", "parties_complete"))
+
 
                  # static_district_offset now has shape (districts, parties_complete)
 
@@ -759,6 +763,16 @@ class DynamicGPElectionModel(BaseElectionModel):
             else:
                  print("DEBUG build_model: Skipping National Result Likelihood (no observed national results).")
 
+            # --- Check Test Point --- ADDED
+            print("\n--- Checking Model Logp at Initial Point ---")
+            try:
+                 print(model.point_logps())
+                 print("--- Initial Point Logp Check Complete ---\n")
+            except Exception as e:
+                 print(f"ERROR during model.point_logps(): {e}")
+                 print("--- Initial Point Logp Check Failed ---\n")
+            # --- End Check ---
+
         return model
 
     def posterior_predictive_check(self, idata: az.InferenceData, extend_idata: bool = True) -> az.InferenceData | Dict:
@@ -861,22 +875,23 @@ class DynamicGPElectionModel(BaseElectionModel):
             ValueError: If required data groups or variables are missing from idata.
         """
         # 1. Check for required groups
-        # REMOVED Check/call for posterior_predictive_check
-        # if "posterior_predictive" not in idata:
-        #    print("Posterior predictive samples not found in idata. Running posterior_predictive_check...")
-        #    try:
-        #        idata = self.posterior_predictive_check(idata, extend_idata=True) # Modifies idata in-place
-        #    except Exception as e:
-        #         raise ValueError(f"Failed to generate posterior predictive samples: {e}")
+        # RE-ADDED Check/call for posterior_predictive_check
+        if "posterior_predictive" not in idata:
+           print("Posterior predictive samples not found in idata. Running posterior_predictive_check...")
+           try:
+               idata = self.posterior_predictive_check(idata, extend_idata=True) # Modifies idata in-place
+           except Exception as e:
+                raise ValueError(f"Failed to generate posterior predictive samples: {e}")
 
         if "posterior" not in idata:
             raise ValueError("posterior group is required in InferenceData to calculate metrics.")
         if "observed_data" not in idata:
             raise ValueError("observed_data group is required in InferenceData to calculate metrics.")
-        # if "posterior_predictive" not in idata: # Double check after PPC run
-        #    raise ValueError("posterior_predictive group still missing after running check.")
+        if "posterior_predictive" not in idata: # Double check after PPC run
+           raise ValueError("posterior_predictive group still missing after running check.")
 
-        # --- START DEBUG --- 
+        # --- START DEBUG ---
+
         print("\nDEBUG METRICS: Checking idata contents...")
         # if hasattr(idata, 'posterior_predictive'):
         #    print(f"  idata.posterior_predictive keys: {list(idata.posterior_predictive.keys())}")
@@ -1153,9 +1168,9 @@ class DynamicGPElectionModel(BaseElectionModel):
         # --- End Determine Target Date ---
 
         # --- Get National Latent Popularity at Target Date ---
-        national_pop_var = "latent_popularity_calendar_trajectory"
+        national_pop_var = "latent_popularity_national" # Reverted name
         if national_pop_var not in idata.posterior:
-            print(f"Error: National trajectory variable '{national_pop_var}' not found."); return None
+            print(f"Error: National popularity variable '{national_pop_var}' not found."); return None
         if 'calendar_time' not in idata.posterior.coords:
              print("Error: Coordinate 'calendar_time' not found."); return None
 
@@ -1203,15 +1218,10 @@ class DynamicGPElectionModel(BaseElectionModel):
                 # Get the district effect posterior for the specific district
                 district_effect_da = idata.posterior["district_effects"].sel(districts=district)
 
-                # Need the *latent mean* at the target date to add the effect before softmax
-                latent_mean_var = "latent_mu_calendar" # National latent mean over time
+                # Need the *latent mean* (pre-softmax trend) at the target date
+                latent_mean_var = "national_trend_pt" # Use the actual pre-softmax trend variable
                 if latent_mean_var not in idata.posterior:
-                     # Try calculating it if missing (e.g., from older trace)
-                     print(f"Warning: '{latent_mean_var}' not found. Attempting calculation...")
-                     if "baseline_effect_calendar" in idata.posterior and "medium_term_effect_calendar" in idata.posterior:
-                          idata.posterior[latent_mean_var] = idata.posterior["baseline_effect_calendar"] + idata.posterior["medium_term_effect_calendar"]
-                     else:
-                          print(f"Error: Cannot calculate '{latent_mean_var}'. Baseline or medium-term effect missing."); return None
+                     print(f"Error: Required variable '{latent_mean_var}' not found in posterior."); return None
 
 
                 latent_mean_da = idata.posterior[latent_mean_var].copy()

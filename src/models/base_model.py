@@ -187,7 +187,7 @@ class BaseElectionModel(abc.ABC):
         
         # Add chain initialization strategy if not specified
         if 'init' not in sampler_kwargs:
-            sampler_kwargs['init'] = 'jitter+adapt_diag'
+            sampler_kwargs['init'] = 'adapt_diag'
         
         # Set number of chains if not specified
         sampler_kwargs.setdefault('chains', 4)
