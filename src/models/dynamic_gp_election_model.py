@@ -1101,12 +1101,71 @@ class DynamicGPElectionModel(BaseElectionModel):
         return metrics, idata
 
 
-    def predict_latent_trajectory(self, idata: az.InferenceData, start_date: pd.Timestamp, end_date: pd.Timestamp) -> az.InferenceData:
-        # This method currently returns the *national* trajectory.
-        # Needs adaptation if district-specific trajectories are required.
-        print("Warning: predict_latent_trajectory currently returns NATIONAL trajectory.")
-        # Placeholder for future implementation if needed
-        return az.InferenceData()
+    def predict_latent_trajectory(self, idata: az.InferenceData, start_date: pd.Timestamp, end_date: pd.Timestamp) -> Optional[az.InferenceData]:
+        """Calculates the posterior predictive distribution for the national latent popularity
+           trajectory between the specified start and end dates.
+
+        Args:
+            idata: InferenceData object containing the posterior trace.
+            start_date: The start date for the trajectory slice.
+            end_date: The end date for the trajectory slice.
+
+        Returns:
+            A new InferenceData object containing the 'latent_popularity_national'
+            variable sliced for the specified date range in the 'posterior' group,
+            or None if the variable or coordinates are not found.
+        """
+        print(f"Predicting latent national trajectory from {start_date.date()} to {end_date.date()}...")
+
+        if not isinstance(idata, az.InferenceData) or 'posterior' not in idata:
+            print("Error: Valid InferenceData with posterior samples required.")
+            return None
+
+        latent_var_name = "latent_popularity_national"
+        time_coord_name = "calendar_time"
+
+        if latent_var_name not in idata.posterior:
+            print(f"Error: Latent variable '{latent_var_name}' not found in posterior trace.")
+            return None
+
+        if time_coord_name not in idata.posterior.coords:
+            print(f"Error: Time coordinate '{time_coord_name}' not found in posterior trace.")
+            return None
+
+        try:
+            latent_popularity_full = idata.posterior[latent_var_name]
+            latent_time_values = pd.to_datetime(idata.posterior[time_coord_name].values)
+
+            start_date_naive = pd.Timestamp(start_date).tz_localize(None)
+            end_date_naive = pd.Timestamp(end_date).tz_localize(None)
+            latent_time_values_naive = pd.to_datetime(latent_time_values).tz_localize(None)
+
+            date_mask = (latent_time_values_naive >= start_date_naive) & (latent_time_values_naive <= end_date_naive)
+
+            if not np.any(date_mask):
+                print("Warning: No latent popularity data found within the specified date range (empty mask).")
+                return None
+
+            latent_popularity_sliced = latent_popularity_full.isel({time_coord_name: date_mask})
+
+            if latent_popularity_sliced[time_coord_name].size == 0:
+                 print("Warning: No latent popularity data found within the specified date range (size is 0 after isel).")
+                 return None
+
+            # Create a new Dataset for the posterior group
+            sliced_posterior_ds = xr.Dataset({latent_var_name: latent_popularity_sliced})
+            # Create the final InferenceData object
+            sliced_idata = az.InferenceData(posterior=sliced_posterior_ds)
+
+            print(f"Successfully extracted trajectory slice with {latent_popularity_sliced[time_coord_name].size} time points.")
+            return sliced_idata
+
+        except Exception as e:
+            print(f"Error during latent trajectory prediction: {e}")
+            # Optional: Re-import traceback if needed for debugging
+            # import traceback
+            # traceback.print_exc()
+            return None
 
     def predict(self, oos_data: pd.DataFrame) -> az.InferenceData:
         # This likely needs adaptation for district model if predicting polls is still desired.
