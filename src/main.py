@@ -19,6 +19,14 @@ pytensor.config.cxx = '/usr/bin/clang++'
 from src.models.elections_facade import ElectionsFacade
 from src.models.static_baseline_election_model import StaticBaselineElectionModel
 from src.models.dynamic_gp_election_model import DynamicGPElectionModel
+from src.data.loaders import load_election_results, load_district_config
+from src.processing.electoral_systems import calculate_dhondt
+from src.processing.seat_prediction import (
+    simulate_seat_allocation, 
+    generate_district_forecast_json, 
+    generate_national_trends_json, 
+    generate_house_effect_json
+)
 
 # # <<< Print loaded class file path >>>
 # print(f"DEBUG MAIN: ElectionsFacade class loaded from: {ElectionsFacade.__file__}")
@@ -38,7 +46,6 @@ from src.visualization.plots import (
 )
 from src.config import DEFAULT_BASELINE_TIMESCALE, DEFAULT_ELECTION_TIMESCALES
 from src.data.dataset import ElectionDataset
-from src.data.loaders import load_election_results, load_district_config
 from src.processing.electoral_systems import calculate_dhondt
 from src.processing.seat_prediction import simulate_seat_allocation
 
@@ -346,7 +353,6 @@ def fit_model(args):
             except Exception as notify_err:
                 print(f"Failed to send error notification: {notify_err}")
         if args.debug:
-             import traceback
              traceback.print_exc()
         return None
 
@@ -629,7 +635,6 @@ def cross_validate(args):
                 })
             except Exception as e:
                 print(f"Error processing election {election_date}: {e}")
-                import traceback
                 traceback.print_exc()
                 
                 # Add a placeholder result
@@ -660,7 +665,6 @@ def cross_validate(args):
     except Exception as e:
         print(f"Error in cross-validation: {e}")
         if args.debug:
-            import traceback
             traceback.print_exc()
         if args.notify:
             requests.post("https://ntfy.sh/bc-estimador",
@@ -877,8 +881,8 @@ def predict(args):
         # --- Get Posterior Vote Shares (National or District based on model) ---
         target_pop_posterior = None # For national/static model
         district_shares_posterior = None # For dynamic_gp model
-        model_instance = elections_model.model_instance # Get the underlying model instance
-        hdi_prob = 0.94 # Define hdi_prob before the conditional blocks
+        model_instance = elections_model.model_instance 
+        hdi_prob = 0.94 
 
         # Determine which method to call based on the actual model instance type
         if isinstance(model_instance, DynamicGPElectionModel) and hasattr(model_instance, 'get_district_vote_share_posterior'):
@@ -889,11 +893,27 @@ def predict(args):
             )
             if district_shares_posterior is None:
                  print("Could not retrieve district vote shares. Skipping seat predictions.")
+                 # --- ADDED: Also skip district forecast JSON generation --- 
+                 print("Skipping district_forecast.json generation.")
+                 # --- END ADDED ---
             else:
                  print("District vote share posterior calculated successfully.")
-                 # Optional: Display summary for a specific district or national average if needed
-                 # For now, we proceed directly to seat simulation
-
+                 # --- Generate district forecast JSON ---
+                 try:
+                      # Calculate mean shares across chain and draw
+                      mean_shares = district_shares_posterior.mean(dim=["chain", "draw"])
+                      generate_district_forecast_json(
+                          mean_district_shares=mean_shares,
+                          district_names=elections_model.dataset.unique_districts,
+                          party_names=elections_model.dataset.political_families,
+                          pred_dir=pred_dir,
+                          debug=args.debug
+                      )
+                 except Exception as dfj_err:
+                      print(f"Warning: Failed to generate district_forecast.json: {dfj_err}")
+                      if args.debug: traceback.print_exc()
+                 # --- END Generate district forecast JSON ---
+                 
         elif hasattr(elections_model, 'get_latent_popularity'): # Fallback or for static model
              print(f"\nCalculating Latent Popularity Prediction (mode: {args.prediction_date_mode})...")
              # This likely gets national popularity for static models or if district method failed/unavailable
@@ -932,6 +952,60 @@ def predict(args):
             return # Exit if no way to get shares
         # --- End Posterior Share Calculation ---
 
+        # --- Generate National Trends Data --- 
+        national_trend_posterior = None
+        if hasattr(model_instance, 'predict_latent_trajectory'):
+             try:
+                  # Determine start and end dates for the trend
+                  # Example: From first poll date to prediction date (or election date)
+                  first_poll_date = elections_model.dataset.polls['date'].min()
+                  # Use election date as end date for consistency, regardless of prediction mode
+                  end_date = pd.to_datetime(elections_model.election_date)
+                  
+                  print(f"\nCalculating National Latent Trajectory from {first_poll_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}...")
+                  # Pass the facade's trace object
+                  national_trend_posterior_idata = model_instance.predict_latent_trajectory(
+                       idata=elections_model.trace, 
+                       start_date=first_poll_date, 
+                       end_date=end_date
+                  )
+                  # Extract the relevant DataArray (adjust variable name if needed)
+                  if (national_trend_posterior_idata is not None and 
+                      'posterior' in national_trend_posterior_idata and 
+                      'latent_popularity_national' in national_trend_posterior_idata.posterior):
+                     national_trend_posterior = national_trend_posterior_idata.posterior["latent_popularity_national"]
+                     print("National latent trajectory calculated successfully.")
+                     # --- Generate national trends JSON ---
+                     generate_national_trends_json(
+                         national_trend_posterior=national_trend_posterior,
+                         pred_dir=pred_dir,
+                         hdi_prob=hdi_prob, # Use same HDI as summaries
+                         debug=args.debug
+                     )
+                     # --- END Generate national trends JSON ---
+                  else:
+                     print("Warning: 'latent_popularity_national' not found in the posterior group of predict_latent_trajectory output.")
+                      
+             except Exception as trend_err:
+                  print(f"Warning: Failed to calculate or process national trends: {trend_err}")
+                  if args.debug: traceback.print_exc()
+        else:
+             print("Warning: Model instance does not have 'predict_latent_trajectory' method. Skipping national trends.")
+        # --- End National Trends Data --- 
+        
+        # --- Generate House Effects JSON --- 
+        try:
+            # Pass the posterior group and the dataset object
+            generate_house_effect_json(
+                posterior_trace=elections_model.trace.posterior, 
+                dataset=elections_model.dataset, 
+                pred_dir=pred_dir,
+                debug=args.debug
+            )
+        except Exception as he_err:
+            print(f"Warning: Failed to generate house_effects.json: {he_err}")
+            if args.debug: traceback.print_exc()
+        # --- End House Effects JSON --- 
 
         # --- Call SEAT PREDICTION SIMULATION --- 
         seats_df = None
@@ -974,7 +1048,6 @@ def predict(args):
                      except Exception as plot_err:
                          print(f"Warning: Failed to generate seat distribution histograms: {plot_err}")
                          if args.debug: 
-                             import traceback # Import locally
                              traceback.print_exc()
                  else:
                      print("\nSkipping seat histogram plot as simulation did not produce results.")
@@ -982,7 +1055,6 @@ def predict(args):
              except Exception as simulation_err:
                  print(f"Error during seat prediction simulation call: {simulation_err}")
                  if args.debug: 
-                     import traceback # Import locally
                      traceback.print_exc()
 
         elif num_samples_for_seats <= 0:
@@ -1007,7 +1079,6 @@ def predict(args):
         except Exception as trend_plot_err:
              print(f"Warning: Failed to generate latent trend plot: {trend_plot_err}")
              if args.debug:
-                  import traceback # Import locally
                   traceback.print_exc()
         # --- End Latent Trend Plot ---
 
@@ -1029,7 +1100,6 @@ def predict(args):
                 except Exception as plot_err:
                      print(f"Warning: Failed to generate forecast distribution plot: {plot_err}")
                      if args.debug:
-                          import traceback # Import locally
                           traceback.print_exc()
             else:
                  print("Skipping forecast distribution plot: national target popularity not calculated.")
@@ -1040,9 +1110,7 @@ def predict(args):
 
     except Exception as e:
         print(f"Error during prediction mode: {e}")
-        # <<< Import traceback locally here >>>
         if args.debug: 
-            import traceback 
             traceback.print_exc()
 
 def main(args=None):
