@@ -91,83 +91,160 @@ def _consolidate_tracking_polls(df, party_cols, rolling_window_days=3):
 
     # --- Aggregation ---
     consolidated_polls_list = []
+    non_tracking_polls_processed = non_tracking_polls.copy() # Start with non-tracking polls
 
     for group_id, group in tracking_polls.groupby('group_id'):
-        if len(group) == 1:
-            # If only one poll in the group, keep it as is (remove helper columns)
-            consolidated_polls_list.append(group.drop(columns=['time_diff', 'group_id']))
-            continue
+        # Check if this group represents "resultados acumulados"
+        # Use the first row's stratification, assuming consistency within the group
+        is_resultados_acumulados = False
+        if not group.empty and 'Stratification' in group.columns:
+             # Check case-insensitively and handle potential NaN
+             first_strat = str(group.iloc[0]['Stratification'])
+             if "resultados acumulados" in first_strat.lower():
+                  is_resultados_acumulados = True
+                  print(f"DEBUG LOADER: Group {group_id} (Pollster: {group.iloc[0]['pollster']}) identified as 'resultados acumulados'. Applying disjoint logic.")
 
-        # Calculate average and total sample size for the group
-        # Ensure sample_size is numeric before summing/averaging
-        group['sample_size'] = pd.to_numeric(group['sample_size'], errors='coerce').fillna(0)
-        # Calculate the average sample size for the output N
-        consolidated_sample_size = group['sample_size'].mean()
-        # Calculate the sum of sample sizes (total weight) for weighted averaging party shares
-        total_weight = group['sample_size'].sum()
 
-        if consolidated_sample_size <= 0: # Avoid division by zero or nonsensical consolidation
-             print(f"Warning: Group {group_id} for pollster {group['pollster'].iloc[0]} has zero or negative average sample size ({consolidated_sample_size}). Skipping consolidation for this group.")
-             # Append original polls from the group instead of consolidating
-             consolidated_polls_list.append(group.drop(columns=['time_diff', 'group_id']))
-             continue
+        if is_resultados_acumulados:
+            # --- Apply "Disjoint (using actual dates) + Keep Last" logic ---
+            if len(group) <= 1:
+                # If only one poll, just keep it (remove helper columns)
+                 keep_group = group.drop(columns=['time_diff', 'group_id'], errors='ignore')
+                 consolidated_polls_list.append(keep_group)
+                 continue
 
-        # Calculate weighted average for party columns
-        weighted_avg_parties = {}
-        if total_weight <= 0:
-            # Fallback: simple average if total weight is zero (e.g., all polls in group had 0 sample size)
-            print(f"Warning: Total weight (sum of sample sizes) is zero for group {group_id}. Using simple average for party shares.")
-            for party in party_cols:
-                 if party in group.columns:
-                     group[party] = pd.to_numeric(group[party], errors='coerce').fillna(0)
-                     weighted_avg_parties[party] = group[party].mean()
-                 else:
-                     weighted_avg_parties[party] = 0
+            # Ensure sorted by Fieldwork End (should be already, but safe)
+            group_sorted = group.sort_values(by='Fieldwork End')
+
+            polls_to_keep_indices = []
+            if not group_sorted.empty:
+                # Keep the first poll
+                first_poll_index = group_sorted.index[0]
+                polls_to_keep_indices.append(first_poll_index)
+                last_kept_fieldwork_end_date = group_sorted.loc[first_poll_index, 'Fieldwork End']
+
+                # Iterate through the rest
+                for i in range(1, len(group_sorted)):
+                    current_poll_index = group_sorted.index[i]
+                    current_poll = group_sorted.loc[current_poll_index]
+                    # Ensure dates are valid datetimes before comparison
+                    if pd.notna(current_poll['Fieldwork Start']) and pd.notna(last_kept_fieldwork_end_date):
+                         if current_poll['Fieldwork Start'] > last_kept_fieldwork_end_date:
+                              polls_to_keep_indices.append(current_poll_index)
+                              last_kept_fieldwork_end_date = current_poll['Fieldwork End']
+
+                # Ensure the very last poll of the original sequence is kept
+                last_poll_index = group_sorted.index[-1]
+                if last_poll_index not in polls_to_keep_indices:
+                     # Add if it wasn't already selected (e.g., by being the first or disjoint)
+                     polls_to_keep_indices.append(last_poll_index)
+
+
+            # Select the polls based on kept indices and drop helper columns
+            if polls_to_keep_indices:
+                 # Use .loc to select potentially non-contiguous rows by index
+                 keep_group = group.loc[list(set(polls_to_keep_indices))].drop(columns=['time_diff', 'group_id'], errors='ignore')
+                 consolidated_polls_list.append(keep_group)
+                 print(f"DEBUG LOADER: Kept {len(keep_group)} polls from 'resultados acumulados' group {group_id} after disjoint logic.")
+
         else:
-             # Normal weighted average calculation using total_weight
-             for party in party_cols:
-                 if party in group.columns:
-                     # Ensure party shares are numeric
-                     group[party] = pd.to_numeric(group[party], errors='coerce').fillna(0)
-                     # Weight = sample_size * party_share
-                     weighted_sum = (group[party] * group['sample_size']).sum()
-                     # Use total_weight (sum of sample sizes) as denominator for weighted average
-                     weighted_avg_parties[party] = weighted_sum / total_weight
-                 else:
-                      weighted_avg_parties[party] = 0 # Or handle missing party appropriately
+            # --- Apply Original Averaging Logic ---
+            print(f"DEBUG LOADER: Group {group_id} (Pollster: {group.iloc[0]['pollster']}) NOT 'resultados acumulados'. Applying averaging logic.")
+            if len(group) == 1:
+                # If only one poll in the group, keep it as is (remove helper columns)
+                consolidated_polls_list.append(group.drop(columns=['time_diff', 'group_id'], errors='ignore'))
+                continue
 
-        # Create consolidated row
-        last_poll = group.iloc[-1] # Use data from the last poll in the group as reference
-        consolidated_row_data = {
-            'date': [last_poll['date']], # Use the original 'date' (publication date) of the last poll
-            'pollster': [last_poll['pollster']],
-            'sample_size': [int(round(consolidated_sample_size))], # Use the average sample size (rounded)
-            'Fieldwork Start': [group['Fieldwork Start'].min()], # Use earliest start date in the group
-            'Fieldwork End': [last_poll['Fieldwork End']], # Use latest end date in the group
-            'Stratification': [f"Consolidated Tracking Poll ({len(group)} entries, avg N={int(round(consolidated_sample_size))})"], # Mark as consolidated, show avg N
-            **weighted_avg_parties # Add the weighted party shares
-        }
-        # Add any other non-party, non-grouping columns from the last poll if they exist
-        other_cols = [col for col in df.columns if col not in required_cols and col not in ['Fieldwork Start']]
-        for col in other_cols:
-            consolidated_row_data[col] = [last_poll[col]]
+            # Calculate average and total sample size for the group
+            # Ensure sample_size is numeric before summing/averaging
+            group['sample_size'] = pd.to_numeric(group['sample_size'], errors='coerce').fillna(0)
+            # Calculate the average sample size for the output N
+            consolidated_sample_size = group['sample_size'].mean()
+            # Calculate the sum of sample sizes (total weight) for weighted averaging party shares
+            total_weight = group['sample_size'].sum()
 
-        consolidated_row = pd.DataFrame(consolidated_row_data)
-        consolidated_polls_list.append(consolidated_row)
+            if consolidated_sample_size <= 0: # Avoid division by zero or nonsensical consolidation
+                 print(f"Warning: Group {group_id} for pollster {group['pollster'].iloc[0]} has zero or negative average sample size ({consolidated_sample_size}). Skipping consolidation for this group.")
+                 # Append original polls from the group instead of consolidating
+                 consolidated_polls_list.append(group.drop(columns=['time_diff', 'group_id']))
+                 continue
+
+            # Calculate weighted average for party columns
+            weighted_avg_parties = {}
+            if total_weight <= 0:
+                # Fallback: simple average if total weight is zero (e.g., all polls in group had 0 sample size)
+                print(f"Warning: Total weight (sum of sample sizes) is zero for group {group_id}. Using simple average for party shares.")
+                for party in party_cols:
+                     if party in group.columns:
+                         group[party] = pd.to_numeric(group[party], errors='coerce').fillna(0)
+                         weighted_avg_parties[party] = group[party].mean()
+                     else:
+                         weighted_avg_parties[party] = 0
+            else:
+                 # Normal weighted average calculation using total_weight
+                 for party in party_cols:
+                     if party in group.columns:
+                         # Ensure party shares are numeric
+                         group[party] = pd.to_numeric(group[party], errors='coerce').fillna(0)
+                         # Weight = sample_size * party_share
+                         weighted_sum = (group[party] * group['sample_size']).sum()
+                         # Use total_weight (sum of sample sizes) as denominator for weighted average
+                         weighted_avg_parties[party] = weighted_sum / total_weight
+                     else:
+                          weighted_avg_parties[party] = 0 # Or handle missing party appropriately
+
+            # Create consolidated row
+            last_poll = group.iloc[-1] # Use data from the last poll in the group as reference
+            consolidated_row_data = {
+                'date': [last_poll['date']], # Use the original 'date' (publication date) of the last poll
+                'pollster': [last_poll['pollster']],
+                'sample_size': [int(round(consolidated_sample_size))], # Use the average sample size (rounded)
+                'Fieldwork Start': [group['Fieldwork Start'].min()], # Use earliest start date in the group
+                'Fieldwork End': [last_poll['Fieldwork End']], # Use latest end date in the group
+                'Stratification': [f"Consolidated Tracking Poll ({len(group)} entries, avg N={int(round(consolidated_sample_size))})"], # Mark as consolidated, show avg N
+                **weighted_avg_parties # Add the weighted party shares
+            }
+            # Add any other non-party, non-grouping columns from the last poll if they exist
+            other_cols = [col for col in df.columns if col not in required_cols and col not in ['Fieldwork Start']]
+            for col in other_cols:
+                consolidated_row_data[col] = [last_poll[col]]
+
+            consolidated_row = pd.DataFrame(consolidated_row_data)
+            consolidated_polls_list.append(consolidated_row)
 
     if not consolidated_polls_list:
-         print("No tracking polls were consolidated.")
-         final_df = non_tracking_polls # Should be df if tracking_polls was empty initially
+         print("No tracking polls were consolidated or selected.")
+         # If tracking_polls was empty initially, df should still contain non_tracking_polls
+         # If tracking_polls existed but resulted in empty consolidated_polls_list, 
+         # final_df should just be non_tracking_polls_processed
+         final_df = non_tracking_polls_processed 
     else:
+        # Concatenate all kept/consolidated polls
         consolidated_df = pd.concat(consolidated_polls_list, ignore_index=True)
-        print(f"Consolidated {len(tracking_polls)} tracking polls into {len(consolidated_df)} entries (including {len(consolidated_df[consolidated_df['Stratification'].str.contains('Consolidated')])} consolidated groups).")
+        
+        # Determine how many were processed by each method (approximate)
+        num_processed_avg = len(consolidated_df[consolidated_df['Stratification'].astype(str).str.contains("Consolidated", na=False, case=False)])
+        # Count rows *not* marked consolidated - these are either single-poll groups or disjoint results
+        num_processed_disjoint_or_single = len(consolidated_df) - num_processed_avg 
+        
+        print(f"Processed {len(tracking_polls)} original tracking poll entries into {len(consolidated_df)} entries.")
+        print(f"  - Approx {num_processed_avg} entries are from averaging consolidation.")
+        print(f"  - Approx {num_processed_disjoint_or_single} entries are from disjoint selection or single-poll groups.")
 
-        # Combine non-tracking and consolidated tracking polls
-        # Ensure columns match before concatenating - align columns based on the original df
-        consolidated_df = consolidated_df.reindex(columns=df.columns.drop(['time_diff', 'group_id'], errors='ignore'))
-        non_tracking_polls = non_tracking_polls.reindex(columns=df.columns.drop(['time_diff', 'group_id'], errors='ignore'))
 
-        final_df = pd.concat([non_tracking_polls, consolidated_df], ignore_index=True)
+        # Combine non-tracking and processed tracking polls
+        # Ensure columns match before concatenating - align columns based on the original df structure
+        # Define expected columns based on original df, minus helpers
+        expected_cols = [col for col in df.columns if col not in ['time_diff', 'group_id']]
+        
+        # Reindex both dataframes to ensure they have the same columns in the same order
+        # Fill missing columns introduced by reindexing with appropriate defaults (e.g., NaN or 0) if necessary.
+        # However, simple reindex should align based on original 'df' columns present in 'expected_cols'
+        consolidated_df = consolidated_df.reindex(columns=expected_cols)
+        non_tracking_polls_processed = non_tracking_polls_processed.reindex(columns=expected_cols)
+
+
+        final_df = pd.concat([non_tracking_polls_processed, consolidated_df], ignore_index=True)
 
 
     # Re-sort by date
