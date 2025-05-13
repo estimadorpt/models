@@ -27,6 +27,12 @@ from src.processing.seat_prediction import (
     generate_national_trends_json, 
     generate_house_effect_json
 )
+# Import functions from the comparison script
+from src.analysis.compare_forecasts import (
+    get_run_dirs as get_comparison_run_dirs,
+    perform_comparison,
+    ASSUMED_HDI_PROB as DEFAULT_COMPARISON_HDI_PROB
+)
 
 # # <<< Print loaded class file path >>>
 # print(f"DEBUG MAIN: ElectionsFacade class loaded from: {ElectionsFacade.__file__}")
@@ -729,7 +735,7 @@ def diagnose_model(args):
             return
 
         # <<<--- ADDED DEBUG INSPECTION CODE --- >>>
-        print("\\n--- Debug: Inspecting raw district_sensitivity values ---")
+        print("\n--- Debug: Inspecting raw district_sensitivity values ---")
         if "posterior" in elections_model.trace:
             posterior_data = elections_model.trace.posterior
             variables_to_check = ["district_sensitivity", "district_sensitivity_raw"]
@@ -926,12 +932,10 @@ def predict(args):
                  pred_summary = None # Initialize pred_summary before the try block
                  try: # Start try block for summary calculation
                      pred_summary = az.summary(target_pop_posterior, hdi_prob=hdi_prob, kind='stats', round_to=None)
-                     pred_summary = pred_summary.rename(columns={
-                         'mean': 'Mean', 'sd': 'SD',
-                         f'hdi_{100*(1-hdi_prob)/2:.1f}%': f'HDI {100*(1-hdi_prob)/2:.0f}%',
-                         f'hdi_{100*(1-(1-hdi_prob)/2):.1f}%': f'HDI {100*(1-(1-hdi_prob)/2):.0f}%'
-                     })
-                     output_cols_display = ['Mean', f'HDI {100*(1-hdi_prob)/2:.0f}%', f'HDI {100*(1-(1-hdi_prob)/2):.0f}%']
+                     # Determine HDI column names directly from ArviZ summary for display
+                     hdi_lower_col_name = [col for col in pred_summary.columns if col.startswith('hdi_') and col.endswith('%')][0] # Simplistic assumption
+                     hdi_upper_col_name = [col for col in pred_summary.columns if col.startswith('hdi_') and col.endswith('%')][1] # Simplistic assumption
+                     output_cols_display = ['mean', hdi_lower_col_name, hdi_upper_col_name]
                      output_cols_display = [col for col in output_cols_display if col in pred_summary.columns]
                      if output_cols_display:
                           pred_summary_display = pred_summary[output_cols_display]
@@ -993,6 +997,64 @@ def predict(args):
              print("Warning: Model instance does not have 'predict_latent_trajectory' method. Skipping national trends.")
         # --- End National Trends Data --- 
         
+        # --- Generate National Vote Share Summary for Dynamic GP from National Trend (Option 4) ---
+        if isinstance(model_instance, DynamicGPElectionModel) and national_trend_posterior is not None:
+            print(f"\nGenerating national vote share summary from national trend for {args.prediction_date_mode}...")
+            try:
+                # Determine the target date based on prediction_date_mode
+                target_date_for_summary = None
+                if args.prediction_date_mode == 'election_day':
+                    target_date_for_summary = pd.to_datetime(elections_model.election_date)
+                elif args.prediction_date_mode == 'last_poll':
+                    if not elections_model.dataset.polls.empty:
+                        target_date_for_summary = pd.to_datetime(elections_model.dataset.polls['date'].max())
+                    else:
+                        print("Warning: No polls in dataset, cannot use 'last_poll' for national summary. Falling back to election_day.")
+                        target_date_for_summary = pd.to_datetime(elections_model.election_date)
+                elif args.prediction_date_mode == 'today':
+                    target_date_for_summary = pd.to_datetime(datetime.today().strftime('%Y-%m-%d'))
+                
+                if target_date_for_summary:
+                    # Find the closest calendar time index in national_trend_posterior
+                    available_times = pd.to_datetime(national_trend_posterior.coords['calendar_time'].values)
+                    # Ensure target_date_for_summary is timezone-naive if available_times is
+                    if available_times.tz is None and target_date_for_summary.tz is not None:
+                        target_date_for_summary = target_date_for_summary.tz_localize(None)
+                    
+                    time_diff = np.abs(available_times - target_date_for_summary)
+                    closest_time_idx = time_diff.argmin()
+                    selected_time = available_times[closest_time_idx]
+                    print(f"Selected time for national summary: {selected_time.strftime('%Y-%m-%d')} (closest to target {target_date_for_summary.strftime('%Y-%m-%d')})")
+
+                    # Slice the posterior at this specific time point
+                    national_summary_slice = national_trend_posterior.isel(calendar_time=closest_time_idx)
+                    
+                    # Define hdi_prob for az.summary, consistent with other uses
+                    hdi_prob = 0.94 
+                    # Generate summary using ArviZ
+                    pred_summary = az.summary(national_summary_slice, hdi_prob=hdi_prob, kind='stats', round_to=None)
+                    # Determine HDI column names directly from ArviZ summary for display
+                    hdi_lower_col_name_trend = [col for col in pred_summary.columns if col.startswith('hdi_') and col.endswith('%')][0] # Simplistic
+                    hdi_upper_col_name_trend = [col for col in pred_summary.columns if col.startswith('hdi_') and col.endswith('%')][1] # Simplistic
+                    output_cols_display = ['mean', hdi_lower_col_name_trend, hdi_upper_col_name_trend]
+                    output_cols_display = [col for col in output_cols_display if col in pred_summary.columns]
+                    if output_cols_display:
+                        pred_summary_display = pred_summary[output_cols_display]
+                        pred_summary_pct = pred_summary_display.applymap(lambda x: f"{x*100:.1f}%" if pd.notnull(x) and isinstance(x, numbers.Number) else "N/A")
+                        print(f"\n--- Latent Popularity Summary from National Trend ({args.prediction_date_mode}) ---")
+                        print(pred_summary_pct.to_string())
+                        print("----------------------------------------------------------------")
+                    
+                    output_path = os.path.join(pred_dir, f"vote_share_summary_{args.prediction_date_mode}.csv")
+                    pred_summary.to_csv(output_path)
+                    print(f"National vote share summary from trend saved to {output_path}")
+                else:
+                    print("Warning: Could not determine target_date_for_summary, skipping national summary generation from trend.")
+            except Exception as nat_sum_err:
+                print(f"Warning: Failed to generate national vote share summary from trend: {nat_sum_err}")
+                if args.debug: traceback.print_exc()
+        # --- End Generate National Vote Share Summary for Dynamic GP ---
+
         # --- Generate House Effects JSON --- 
         try:
             # Pass the posterior group and the dataset object
@@ -1086,7 +1148,9 @@ def predict(args):
         # This plot currently relies on national latent popularity
         if elections_model and hasattr(elections_model, 'model_instance') and elections_model.model_instance:
             # Check if the necessary NATIONAL posterior exists before plotting
-            if target_pop_posterior is not None:
+            # Check if target_pop_posterior was defined and is not None
+            target_pop_posterior_exists = 'target_pop_posterior' in locals() and target_pop_posterior is not None
+            if target_pop_posterior_exists:
                 try:
                      print("\nAttempting to generate forecast distribution plot (based on national trend)...")
                      # Ensure pred_dir exists
@@ -1108,9 +1172,164 @@ def predict(args):
 
         print(f"\nPrediction generation step complete. Results saved to {pred_dir}")
 
+        # --- Automatic Forecast Comparison (if not skipped) ---
+        if not args.skip_comparison_in_predict:
+            print("\nAttempting automatic forecast comparison with previous run...")
+            try:
+                # load_dir is the current run's directory in predict mode.
+                # It becomes Run A for the comparison.
+                current_run_dir_from_args = args.load_dir
+                # Resolve current_run_dir to its real path, especially if it's a symlink like 'outputs/latest'
+                if os.path.islink(current_run_dir_from_args):
+                    current_run_dir = os.path.realpath(current_run_dir_from_args)
+                    print(f"Resolved current run symlink {current_run_dir_from_args} to {current_run_dir}")
+                else:
+                    current_run_dir = os.path.abspath(current_run_dir_from_args)
+                    print(f"Using current run path: {current_run_dir}")
+                
+                hdi_prob_for_comparison = DEFAULT_COMPARISON_HDI_PROB # Default
+                loaded_model_config_path = os.path.join(current_run_dir, "model_config.json")
+                if os.path.exists(loaded_model_config_path):
+                    try:
+                        with open(loaded_model_config_path, 'r') as f_cfg:
+                            model_cfg = json.load(f_cfg)
+                            hdi_prob_for_comparison = model_cfg.get('hdi_prob', args.hdi_prob_comparison if hasattr(args, 'hdi_prob_comparison') else DEFAULT_COMPARISON_HDI_PROB)
+                    except Exception as cfg_err:
+                        print(f"Warning: Could not read hdi_prob from {loaded_model_config_path}: {cfg_err}. Using default {hdi_prob_for_comparison}.")
+                
+                base_outputs_dir = os.path.dirname(current_run_dir)
+                if not base_outputs_dir or base_outputs_dir == ".": base_outputs_dir = "outputs/" 
+                
+                run_pattern = r"^(?:static|dynamic_gp)_run_(\d{8}_\d{6})$"
+                potential_runs = []
+                for item in os.listdir(base_outputs_dir):
+                    full_path = os.path.join(base_outputs_dir, item)
+                    if os.path.isdir(full_path) and item != "latest":
+                        match = re.match(run_pattern, item)
+                        if match:
+                            try:
+                                timestamp_str = match.group(1)
+                                dt_obj = datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S")
+                                potential_runs.append({"path": os.path.normpath(full_path), "datetime": dt_obj})
+                            except ValueError:
+                                continue # Skip unparsable directory names
+                potential_runs.sort(key=lambda x: x["datetime"], reverse=True)
+
+                previous_run_dir = None
+                current_run_norm_path = os.path.normpath(current_run_dir)
+                for i, run_info in enumerate(potential_runs):
+                    if run_info["path"] == current_run_norm_path:
+                        if i + 1 < len(potential_runs):
+                            previous_run_dir = potential_runs[i + 1]["path"]
+                            break
+                
+                if previous_run_dir:
+                    comparison_output_file = os.path.join(current_run_dir, "predictions", "forecast_comparison_with_previous.json")
+                    run_forecast_comparison_logic(
+                        run_a_dir=current_run_dir, 
+                        run_b_dir=previous_run_dir,
+                        prediction_mode=args.prediction_date_mode, # Use the mode from the current predict run
+                        hdi_prob=hdi_prob_for_comparison,
+                        output_file=comparison_output_file,
+                        debug_mode=args.debug
+                    )
+                else:
+                    print("No previous run found to compare with. Skipping automatic comparison.")
+
+            except Exception as auto_comp_err:
+                print(f"Error during automatic forecast comparison: {auto_comp_err}")
+                if args.debug:
+                    traceback.print_exc()
+        else:
+            print("Automatic forecast comparison with previous run skipped due to --skip-comparison-in-predict.")
+
+        # --- End Automatic Comparison ---
+
     except Exception as e:
         print(f"Error during prediction mode: {e}")
         if args.debug: 
+            traceback.print_exc()
+
+def run_forecast_comparison_logic(run_a_dir, run_b_dir, prediction_mode, hdi_prob, output_file, debug_mode=False):
+    """Helper function to run and save forecast comparison."""
+    print(f"\n--- Running Forecast Comparison ---")
+    print(f"Run A: {run_a_dir}")
+    if run_b_dir:
+        print(f"Run B: {run_b_dir}")
+    else:
+        print(f"Run B: Not available/specified (single run comparison).")
+    print(f"Prediction Mode: {prediction_mode}")
+    print(f"HDI Probability for column matching: {hdi_prob}")
+    print(f"Output to: {output_file}")
+
+    try:
+        comparison_data = perform_comparison(
+            run_a_dir=run_a_dir,
+            run_b_dir=run_b_dir, # Can be None
+            prediction_mode=prediction_mode,
+            hdi_prob=hdi_prob
+        )
+
+        # Ensure output directory exists
+        output_dir_path = os.path.dirname(output_file)
+        if output_dir_path:
+            os.makedirs(output_dir_path, exist_ok=True)
+
+        with open(output_file, 'w') as f:
+            def default_converter(o):
+                if isinstance(o, (pd.Timestamp, datetime)):
+                    return o.isoformat()
+                if pd.isna(o):
+                    return None
+                if hasattr(o, 'item'): # Handles numpy numbers
+                    return o.item()
+                # Add conversion for numpy float32/64 if not caught by hasattr(o, 'item')
+                if isinstance(o, (np.float32, np.float64)):
+                    return o.item()
+                # Add conversion for numpy int32/64 as well
+                if isinstance(o, (np.int32, np.int64)):
+                    return o.item()
+                raise TypeError(f"Object of type {o.__class__.__name__} is not JSON serializable")
+            json.dump(comparison_data, f, indent=4, default=default_converter)
+        print(f"Forecast comparison results saved to {output_file}")
+        print(f"--- Forecast Comparison Complete ---")
+        return True
+    except (FileNotFoundError, ValueError, IOError) as e:
+        print(f"ERROR during forecast comparison: {e}")
+    except Exception as e:
+        print(f"An unexpected error occurred during forecast comparison: {e}")
+        if debug_mode: # Use passed debug_mode
+            traceback.print_exc()
+    print(f"--- Forecast Comparison Failed or Incomplete ---")
+    return False
+
+def compare_forecasts_mode(args):
+    """Handles the 'compare-forecasts' mode."""
+    print("Starting forecast comparison mode...")
+    try:
+        run_a_dir, run_b_dir = get_comparison_run_dirs(
+            run1_path=args.run1_comparison,
+            run2_path=args.run2_comparison,
+            latest_vs_previous=args.latest_vs_previous_comparison
+        )
+        
+        # If latest_vs_previous was true and no previous run was found, run_b_dir will be None.
+        # run_forecast_comparison_logic handles run_b_dir being None.
+
+        run_forecast_comparison_logic(
+            run_a_dir=run_a_dir,
+            run_b_dir=run_b_dir,
+            prediction_mode=args.prediction_date_mode_comparison,
+            hdi_prob=args.hdi_prob_comparison,
+            output_file=args.output_file_comparison,
+            debug_mode=args.debug # Pass debug status
+        )
+
+    except (FileNotFoundError, ValueError) as e:
+        print(f"Error setting up comparison: {e}")
+    except Exception as e:
+        print(f"An unexpected error occurred in compare_forecasts_mode: {e}")
+        if args.debug:
             traceback.print_exc()
 
 def main(args=None):
@@ -1119,7 +1338,7 @@ def main(args=None):
     # --- Mode Selection ---
     parser.add_argument(
         "--mode",
-        choices=["train", "viz", "visualize-data", "diagnose", "cross-validate", "predict"],
+        choices=["train", "viz", "visualize-data", "diagnose", "cross-validate", "predict", "compare-forecasts"],
         required=True,
         help="Operation mode",
     )
@@ -1240,6 +1459,25 @@ def main(args=None):
         default='election_day',
         help="Specify which date's latent popularity to use for prediction (election day, last poll, or today). Default: election_day"
     )
+    pred_group.add_argument(
+        "--skip-comparison-in-predict",
+        action="store_true",
+        help="If set, skips the automatic forecast comparison with the previous run during predict mode."
+    )
+
+    # --- Forecast Comparison Mode Specific Arguments ---
+    compare_group = parser.add_argument_group('Forecast Comparison Mode Parameters')
+    compare_group.add_argument("--run1-comparison", help="Path to the first model run directory for comparison (Run A).")
+    compare_group.add_argument("--run2-comparison", help="Path to the second model run directory for comparison (Run B).")
+    compare_group.add_argument("--latest-vs-previous-comparison", action="store_true",
+                               help="Compare the 'latest' run with the one immediately preceding it. Used in 'compare-forecasts' mode.")
+    compare_group.add_argument("--prediction-date-mode-comparison", default="election_day",
+                               choices=['election_day', 'last_poll', 'today'],
+                               help="Prediction date mode to use for comparison (default: election_day).")
+    compare_group.add_argument("--output-file-comparison", default="outputs/forecast_comparison.json",
+                               help="Path to save the JSON output file for 'compare-forecasts' mode (default: outputs/forecast_comparison.json).")
+    compare_group.add_argument("--hdi-prob-comparison", type=float, default=DEFAULT_COMPARISON_HDI_PROB,
+                               help=f"HDI probability used for matching columns in comparison CSVs (default: {DEFAULT_COMPARISON_HDI_PROB}).")
 
     # --- Cross-validation Specific Arguments ---
     cv_group = parser.add_argument_group('Cross-validation Parameters')
@@ -1287,6 +1525,8 @@ def main(args=None):
             visualize_data(args)
         elif args.mode == "diagnose":
             diagnose_model(args)
+        elif args.mode == "compare-forecasts":
+            compare_forecasts_mode(args)
             
         end_main_time = time.time()
         print(f"\n'{args.mode}' mode finished in {end_main_time - start_main_time:.2f} seconds.")
