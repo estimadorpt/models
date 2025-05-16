@@ -1117,97 +1117,124 @@ def plot_seat_distribution_histograms(seats_df: pd.DataFrame, output_dir: str,
                                   date_mode: str = "election_day", 
                                   filename="seat_distribution_histograms.png"):
     """
-    Plots histograms for the predicted seat distribution of each party.
-    
+    Generates histograms of predicted seat distributions for each party from simulation samples.
+
     Args:
-        seats_df (pd.DataFrame): DataFrame with posterior samples of predicted seats for each party.
-                                Should contain columns for each party and optionally 'sample_index'.
+        seats_df (pd.DataFrame): DataFrame where each row is a sample of predicted seats.
+                                 Columns should include party names and their seat counts.
+                                 May also include 'diaspora_scenario_applied' and 'original_sample_id'.
         output_dir (str): Directory to save the plot.
-        date_mode (str): The mode used for popularity prediction (e.g., 'election_day', 'last_poll'), 
-                         used for the plot title.
-        filename (str): The name of the file to save the plot as.
+        date_mode (str): Prediction date mode (e.g., 'election_day') for the plot title and filename.
+        filename (str): Custom filename for the plot.
     """
-    fig = None # Initialize fig to None
-    try:
-        os.makedirs(output_dir, exist_ok=True)
-        
-        # Identify party columns (excluding potential sample_index)
-        party_cols = [col for col in seats_df.columns if col != 'sample_index']
-        if not party_cols:
-            print("Warning: No party columns found in seats_df. Cannot plot seat histograms.")
-            return
-            
-        # Sort parties by median seats (descending) for consistent plotting order
-        median_seats = seats_df[party_cols].median().sort_values(ascending=False)
-        ordered_parties = median_seats.index.tolist()
-        
-        # Determine number of rows/cols for subplot grid
-        n_parties = len(ordered_parties)
-        n_cols = 3 
-        n_rows = int(np.ceil(n_parties / n_cols))
-        
-        # Create subplots
-        fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 4 * n_rows), sharey=False)
-        axes = axes.flatten() # Flatten for easy iteration
-        
-        for i, party in enumerate(ordered_parties):
-            if i >= len(axes):
-                break # Avoid index error if more parties than subplots (shouldn't happen with ceil)
-                
-            ax = axes[i]
-            party_seats = seats_df[party]
-            
-            # Determine appropriate bins based on data range
-            min_seats = int(party_seats.min())
-            max_seats = int(party_seats.max())
-            # Use discrete bins for integer seat counts
-            bins = np.arange(min_seats, max_seats + 2) - 0.5 # Center bins on integers
-            
-            # Plot histogram
-            sns.histplot(party_seats, bins=bins, ax=ax, kde=False, color=_get_party_color(party))
-            
-            # Add median line
-            median_val = median_seats[party]
-            ax.axvline(median_val, color='black', linestyle='--', label=f'Median: {median_val:.0f}')
-            
-            ax.set_title(party)
-            ax.set_xlabel("Predicted Seats")
-            ax.set_ylabel("Frequency")
-            ax.legend()
-            ax.grid(axis='y', linestyle='--', alpha=0.7)
-            # Ensure x-axis shows integer ticks if range is reasonable
-            if max_seats - min_seats < 20: # Arbitrary threshold for showing all int ticks
-                 ax.xaxis.set_major_locator(mtick.MaxNLocator(integer=True))
+    if seats_df is None or seats_df.empty:
+        print("Seat distribution data is empty. Skipping histogram plot.")
+        return
 
-        # Hide unused subplots
-        for j in range(i + 1, len(axes)):
-            fig.delaxes(axes[j])
-        
-        # Add overall title
-        fig.suptitle(
-            f'Posterior Distribution of Predicted Seats (Based on {date_mode.replace("_", " ").title()} Popularity)',
-            fontsize=16
-        )
-        plt.tight_layout(rect=[0, 0.03, 1, 0.95]) # Adjust layout for suptitle
-        
-        # Save the figure
-        output_path = os.path.join(output_dir, filename)
-        plt.savefig(output_path)
-        print(f"Saved seat distribution histograms to {output_path}")
-        plt.close(fig)
+    # Identify party columns by excluding known non-party columns
+    # and assuming others are party seat counts (numeric).
+    known_non_party_cols = ['diaspora_scenario_applied', 'original_sample_id', 'sample_index'] # Add any other known non-party cols
+    
+    party_columns = []
+    for col in seats_df.columns:
+        if col not in known_non_party_cols:
+            # Attempt to convert to numeric to see if it's a seat count column
+            try:
+                pd.to_numeric(seats_df[col])
+                party_columns.append(col)
+            except (ValueError, TypeError):
+                # If conversion fails, it's not a numeric party seat column
+                print(f"Debug plot_seat_hist: Column '{col}' is not numeric, excluded from party columns.")
+                pass 
+    
+    # Ensure party_columns are sorted for consistent plot order if desired
+    party_columns = sorted(party_columns)
 
-    except Exception as e:
-        print(f"Error generating seat distribution histograms: {e}")
-        if fig is not None: plt.close(fig)
-        # Optionally create a placeholder error plot
-        try:
-            fig_err, ax_err = plt.subplots()
-            ax_err.text(0.5, 0.5, f"Error generating histograms:\n{e}", ha='center', va='center')
-            output_path = os.path.join(output_dir, filename.replace(".png", "_error.png"))
-            plt.savefig(output_path)
-            plt.close(fig_err)
-        except Exception as inner_e:
-            print(f"Failed to create error placeholder plot: {inner_e}") 
+    if not party_columns:
+        print("No valid party columns found for seat distribution histograms. Skipping plot.")
+        return
+
+    num_parties = len(party_columns)
+    if num_parties == 0:
+        print("No party columns found in seats_df. Skipping seat distribution histograms.")
+        return
+
+    # Determine number of rows and columns for the subplot grid
+    # Aim for a somewhat square layout, but prioritize more columns if many parties
+    if num_parties <= 4:
+        ncols = num_parties
+        nrows = 1
+    elif num_parties <= 8:
+        ncols = 4
+        nrows = 2
+    elif num_parties <= 9: # Special case for 3x3
+        ncols = 3
+        nrows = 3
+    elif num_parties <= 12:
+        ncols = 4
+        nrows = 3
+    else: # Default for more than 12 parties, might need adjustment
+        ncols = 4
+        nrows = (num_parties + ncols - 1) // ncols
+
+    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(5 * ncols, 4 * nrows), sharey=False)
+    axes = np.array(axes).flatten() # Flatten to 1D array for easier iteration
+
+    for i, party in enumerate(party_columns):
+        if i >= len(axes):
+            break # Should not happen if nrows/ncols are calculated correctly
+        ax = axes[i]
+        party_color = _get_party_color(party) # Use helper to get color
+        
+        # Actual seat counts for the party
+        seat_counts = seats_df[party].astype(int)
+        
+        # Calculate mean and median
+        mean_seats = seat_counts.mean()
+        median_seats = seat_counts.median()
+        
+        # Determine a reasonable number of bins
+        # Handle cases where min and max are the same to avoid issues with range
+        min_val = seat_counts.min()
+        max_val = seat_counts.max()
+        if min_val == max_val:
+            bins = np.arange(min_val - 0.5, max_val + 1.5, 1) # Ensure at least one bin
+        else:
+            # Use integer bins from min to max seat count
+            bins = np.arange(min_val -0.5, max_val + 1.5, 1) # Bins centered on integers
+        
+        sns.histplot(seat_counts, bins=bins, kde=False, ax=ax, color=party_color, stat="probability")
+        
+        ax.set_title(f'{party}', fontsize=12)
+        ax.set_xlabel('Number of Seats', fontsize=10)
+        ax.set_ylabel('Probability', fontsize=10)
+        ax.grid(axis='y', linestyle='--', alpha=0.7)
+        
+        # Add vertical lines for mean and median
+        ax.axvline(mean_seats, color='k', linestyle='dashed', linewidth=1, label=f'Mean: {mean_seats:.1f}')
+        ax.axvline(median_seats, color='dimgray', linestyle='dotted', linewidth=1, label=f'Median: {median_seats:.1f}')
+        ax.legend(fontsize=8)
+
+        # Ensure x-axis ticks are integers
+        ax.xaxis.set_major_locator(plt.MaxNLocator(integer=True))
+
+    # Hide any unused subplots
+    for j in range(num_parties, len(axes)):
+        fig.delaxes(axes[j])
+
+    fig.suptitle(f'Predicted Seat Distributions ({date_mode.replace("_", " ").title()})', fontsize=16, y=1.02)
+    plt.tight_layout(rect=[0, 0, 1, 0.98]) # Adjust layout to make space for suptitle
+    
+    # Construct filename
+    # The 'filename' argument passed to the function can be used directly if it's already specific.
+    # If not, we can construct it like before:
+    # filename_to_use = filename if filename != "seat_distribution_histograms.png" else f"seat_histograms_{date_mode}.png"
+    # For now, let's assume the passed filename is the intended one:
+    final_filename = os.path.join(output_dir, filename)
+    
+    plt.savefig(final_filename)
+    print(f"Seat distribution histograms saved to {final_filename}")
+    plt.close(fig)
 
 def plot_poll_bias_forest(elections_model, output_dir):
     """

@@ -25,7 +25,8 @@ from src.processing.seat_prediction import (
     simulate_seat_allocation, 
     generate_district_forecast_json, 
     generate_national_trends_json, 
-    generate_house_effect_json
+    generate_house_effect_json,
+    generate_poll_bias_json
 )
 # Import functions from the comparison script
 from src.analysis.compare_forecasts import (
@@ -1068,6 +1069,19 @@ def predict(args):
             print(f"Warning: Failed to generate house_effects.json: {he_err}")
             if args.debug: traceback.print_exc()
         # --- End House Effects JSON --- 
+
+        # --- Generate Poll Bias JSON --- 
+        try:
+            # Pass the posterior group
+            generate_poll_bias_json(
+                posterior_trace=elections_model.trace.posterior,
+                pred_dir=pred_dir,
+                debug=args.debug
+            )
+        except Exception as pb_err:
+            print(f"Warning: Failed to generate poll_bias.json: {pb_err}")
+            if args.debug: traceback.print_exc()
+        # --- End Poll Bias JSON --- 
 
         # --- Call SEAT PREDICTION SIMULATION --- 
         seats_df = None

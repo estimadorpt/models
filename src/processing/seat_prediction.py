@@ -335,30 +335,86 @@ def simulate_seat_allocation(
 
         # --- Process National Seat Simulation Results (Existing Logic) ---
         if seat_allocation_samples:
-            seats_df = pd.DataFrame(seat_allocation_samples).fillna(0)
-            for party in political_families: # Ensure all parties are columns
+            # --- AUGMENT WITH DIASPORA SCENARIOS ---
+            print("\nAugmenting national seat samples with diaspora scenarios...")
+            diaspora_scenarios_config = [
+                {'name': 'S_2024', 'seats_delta': {'CH': 2, 'PS': 1, 'AD': 1}},
+                {'name': 'S_2022', 'seats_delta': {'PS': 3, 'AD': 1}},
+                {'name': 'S_2019', 'seats_delta': {'PS': 2, 'AD': 2}},
+            ]
+            
+            # Convert list of dicts to DataFrame for augment_seats_with_diaspora_scenarios
+            national_seats_df_temp = pd.DataFrame(seat_allocation_samples).fillna(0)
+            for party in political_families: # Ensure all parties are columns before augmentation
+                if party not in national_seats_df_temp.columns:
+                    national_seats_df_temp[party] = 0
+            
+            # Call the augmentation function (already defined in this file)
+            # Ensure party_names argument is correctly passed using political_families
+            augmented_seats_df = augment_seats_with_diaspora_scenarios(
+                national_seats_df=national_seats_df_temp,
+                diaspora_scenarios=diaspora_scenarios_config,
+                party_names=political_families 
+            )
+            
+            if augmented_seats_df.empty:
+                print("Warning: Augmentation with diaspora scenarios resulted in an empty DataFrame. Proceeding with national only.")
+                seats_df = national_seats_df_temp # Fallback to national only
+            else:
+                print(f"Augmentation complete. Total samples including diaspora scenarios: {len(augmented_seats_df)}")
+                seats_df = augmented_seats_df
+            # --- END AUGMENTATION ---
+
+            # Ensure 'sample_index' is not the actual index if it was added by augmentation logic directly
+            # The augment_seats_with_diaspora_scenarios creates 'original_sample_id'
+            # The main seats_df should be indexed 0 to N-1 for az.summary if not using original_sample_id
+            # If 'sample_index' from national samples is problematic, reset index before summary
+            # seats_df = seats_df.reset_index(drop=True) # Optional: if index issues arise
+
+            for party in political_families: # Ensure all parties are columns in the final seats_df
                 if party not in seats_df.columns: seats_df[party] = 0
-            party_cols = sorted([p for p in political_families if p in seats_df.columns])
-            cols_order = ['sample_index'] + party_cols
-            seats_df = seats_df[cols_order]; seats_df[party_cols] = seats_df[party_cols].astype(int)
-            print("\n--- National Seat Prediction Summary ---")
-            summary_dict = {col: seats_df[col].values for col in party_cols}
-            seat_summary = az.summary(summary_dict, hdi_prob=hdi_prob, kind='stats', round_to=1)
+            
+            # Define party_cols based on political_families to ensure consistent order and inclusion
+            party_cols = [p for p in political_families if p in seats_df.columns] # Use sorted if specific order is needed
+            
+            # Columns to keep for summary and output (excluding utility cols like 'diaspora_scenario_applied' from main stats)
+            cols_for_summary = party_cols 
+            
+            # Ensure 'sample_index' or a similar unique ID per original national draw exists if needed by other parts
+            # 'original_sample_id' is now present from the augmentation.
+            # For az.summary, we typically pass a dictionary of arrays.
+            
+            print("\n--- Total Seat Prediction Summary (including Diaspora Scenarios) ---")
+            # Prepare data for ArviZ summary: dictionary of numpy arrays
+            summary_dict_data = {}
+            for col in cols_for_summary:
+                if col in seats_df:
+                    summary_dict_data[col] = seats_df[col].values.astype(int) # Ensure integer type for seats
+                else:
+                    summary_dict_data[col] = np.zeros(len(seats_df), dtype=int)
+
+            seat_summary = az.summary(summary_dict_data, hdi_prob=hdi_prob, kind='stats', round_to=1)
             print(seat_summary.to_string()); print("-"*60)
             try:
-                file_suffix = f"seat_samples_direct_{prediction_date_mode}.csv"
-                summary_suffix = f"seat_summary_direct_{prediction_date_mode}.csv"
-                seats_samples_path = os.path.join(pred_dir, file_suffix); seats_df.to_csv(seats_samples_path, index=False); print(f"National seat samples saved to {seats_samples_path}")
-                seat_summary_path = os.path.join(pred_dir, summary_suffix); seat_summary.to_csv(seat_summary_path); print(f"National seat summary saved to {seat_summary_path}")
+                # Filenames now reflect that these include diaspora effects
+                file_suffix = f"total_seat_samples_direct_{prediction_date_mode}.csv"
+                summary_suffix = f"total_seat_summary_direct_{prediction_date_mode}.csv"
+                seats_samples_path = os.path.join(pred_dir, file_suffix); seats_df.to_csv(seats_samples_path, index=False); print(f"Total seat samples saved to {seats_samples_path}")
+                seat_summary_path = os.path.join(pred_dir, summary_suffix); seat_summary.to_csv(seat_summary_path); print(f"Total seat summary saved to {seat_summary_path}")
                 seats_df_results = seats_df; seat_summary_results = seat_summary
-                # --- Save seat_forecast_simulations.json (Existing) --- 
+                
+                # --- Save seat_forecast_simulations.json (Now includes diaspora effects and scenario tag) --- 
                 seats_json_path = os.path.join(pred_dir, "seat_forecast_simulations.json")
-                if 'sample_index' in seats_df.columns: seats_json_data = seats_df.drop(columns=['sample_index']).to_dict(orient='records')
-                else: seats_json_data = seats_df.to_dict(orient='records')
+                # Select relevant columns for JSON output (parties + scenario tag)
+                json_output_cols = party_cols + ['diaspora_scenario_applied', 'original_sample_id']
+                # Ensure all selected columns exist in seats_df
+                json_output_cols = [col for col in json_output_cols if col in seats_df.columns]
+                seats_json_data = seats_df[json_output_cols].to_dict(orient='records')
+                
                 with open(seats_json_path, 'w', encoding='utf-8') as f: json.dump(seats_json_data, f, ensure_ascii=False, indent=2)
-                print(f"Seat forecast samples JSON saved to {seats_json_path}")
+                print(f"Seat forecast samples JSON (with diaspora scenarios) saved to {seats_json_path}")
             except Exception as save_err: 
-                 print(f"Warning: Failed to save national seat results: {save_err}")
+                 print(f"Warning: Failed to save total seat results: {save_err}")
         else: 
              print("\nSeat prediction simulation did not produce valid national samples.")
         # --- End National Results Processing ---
@@ -765,3 +821,129 @@ def generate_house_effect_json(
         if debug:
             traceback.print_exc()
         return False
+
+def generate_poll_bias_json(
+    posterior_trace: xr.Dataset, # Expect InferenceData.posterior
+    pred_dir: str,
+    debug: bool = False
+) -> bool:
+    """
+    Generates the poll_bias.json file for the dashboard.
+
+    Args:
+        posterior_trace (xr.Dataset): The posterior group from an InferenceData object,
+                                        containing 'poll_bias'.
+        pred_dir (str): Directory to save the output JSON file.
+        debug (bool): Enable debug printing.
+
+    Returns:
+        bool: True if the file was generated successfully, False otherwise.
+    """
+    print("\nGenerating poll bias JSON...")
+    output_path = os.path.join(pred_dir, "poll_bias.json")
+    
+    variable_name = "poll_bias"
+    party_dim = "parties_complete" # Expected party dimension name
+
+    if variable_name not in posterior_trace:
+        print(f"Error: '{variable_name}' variable not found in posterior trace.")
+        return False
+        
+    poll_bias_da = posterior_trace[variable_name]
+    
+    # Check for expected dimensions
+    # poll_bias typically has ("chain", "draw", "parties_complete")
+    # or after .mean() it would just be ("parties_complete",)
+    # For safety, check if party_dim is present.
+    if party_dim not in poll_bias_da.dims:
+         print(f"Error: '{variable_name}' missing required dimension '{party_dim}'. Found: {poll_bias_da.dims}")
+         return False
+
+    poll_bias_data = []
+    try:
+        # Mean across chain and draw dimensions if they exist
+        dims_to_mean = [dim for dim in ["chain", "draw"] if dim in poll_bias_da.dims]
+        if dims_to_mean:
+            mean_bias_effects = poll_bias_da.mean(dim=dims_to_mean)
+        else:
+            mean_bias_effects = poll_bias_da # Assume already averaged or single value
+
+        party_coords = poll_bias_da[party_dim].values.tolist()
+
+        for party_name in party_coords:
+            try:
+                # Select mean effect using coordinate names
+                mean_effect = mean_bias_effects.sel({party_dim: party_name}).item()
+            except KeyError:
+                if debug: print(f"Warning: Could not find bias for {party_name}. Setting to 0.")
+                mean_effect = 0.0 # Default value if specific party not found
+            except Exception as e:
+                if debug: print(f"Warning: Error selecting bias for {party_name}: {e}. Setting to 0.")
+                mean_effect = 0.0
+
+
+            poll_bias_data.append({
+                "party": party_name,
+                "poll_bias": round(float(mean_effect), 4) # Ensure float before rounding
+            })
+            
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(poll_bias_data, f, ensure_ascii=False, indent=2)
+            
+        print(f"Poll bias JSON saved successfully to {output_path}")
+        return True
+
+    except Exception as e:
+        print(f"Error generating poll bias JSON: {e}")
+        if debug:
+            traceback.print_exc()
+        return False
+
+def augment_seats_with_diaspora_scenarios(
+    national_seats_df: pd.DataFrame,
+    diaspora_scenarios: List[Dict[str, any]],
+    party_names: List[str]
+) -> pd.DataFrame:
+    """
+    Augments national seat prediction samples with diaspora seat scenarios.
+
+    Args:
+        national_seats_df (pd.DataFrame): DataFrame where each row is a sample of national seats
+                                          (columns are party names, index is sample_id or range).
+        diaspora_scenarios (List[Dict[str, any]]): A list of diaspora scenarios.
+                                                  Each scenario is a dictionary with:
+                                                  - 'name': str, name of the scenario (e.g., "S_2024")
+                                                  - 'seats_delta': Dict[str, int], party-to-seat additions.
+        party_names (List[str]): A list of all party codes/names.
+
+    Returns:
+        pd.DataFrame: A new DataFrame containing all national samples augmented by each
+                      diaspora scenario. Includes a column 'diaspora_scenario_applied'.
+    """
+    if national_seats_df is None or national_seats_df.empty:
+        print("Warning: National seats DataFrame is empty. Cannot augment with diaspora scenarios.")
+        return pd.DataFrame()
+
+    augmented_samples_list = []
+
+    for national_sample_index, national_sample_row in national_seats_df.iterrows():
+        for scenario in diaspora_scenarios:
+            augmented_sample = national_sample_row.copy()
+            augmented_sample['original_sample_id'] = national_sample_index 
+            augmented_sample['diaspora_scenario_applied'] = scenario['name']
+            
+            scenario_deltas = scenario['seats_delta']
+            for party in party_names:
+                # Ensure party column exists in the augmented sample (initialized from national_sample_row)
+                if party not in augmented_sample:
+                    augmented_sample[party] = 0 # Should not happen if national_seats_df is well-formed
+                
+                # Add diaspora seats for the current party from the scenario
+                augmented_sample[party] += scenario_deltas.get(party, 0)
+            
+            augmented_samples_list.append(augmented_sample)
+
+    if not augmented_samples_list:
+        return pd.DataFrame()
+        
+    return pd.DataFrame(augmented_samples_list)

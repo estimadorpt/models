@@ -101,29 +101,28 @@ def load_prediction_csv(run_dir, prediction_mode, data_type, hdi_prob=ASSUMED_HD
     """
     arviz_hdi_cols = get_arviz_hdi_column_names(hdi_prob)
     base_file_name = None
-    alternative_file_name = None # For seats from direct district method
 
     if data_type == "vote_share":
         base_file_name = f"vote_share_summary_{prediction_mode}.csv"
     elif data_type == "seat":
-        base_file_name = f"seat_summary_{prediction_mode}.csv"
-        alternative_file_name = f"seat_summary_direct_{prediction_mode}.csv" # Used by DynamicGPModel
+        # Only look for the file that includes diaspora calculations
+        base_file_name = f"total_seat_summary_direct_{prediction_mode}.csv"
     else:
         raise ValueError(f"Invalid data_type: {data_type}. Must be 'vote_share' or 'seat'.")
 
     file_path = os.path.join(run_dir, "predictions", base_file_name)
-    actual_file_used = base_file_name
+    actual_file_used = base_file_name # actual_file_used will always be base_file_name with this simpler logic
 
-    if not os.path.exists(file_path) and alternative_file_name:
-        file_path_alt = os.path.join(run_dir, "predictions", alternative_file_name)
-        if os.path.exists(file_path_alt):
-            file_path = file_path_alt
-            actual_file_used = alternative_file_name
-            print(f"Primary file {base_file_name} not found, using alternative {alternative_file_name}")
-        else:
-            raise FileNotFoundError(f"Prediction file not found: Neither {base_file_name} nor {alternative_file_name} exist in {os.path.join(run_dir, 'predictions')}")
-    elif not os.path.exists(file_path):
-        raise FileNotFoundError(f"Prediction file not found: {file_path}")
+    if not os.path.exists(file_path):
+        # Construct a more specific error message depending on data_type
+        error_message = f"Prediction file not found: {base_file_name} does not exist in {os.path.join(run_dir, 'predictions')}"
+        if data_type == "seat":
+            # Give a hint about the expected filename for seats
+            error_message = (
+                f"Seat prediction summary file not found. Expected: {base_file_name} in "
+                f"{os.path.join(run_dir, 'predictions')}. Ensure seat predictions (including diaspora) were generated."
+            )
+        raise FileNotFoundError(error_message)
 
     print(f"Loading data from: {actual_file_used}")
     try:
