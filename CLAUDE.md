@@ -34,6 +34,35 @@ conda activate models
 pip install -e .
 ```
 
+## Development Workflow
+
+### Branching Strategy
+
+**ALWAYS create a feature branch before making changes:**
+
+```bash
+# Start any new work
+git checkout main
+git pull origin main
+git checkout -b feature/descriptive-name
+
+# Work on your changes
+# ... make changes ...
+
+# When ready to merge
+git push origin feature/descriptive-name
+# Create PR through GitHub
+```
+
+**Branch Naming Convention:**
+- `feature/` - New features or enhancements
+- `fix/` - Bug fixes  
+- `refactor/` - Code refactoring without functionality changes
+- `test/` - Adding or improving tests
+- `docs/` - Documentation updates
+
+**Critical Rule**: Never commit directly to `main`. Always use feature branches and pull requests.
+
 ## Common Commands
 
 ### With Pixi (Recommended)
