@@ -1,0 +1,52 @@
+[project]
+name = "models"
+channels = ["conda-forge"]
+platforms = ["osx-64", "osx-arm64", "linux-64"]
+
+[dependencies]
+# Core dependencies
+python = ">=3.11,<3.14"
+pymc = ">=5.17.0"
+numpy = ">=2.0.0"
+pyarrow = "*"
+ipykernel = "*"
+jupyterlab = "*"
+seaborn = "*"
+numpyro = "*"
+joblib = "*"
+zarr = "<3.0.0"
+pytest = ">=7.0.0"
+pytest-cov = ">=4.0.0"
+
+# Additional scientific computing dependencies
+pandas = "*"
+matplotlib = "*"
+scipy = "*"
+arviz = "*"
+xarray = "*"
+
+# Development dependencies
+black = "*"
+isort = "*"
+
+[tasks]
+test = "pytest"
+test-cov = "pytest --cov=src"
+format = "black src/ tests/"
+lint = "black --check src/ tests/ && isort --check-only src/ tests/"
+notebook = "jupyter lab"
+
+# Model training commands
+train = "python -m src.main --mode train --election-date 2026-01-01 --output-dir outputs --draws 1000 --tune 1000"
+viz = "python -m src.main --mode viz --load-dir outputs/latest"
+diagnose = "python -m src.main --mode diagnose --load-dir outputs/latest"
+predict = "python -m src.main --mode predict --load-dir outputs/latest"
+
+[environments]
+default = { solve-group = "default" }
+dev = { features = ["dev"], solve-group = "default" }
+
+[feature.dev.dependencies]
+# Additional development tools
+pre-commit = "*"
+mypy = "*"
