@@ -29,6 +29,18 @@ This regression test suite captures the current behavior of the Portuguese elect
 - **Data Consistency**: Tests election date assignments and countdown logic
 - **Coordinate Determinism**: Validates factorization consistency
 
+### 🛡️ Data Integrity Validation (9 tests)
+**File**: `tests/regression/test_data_integrity_validation.py`
+
+- **Corruption Detection**: NaN/infinite values, negative votes, date parsing errors
+- **Sample Size Errors**: Vote counts > sample size, invalid percentage ranges
+- **Party Consistency**: Political families match data columns, no unexpected parties
+- **Coalition Integrity**: AD unified representation, government status validation
+- **Coordinate Alignment**: Data pollsters/elections match coordinate systems
+- **Missing Data**: Minimum data requirements, critical attribute validation
+- **Edge Cases**: Date range sanity, numerical stability, correlation analysis
+- **Political Sanity**: Reasonable party correlations, temporal consistency
+
 ### ⚡ Performance Benchmarks (5 tests)
 **File**: `tests/regression/test_performance_benchmarks.py`
 
@@ -106,13 +118,15 @@ When adding new functionality, extend these test suites:
 
 ## Success Metrics
 
-✅ **23/23 tests pass** (100% success rate)  
+✅ **32/32 tests pass** (100% success rate)  
 ✅ **Data pipeline** loads 602 polls + 5 election results correctly  
 ✅ **Coalition handling** preserves AD=PSD+CDS representation  
 ✅ **Geographic aggregation** maintains 20-district structure  
 ✅ **Performance** within established thresholds  
 ✅ **Calculations** mathematically correct (D'Hondt, vote totals, etc.)  
 ✅ **Deterministic behavior** for coordinate generation  
+✅ **Data integrity** comprehensive validation for corruption/errors  
+✅ **Edge case detection** for parsing errors and inconsistencies  
 
 This test suite provides a solid foundation for safe refactoring of the Portuguese election forecasting system while preserving all current functionality and performance characteristics.
 
