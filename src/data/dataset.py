@@ -16,10 +16,18 @@ from src.data.loaders import (
     train_test_split,
     standardize
 )
+from src.data.flexible_loaders import (
+    load_election_results_flexible,
+    GeographicLevelManager
+)
+from typing import Optional, Literal
 
 
 class ElectionDataset:
-    """Class for loading and preparing election data for modeling"""
+    """Class for loading and preparing election data for modeling
+    
+    Supports multi-level geographic aggregation: parish, municipality, district, national
+    """
     
     political_families = [
         'PS', 'CH', 'IL', 'BE', 'CDU', 'PAN', 'L', 'AD'
@@ -50,17 +58,23 @@ class ElectionDataset:
         baseline_timescales: List[int],  # Annual cycle
         election_timescales: List[int],  # Pre-campaign and official campaign periods
         test_cutoff: pd.Timedelta = None,
+        geographic_level: Optional[Literal['parish', 'municipality', 'district', 'national']] = 'district'
     ):
         self.election_date = election_date
         self.baseline_timescales = baseline_timescales
         self.election_timescales = election_timescales
         self.test_cutoff = test_cutoff
+        self.geographic_level = geographic_level or 'district'  # Default to district for backward compatibility
         
         # Create a combined list of all election cycle end dates (historical + target)
         self.all_election_dates = sorted(list(set(self.historical_election_dates + [self.election_date]))) 
         # self.election_dates is kept as historical only for compatibility in some places, clarify usage.
         # Primarily, coordinates should use all_election_dates or historical_election_dates explicitly.
         self.election_dates = self.historical_election_dates.copy() # Retain for existing logic if needed, but prefer specific lists.
+        
+        # Initialize geographic level manager
+        self.geo_manager = GeographicLevelManager(default_level=self.geographic_level)
+        print(f"\nInitialized geographic level manager for {self.geographic_level} level")
         
         # Check if our target election is in the future (not in historical dates)
         is_future_election = election_date not in self.historical_election_dates
@@ -72,11 +86,22 @@ class ElectionDataset:
         
         # Load data
         self.polls = self._load_polls()
-        # self.results_mult = self._load_results(aggregate_national=True) # This was loading national results into results_mult
-        # Load national results explicitly
-        self.results_national = self._load_results(aggregate_national=True)
-        # Load district results separately
-        self.results_mult_district = self._load_results(aggregate_national=False)
+        
+        # Load results using flexible geographic system
+        self.results_national = self._load_results_flexible('national')
+        
+        if self.geographic_level == 'national':
+            # For national level, use same data for both
+            self.results_mult_district = self.results_national.copy()
+        elif self.geographic_level == 'district':
+            # Load district results for backward compatibility
+            self.results_mult_district = self._load_results_flexible('district')
+        else:
+            # For municipality/parish level, load that level
+            self.results_mult_district = self._load_results_flexible(self.geographic_level)
+            
+        # Store the primary results based on geographic level
+        self.results_primary = self._load_results_flexible(self.geographic_level)
         
         # Ensure results_national has a unique DatetimeIndex based on election_date (NEW)
         if not self.results_national.empty:
@@ -113,14 +138,23 @@ class ElectionDataset:
         else:
             print("Warning: results_mult_district is empty.")
         
-        # --- Add District Coordinate ---
-        self.unique_districts = []
-        if not self.results_mult_district.empty and 'Circulo' in self.results_mult_district.columns:
-             self.unique_districts = sorted(self.results_mult_district['Circulo'].unique())
-             print(f"\nLoaded {len(self.unique_districts)} unique districts: {self.unique_districts}")
-        else:
-             print("\nWarning: Could not extract unique districts from results_mult_district.")
-        # --- End Add District Coordinate ---
+        # --- Add Geographic Coordinates based on level ---
+        self.unique_geographic_divisions = []
+        self.unique_districts = []  # Keep for backward compatibility
+        
+        if not self.results_primary.empty:
+            if 'geographic_id' in self.results_primary.columns:
+                self.unique_geographic_divisions = sorted(self.results_primary['geographic_id'].unique())
+                print(f"\nLoaded {len(self.unique_geographic_divisions)} unique {self.geographic_level}-level divisions")
+                
+                # For backward compatibility with district-based code
+                if self.geographic_level == 'district' and 'Circulo' in self.results_mult_district.columns:
+                    self.unique_districts = sorted(self.results_mult_district['Circulo'].unique())
+                elif 'geographic_id' in self.results_primary.columns:
+                    self.unique_districts = self.unique_geographic_divisions.copy()
+            else:
+                print(f"\nWarning: Could not extract geographic divisions from {self.geographic_level} results.")
+        # --- End Add Geographic Coordinates ---
         
         # Convert ALL polls to multinomial format first
         all_polls_mult = self.cast_as_multinomial(self.polls)
@@ -254,8 +288,27 @@ class ElectionDataset:
         return min(filtered_dates, default=pd.NaT)
 
     def _load_results(self, aggregate_national=True):
-        """Load election results"""
+        """Load election results - legacy method for backward compatibility"""
         return load_election_results(self.election_dates, self.political_families, aggregate_national)
+    
+    def _load_results_flexible(self, level: str) -> pd.DataFrame:
+        """Load election results at specified geographic level using flexible system"""
+        print(f"Loading election results at {level} level...")
+        
+        if level == 'national':
+            # For national level, use aggregate_national=True for backward compatibility
+            return load_election_results_flexible(
+                election_dates=self.election_dates,
+                political_families=self.political_families,
+                aggregate_national=True
+            )
+        else:
+            # Use the new flexible aggregation system
+            return load_election_results_flexible(
+                election_dates=self.election_dates,
+                political_families=self.political_families,
+                aggregation_level=level
+            )
 
     def cast_as_multinomial(self, df: pd.DataFrame) -> pd.DataFrame:
         """Convert percentages to counts for multinomial modeling"""
@@ -311,12 +364,17 @@ class ElectionDataset:
     
     def prepare_observed_data(self):
         """Prepare observed poll results for posterior predictive checks"""
+        results_data = self.results_national if self.geographic_level == 'national' else self.results_primary
+        
         observed_data = pd.DataFrame({
-            'date': self.results_national['date'],
-            'pollster': self.results_national['pollster'],
+            'date': results_data['date'] if 'date' in results_data.columns else results_data['election_date'],
+            'pollster': results_data.get('pollster', 'Election Result'),
         })
         for party in self.political_families:
-            observed_data[party] = self.results_national[party] / self.results_national['sample_size']
+            if party in results_data.columns and 'sample_size' in results_data.columns:
+                observed_data[party] = results_data[party] / results_data['sample_size']
+            else:
+                observed_data[party] = 0
         return observed_data
 
     def generate_oos_data(self, posterior):
