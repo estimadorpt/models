@@ -1,0 +1,3093 @@
+territory_code,territory_name,district_code,municipality_code,parish_code,district_name,full_municipality_id,full_parish_id
+LOCAL-010103,Aguada de Cima,01,01,03,Aveiro,01-01,01-01-03
+LOCAL-010109,Fermentelos,01,01,09,Aveiro,01-01,01-01-09
+LOCAL-010112,Macinhata do Vouga,01,01,12,Aveiro,01-01,01-01-12
+LOCAL-010119,Valongo do Vouga,01,01,19,Aveiro,01-01,01-01-19
+LOCAL-010121,Águeda e Borralha,01,01,21,Aveiro,01-01,01-01-21
+LOCAL-010122,Barrô e Aguada de Baixo,01,01,22,Aveiro,01-01,01-01-22
+LOCAL-010123,"Belazaima do Chão, Castanheira do Vouga e Agadão",01,01,23,Aveiro,01-01,01-01-23
+LOCAL-010124,Recardães e Espinhel,01,01,24,Aveiro,01-01,01-01-24
+LOCAL-010125,Travassô e Óis da Ribeira,01,01,25,Aveiro,01-01,01-01-25
+LOCAL-010126,"Trofa, Segadães e Lamas do Vouga",01,01,26,Aveiro,01-01,01-01-26
+LOCAL-010127,Préstimo e Macieira de Alcoba,01,01,27,Aveiro,01-01,01-01-27
+LOCAL-010202,Alquerubim,01,02,02,Aveiro,01-02,01-02-02
+LOCAL-010203,Angeja,01,02,03,Aveiro,01-02,01-02-03
+LOCAL-010204,Branca,01,02,04,Aveiro,01-02,01-02-04
+LOCAL-010206,Ribeira de Fráguas,01,02,06,Aveiro,01-02,01-02-06
+LOCAL-010209,Albergaria-a-Velha e Valmaior,01,02,09,Aveiro,01-02,01-02-09
+LOCAL-010210,São João de Loure e Frossos,01,02,10,Aveiro,01-02,01-02-10
+LOCAL-010304,Avelãs de Caminho,01,03,04,Aveiro,01-03,01-03-04
+LOCAL-010305,Avelãs de Cima,01,03,05,Aveiro,01-03,01-03-05
+LOCAL-010307,Moita,01,03,07,Aveiro,01-03,01-03-07
+LOCAL-010309,Sangalhos,01,03,09,Aveiro,01-03,01-03-09
+LOCAL-010310,São Lourenço do Bairro,01,03,10,Aveiro,01-03,01-03-10
+LOCAL-010312,Vila Nova de Monsarros,01,03,12,Aveiro,01-03,01-03-12
+LOCAL-010313,Vilarinho do Bairro,01,03,13,Aveiro,01-03,01-03-13
+LOCAL-010316,"Amoreira da Gândara, Paredes do Bairro e Ancas",01,03,16,Aveiro,01-03,01-03-16
+LOCAL-010317,Arcos e Mogofores,01,03,17,Aveiro,01-03,01-03-17
+LOCAL-010318,"Tamengos, Aguim e Óis do Bairro",01,03,18,Aveiro,01-03,01-03-18
+LOCAL-010402,Alvarenga,01,04,02,Aveiro,01-04,01-04-02
+LOCAL-010407,Chave,01,04,07,Aveiro,01-04,01-04-07
+LOCAL-010409,Escariz,01,04,09,Aveiro,01-04,01-04-09
+LOCAL-010411,Fermedo,01,04,11,Aveiro,01-04,01-04-11
+LOCAL-010413,Mansores,01,04,13,Aveiro,01-04,01-04-13
+LOCAL-010414,Moldes,01,04,14,Aveiro,01-04,01-04-14
+LOCAL-010415,Rossas,01,04,15,Aveiro,01-04,01-04-15
+LOCAL-010416,Santa Eulália,01,04,16,Aveiro,01-04,01-04-16
+LOCAL-010417,São Miguel do Mato,01,04,17,Aveiro,01-04,01-04-17
+LOCAL-010418,Tropeço,01,04,18,Aveiro,01-04,01-04-18
+LOCAL-010419,Urrô,01,04,19,Aveiro,01-04,01-04-19
+LOCAL-010420,Várzea,01,04,20,Aveiro,01-04,01-04-20
+LOCAL-010421,Arouca e Burgo,01,04,21,Aveiro,01-04,01-04-21
+LOCAL-010422,Cabreiros e Albergaria da Serra,01,04,22,Aveiro,01-04,01-04-22
+LOCAL-010423,Canelas e Espiunca,01,04,23,Aveiro,01-04,01-04-23
+LOCAL-010424,Covelo de Paivó e Janarde,01,04,24,Aveiro,01-04,01-04-24
+LOCAL-010501,Aradas,01,05,01,Aveiro,01-05,01-05-01
+LOCAL-010502,Cacia,01,05,02,Aveiro,01-05,01-05-02
+LOCAL-010505,Esgueira,01,05,05,Aveiro,01-05,01-05-05
+LOCAL-010508,Oliveirinha,01,05,08,Aveiro,01-05,01-05-08
+LOCAL-010510,São Bernardo,01,05,10,Aveiro,01-05,01-05-10
+LOCAL-010511,São Jacinto,01,05,11,Aveiro,01-05,01-05-11
+LOCAL-010513,Santa Joana,01,05,13,Aveiro,01-05,01-05-13
+LOCAL-010515,Eixo e Eirol,01,05,15,Aveiro,01-05,01-05-15
+LOCAL-010516,"Requeixo, Nossa Senhora de Fátima e Nariz",01,05,16,Aveiro,01-05,01-05-16
+LOCAL-010517,Glória e Vera Cruz,01,05,17,Aveiro,01-05,01-05-17
+LOCAL-010602,Fornos,01,06,02,Aveiro,01-06,01-06-02
+LOCAL-010606,Real,01,06,06,Aveiro,01-06,01-06-06
+LOCAL-010607,Santa Maria de Sardoura,01,06,07,Aveiro,01-06,01-06-07
+LOCAL-010608,São Martinho de Sardoura,01,06,08,Aveiro,01-06,01-06-08
+LOCAL-010610,"Raiva, Pedorido e Paraíso",01,06,10,Aveiro,01-06,01-06-10
+LOCAL-010611,Sobrado e Bairros,01,06,11,Aveiro,01-06,01-06-11
+LOCAL-010702,Espinho,01,07,02,Aveiro,01-07,01-07-02
+LOCAL-010704,Paramos,01,07,04,Aveiro,01-07,01-07-04
+LOCAL-010705,Silvalde,01,07,05,Aveiro,01-07,01-07-05
+LOCAL-010706,Anta e Guetim,01,07,06,Aveiro,01-07,01-07-06
+LOCAL-010801,Avanca,01,08,01,Aveiro,01-08,01-08-01
+LOCAL-010805,Pardilhó,01,08,05,Aveiro,01-08,01-08-05
+LOCAL-010806,Salreu,01,08,06,Aveiro,01-08,01-08-06
+LOCAL-010808,Beduído e Veiros,01,08,08,Aveiro,01-08,01-08-08
+LOCAL-010809,Canelas e Fermelã,01,08,09,Aveiro,01-08,01-08-09
+LOCAL-010901,Argoncilhe,01,09,01,Aveiro,01-09,01-09-01
+LOCAL-010902,Arrifana,01,09,02,Aveiro,01-09,01-09-02
+LOCAL-010904,Escapães,01,09,04,Aveiro,01-09,01-09-04
+LOCAL-010907,Fiães,01,09,07,Aveiro,01-09,01-09-07
+LOCAL-010908,Fornos,01,09,08,Aveiro,01-09,01-09-08
+LOCAL-010913,Lourosa,01,09,13,Aveiro,01-09,01-09-13
+LOCAL-010914,Milheirós de Poiares,01,09,14,Aveiro,01-09,01-09-14
+LOCAL-010916,Mozelos,01,09,16,Aveiro,01-09,01-09-16
+LOCAL-010917,Nogueira da Regedoura,01,09,17,Aveiro,01-09,01-09-17
+LOCAL-010918,São Paio de Oleiros,01,09,18,Aveiro,01-09,01-09-18
+LOCAL-010919,Paços de Brandão,01,09,19,Aveiro,01-09,01-09-19
+LOCAL-010921,Rio Meão,01,09,21,Aveiro,01-09,01-09-21
+LOCAL-010922,Romariz,01,09,22,Aveiro,01-09,01-09-22
+LOCAL-010924,Sanguedo,01,09,24,Aveiro,01-09,01-09-24
+LOCAL-010925,Santa Maria de Lamas,01,09,25,Aveiro,01-09,01-09-25
+LOCAL-010926,São João de Ver,01,09,26,Aveiro,01-09,01-09-26
+LOCAL-010932,Caldas de São Jorge e Pigeiros,01,09,32,Aveiro,01-09,01-09-32
+LOCAL-010933,"Canedo, Vale e Vila Maior",01,09,33,Aveiro,01-09,01-09-33
+LOCAL-010934,"Lobão, Gião, Louredo e Guisande",01,09,34,Aveiro,01-09,01-09-34
+LOCAL-010935,"Santa Maria da Feira, Travanca, Sanfins e Espargo",01,09,35,Aveiro,01-09,01-09-35
+LOCAL-010936,São Miguel de Souto e Mosteirô,01,09,36,Aveiro,01-09,01-09-36
+LOCAL-011005,Gafanha da Encarnação,01,10,05,Aveiro,01-10,01-10-05
+LOCAL-011006,Gafanha da Nazaré,01,10,06,Aveiro,01-10,01-10-06
+LOCAL-011007,Gafanha do Carmo,01,10,07,Aveiro,01-10,01-10-07
+LOCAL-011008,Ílhavo (São Salvador),01,10,08,Aveiro,01-10,01-10-08
+LOCAL-011102,Barcouço,01,11,02,Aveiro,01-11,01-11-02
+LOCAL-011103,Casal Comba,01,11,03,Aveiro,01-11,01-11-03
+LOCAL-011104,Luso,01,11,04,Aveiro,01-11,01-11-04
+LOCAL-011106,Pampilhosa,01,11,06,Aveiro,01-11,01-11-06
+LOCAL-011107,Vacariça,01,11,07,Aveiro,01-11,01-11-07
+LOCAL-011109,"Mealhada, Ventosa do Bairro e Antes",01,11,09,Aveiro,01-11,01-11-09
+LOCAL-011201,Bunheiro,01,12,01,Aveiro,01-12,01-12-01
+LOCAL-011202,Monte,01,12,02,Aveiro,01-12,01-12-02
+LOCAL-011203,Murtosa,01,12,03,Aveiro,01-12,01-12-03
+LOCAL-011204,Torreira,01,12,04,Aveiro,01-12,01-12-04
+LOCAL-011301,Carregosa,01,13,01,Aveiro,01-13,01-13-01
+LOCAL-011302,Cesar,01,13,02,Aveiro,01-13,01-13-02
+LOCAL-011303,Fajões,01,13,03,Aveiro,01-13,01-13-03
+LOCAL-011304,Loureiro,01,13,04,Aveiro,01-13,01-13-04
+LOCAL-011305,Macieira de Sarnes,01,13,05,Aveiro,01-13,01-13-05
+LOCAL-011310,Ossela,01,13,10,Aveiro,01-13,01-13-10
+LOCAL-011315,São Martinho da Gândara,01,13,15,Aveiro,01-13,01-13-15
+LOCAL-011318,São Roque,01,13,18,Aveiro,01-13,01-13-18
+LOCAL-011319,Vila de Cucujães,01,13,19,Aveiro,01-13,01-13-19
+LOCAL-011320,Nogueira do Cravo e Pindelo,01,13,20,Aveiro,01-13,01-13-20
+LOCAL-011321,"O. Azeméis, Riba-Ul, Ul, Macinhata Seixa, Madail",01,13,21,Aveiro,01-13,01-13-21
+LOCAL-011322,"Pinheiro da Bemposta, Travanca e Palmaz",01,13,22,Aveiro,01-13,01-13-22
+LOCAL-011403,Oiã,01,14,03,Aveiro,01-14,01-14-03
+LOCAL-011404,Oliveira do Bairro,01,14,04,Aveiro,01-14,01-14-04
+LOCAL-011405,Palhaça,01,14,05,Aveiro,01-14,01-14-05
+LOCAL-011407,"Bustos, Troviscal e Mamarrosa",01,14,07,Aveiro,01-14,01-14-07
+LOCAL-011502,Cortegaça,01,15,02,Aveiro,01-15,01-15-02
+LOCAL-011503,Esmoriz,01,15,03,Aveiro,01-15,01-15-03
+LOCAL-011504,Maceda,01,15,04,Aveiro,01-15,01-15-04
+LOCAL-011507,Válega,01,15,07,Aveiro,01-15,01-15-07
+LOCAL-011509,"Ovar, S.João, Arada e S.Vicente de Pereira Jusã",01,15,09,Aveiro,01-15,01-15-09
+LOCAL-011601,São João da Madeira,01,16,01,Aveiro,01-16,01-16-01
+LOCAL-011702,Couto de Esteves,01,17,02,Aveiro,01-17,01-17-02
+LOCAL-011704,Pessegueiro do Vouga,01,17,04,Aveiro,01-17,01-17-04
+LOCAL-011705,Rocas do Vouga,01,17,05,Aveiro,01-17,01-17-05
+LOCAL-011706,Sever do Vouga,01,17,06,Aveiro,01-17,01-17-06
+LOCAL-011708,Talhadas,01,17,08,Aveiro,01-17,01-17-08
+LOCAL-011710,Cedrim e Paradela,01,17,10,Aveiro,01-17,01-17-10
+LOCAL-011711,Silva Escura e Dornelas,01,17,11,Aveiro,01-17,01-17-11
+LOCAL-011801,Calvão,01,18,01,Aveiro,01-18,01-18-01
+LOCAL-011804,Gafanha da Boa Hora,01,18,04,Aveiro,01-18,01-18-04
+LOCAL-011805,Ouca,01,18,05,Aveiro,01-18,01-18-05
+LOCAL-011807,Sosa,01,18,07,Aveiro,01-18,01-18-07
+LOCAL-011810,Santo André de Vagos,01,18,10,Aveiro,01-18,01-18-10
+LOCAL-011812,Fonte de Angeão e Covão do Lobo,01,18,12,Aveiro,01-18,01-18-12
+LOCAL-011813,Ponte de Vagos e Santa Catarina,01,18,13,Aveiro,01-18,01-18-13
+LOCAL-011814,Vagos e Santo António,01,18,14,Aveiro,01-18,01-18-14
+LOCAL-011901,Arões,01,19,01,Aveiro,01-19,01-19-01
+LOCAL-011902,São Pedro de Castelões,01,19,02,Aveiro,01-19,01-19-02
+LOCAL-011903,Cepelos,01,19,03,Aveiro,01-19,01-19-03
+LOCAL-011905,Junqueira,01,19,05,Aveiro,01-19,01-19-05
+LOCAL-011906,Macieira de Cambra,01,19,06,Aveiro,01-19,01-19-06
+LOCAL-011907,Roge,01,19,07,Aveiro,01-19,01-19-07
+LOCAL-011910,"Vila Chã, Codal e Vila Cova de Perrinho",01,19,10,Aveiro,01-19,01-19-10
+LOCAL-020102,Ervidel,02,01,02,Beja,02-01,02-01-02
+LOCAL-020103,Messejana,02,01,03,Beja,02-01,02-01-03
+LOCAL-020104,São João de Negrilhos,02,01,04,Beja,02-01,02-01-04
+LOCAL-020106,Aljustrel e Rio de Moinhos,02,01,06,Beja,02-01,02-01-06
+LOCAL-020203,Rosário,02,02,03,Beja,02-02,02-02-03
+LOCAL-020205,Santa Cruz,02,02,05,Beja,02-02,02-02-05
+LOCAL-020206,São Barnabé,02,02,06,Beja,02-02,02-02-06
+LOCAL-020208,Aldeia dos Fernandes,02,02,08,Beja,02-02,02-02-08
+LOCAL-020209,Almodôvar e Graça dos Padrões,02,02,09,Beja,02-02,02-02-09
+LOCAL-020210,Santa Clara-a-Nova e Gomes Aires,02,02,10,Beja,02-02,02-02-10
+LOCAL-020301,Alvito,02,03,01,Beja,02-03,02-03-01
+LOCAL-020302,Vila Nova da Baronia,02,03,02,Beja,02-03,02-03-02
+LOCAL-020401,Barrancos,02,04,01,Beja,02-04,02-04-01
+LOCAL-020502,Baleizão,02,05,02,Beja,02-05,02-05-02
+LOCAL-020503,Beringel,02,05,03,Beja,02-05,02-05-03
+LOCAL-020504,Cabeça Gorda,02,05,04,Beja,02-05,02-05-04
+LOCAL-020506,Nossa Senhora das Neves,02,05,06,Beja,02-05,02-05-06
+LOCAL-020510,Santa Clara de Louredo,02,05,10,Beja,02-05,02-05-10
+LOCAL-020516,São Matias,02,05,16,Beja,02-05,02-05-16
+LOCAL-020519,Albernoa e Trindade,02,05,19,Beja,02-05,02-05-19
+LOCAL-020520,Beja (Salvador e Santa Maria da Feira),02,05,20,Beja,02-05,02-05-20
+LOCAL-020521,Beja (Santiago Maior e São João Baptista),02,05,21,Beja,02-05,02-05-21
+LOCAL-020522,Salvada e Quintos,02,05,22,Beja,02-05,02-05-22
+LOCAL-020523,Santa Vitória e Mombeja,02,05,23,Beja,02-05,02-05-23
+LOCAL-020524,Trigaches e São Brissos,02,05,24,Beja,02-05,02-05-24
+LOCAL-020603,Entradas,02,06,03,Beja,02-06,02-06-03
+LOCAL-020604,Santa Bárbara de Padrões,02,06,04,Beja,02-06,02-06-04
+LOCAL-020605,São Marcos da Ataboeira,02,06,05,Beja,02-06,02-06-05
+LOCAL-020606,Castro Verde e Casével,02,06,06,Beja,02-06,02-06-06
+LOCAL-020701,Cuba,02,07,01,Beja,02-07,02-07-01
+LOCAL-020702,Faro do Alentejo,02,07,02,Beja,02-07,02-07-02
+LOCAL-020703,Vila Alva,02,07,03,Beja,02-07,02-07-03
+LOCAL-020704,Vila Ruiva,02,07,04,Beja,02-07,02-07-04
+LOCAL-020803,Figueira dos Cavaleiros,02,08,03,Beja,02-08,02-08-03
+LOCAL-020804,Odivelas,02,08,04,Beja,02-08,02-08-04
+LOCAL-020807,Alfundão e Peroguarda,02,08,07,Beja,02-08,02-08-07
+LOCAL-020808,Ferreira do Alentejo e Canhestros,02,08,08,Beja,02-08,02-08-08
+LOCAL-020901,Alcaria Ruiva,02,09,01,Beja,02-09,02-09-01
+LOCAL-020902,Corte do Pinto,02,09,02,Beja,02-09,02-09-02
+LOCAL-020903,Espírito Santo,02,09,03,Beja,02-09,02-09-03
+LOCAL-020904,Mértola,02,09,04,Beja,02-09,02-09-04
+LOCAL-020905,Santana de Cambas,02,09,05,Beja,02-09,02-09-05
+LOCAL-020906,São João dos Caldeireiros,02,09,06,Beja,02-09,02-09-06
+LOCAL-020910,"S.Mig. Pinheiro, S.Pedro Solis, S.Sebastião Carros",02,09,10,Beja,02-09,02-09-10
+LOCAL-021001,Amareleja,02,10,01,Beja,02-10,02-10-01
+LOCAL-021002,Póvoa de São Miguel,02,10,02,Beja,02-10,02-10-02
+LOCAL-021008,Sobral da Adiça,02,10,08,Beja,02-10,02-10-08
+LOCAL-021009,Santo Agostinho e São João Baptista e Santo Amador,02,10,09,Beja,02-10,02-10-09
+LOCAL-021010,Safara e Santo Aleixo da Restauração,02,10,10,Beja,02-10,02-10-10
+LOCAL-021102,Relíquias,02,11,02,Beja,02-11,02-11-02
+LOCAL-021103,Sabóia,02,11,03,Beja,02-11,02-11-03
+LOCAL-021106,São Luís,02,11,06,Beja,02-11,02-11-06
+LOCAL-021107,São Martinho das Amoreiras,02,11,07,Beja,02-11,02-11-07
+LOCAL-021111,Vila Nova de Milfontes,02,11,11,Beja,02-11,02-11-11
+LOCAL-021115,Luzianes-Gare,02,11,15,Beja,02-11,02-11-15
+LOCAL-021116,Boavista dos Pinheiros,02,11,16,Beja,02-11,02-11-16
+LOCAL-021117,Longueira/Almograve,02,11,17,Beja,02-11,02-11-17
+LOCAL-021118,Colos,02,11,18,Beja,02-11,02-11-18
+LOCAL-021119,Santa Clara-a-Velha,02,11,19,Beja,02-11,02-11-19
+LOCAL-021120,São Salvador e Santa Maria,02,11,20,Beja,02-11,02-11-20
+LOCAL-021121,São Teotónio,02,11,21,Beja,02-11,02-11-21
+LOCAL-021122,Vale de Santiago,02,11,22,Beja,02-11,02-11-22
+LOCAL-021203,Ourique,02,12,03,Beja,02-12,02-12-03
+LOCAL-021206,Santana da Serra,02,12,06,Beja,02-12,02-12-06
+LOCAL-021207,Garvão e Santa Luzia,02,12,07,Beja,02-12,02-12-07
+LOCAL-021208,Panoias e Conceição,02,12,08,Beja,02-12,02-12-08
+LOCAL-021302,Brinches,02,13,02,Beja,02-13,02-13-02
+LOCAL-021303,Pias,02,13,03,Beja,02-13,02-13-03
+LOCAL-021307,Vila Verde de Ficalho,02,13,07,Beja,02-13,02-13-07
+LOCAL-021308,Serpa (Salvador e Santa Maria),02,13,08,Beja,02-13,02-13-08
+LOCAL-021309,Vila Nova de São Bento e Vale de Vargo,02,13,09,Beja,02-13,02-13-09
+LOCAL-021401,Pedrógão,02,14,01,Beja,02-14,02-14-01
+LOCAL-021402,Selmes,02,14,02,Beja,02-14,02-14-02
+LOCAL-021403,Vidigueira,02,14,03,Beja,02-14,02-14-03
+LOCAL-021404,Vila de Frades,02,14,04,Beja,02-14,02-14-04
+LOCAL-030102,Barreiros,03,01,02,Braga,03-01,03-01-02
+LOCAL-030104,Bico,03,01,04,Braga,03-01,03-01-04
+LOCAL-030105,Caires,03,01,05,Braga,03-01,03-01-05
+LOCAL-030107,Carrazedo,03,01,07,Braga,03-01,03-01-07
+LOCAL-030108,Dornelas,03,01,08,Braga,03-01,03-01-08
+LOCAL-030111,Fiscal,03,01,11,Braga,03-01,03-01-11
+LOCAL-030112,Goães,03,01,12,Braga,03-01,03-01-12
+LOCAL-030113,Lago,03,01,13,Braga,03-01,03-01-13
+LOCAL-030118,Rendufe,03,01,18,Braga,03-01,03-01-18
+LOCAL-030119,Bouro (Santa Maria),03,01,19,Braga,03-01,03-01-19
+LOCAL-030120,Bouro (Santa Marta),03,01,20,Braga,03-01,03-01-20
+LOCAL-030125,Amares e Figueiredo,03,01,25,Braga,03-01,03-01-25
+LOCAL-030126,"Caldelas, Sequeiros e Paranhos",03,01,26,Braga,03-01,03-01-26
+LOCAL-030127,"Ferreiros, Prozelo e Besteiros",03,01,27,Braga,03-01,03-01-27
+LOCAL-030128,Torre e Portela,03,01,28,Braga,03-01,03-01-28
+LOCAL-030129,"Vilela, Seramil e Paredes Secas",03,01,29,Braga,03-01,03-01-29
+LOCAL-030201,Abade de Neiva,03,02,01,Braga,03-02,03-02-01
+LOCAL-030202,Aborim,03,02,02,Braga,03-02,03-02-02
+LOCAL-030203,Adães,03,02,03,Braga,03-02,03-02-03
+LOCAL-030205,Airó,03,02,05,Braga,03-02,03-02-05
+LOCAL-030206,Aldreu,03,02,06,Braga,03-02,03-02-06
+LOCAL-030208,Alvelos,03,02,08,Braga,03-02,03-02-08
+LOCAL-030209,Arcozelo,03,02,09,Braga,03-02,03-02-09
+LOCAL-030210,Areias,03,02,10,Braga,03-02,03-02-10
+LOCAL-030212,Balugães,03,02,12,Braga,03-02,03-02-12
+LOCAL-030213,Barcelinhos,03,02,13,Braga,03-02,03-02-13
+LOCAL-030215,Barqueiros,03,02,15,Braga,03-02,03-02-15
+LOCAL-030216,Cambeses,03,02,16,Braga,03-02,03-02-16
+LOCAL-030218,Carapeços,03,02,18,Braga,03-02,03-02-18
+LOCAL-030220,Carvalhal,03,02,20,Braga,03-02,03-02-20
+LOCAL-030221,Carvalhas,03,02,21,Braga,03-02,03-02-21
+LOCAL-030224,Cossourado,03,02,24,Braga,03-02,03-02-24
+LOCAL-030228,Cristelo,03,02,28,Braga,03-02,03-02-28
+LOCAL-030234,Fornelos,03,02,34,Braga,03-02,03-02-34
+LOCAL-030235,Fragoso,03,02,35,Braga,03-02,03-02-35
+LOCAL-030237,Gilmonde,03,02,37,Braga,03-02,03-02-37
+LOCAL-030242,Lama,03,02,42,Braga,03-02,03-02-42
+LOCAL-030243,Lijó,03,02,43,Braga,03-02,03-02-43
+LOCAL-030244,Macieira de Rates,03,02,44,Braga,03-02,03-02-44
+LOCAL-030245,Manhente,03,02,45,Braga,03-02,03-02-45
+LOCAL-030247,Martim,03,02,47,Braga,03-02,03-02-47
+LOCAL-030252,Moure,03,02,52,Braga,03-02,03-02-52
+LOCAL-030254,Oliveira,03,02,54,Braga,03-02,03-02-54
+LOCAL-030255,Palme,03,02,55,Braga,03-02,03-02-55
+LOCAL-030256,Panque,03,02,56,Braga,03-02,03-02-56
+LOCAL-030257,Paradela,03,02,57,Braga,03-02,03-02-57
+LOCAL-030259,Pereira,03,02,59,Braga,03-02,03-02-59
+LOCAL-030260,Perelhal,03,02,60,Braga,03-02,03-02-60
+LOCAL-030261,Pousa,03,02,61,Braga,03-02,03-02-61
+LOCAL-030263,Remelhe,03,02,63,Braga,03-02,03-02-63
+LOCAL-030264,Roriz,03,02,64,Braga,03-02,03-02-64
+LOCAL-030265,Rio Covo (Santa Eugénia),03,02,65,Braga,03-02,03-02-65
+LOCAL-030268,Galegos (Santa Maria),03,02,68,Braga,03-02,03-02-68
+LOCAL-030272,Galegos (São Martinho),03,02,72,Braga,03-02,03-02-72
+LOCAL-030277,Tamel (São Veríssimo),03,02,77,Braga,03-02,03-02-77
+LOCAL-030279,Silva,03,02,79,Braga,03-02,03-02-79
+LOCAL-030282,Ucha,03,02,82,Braga,03-02,03-02-82
+LOCAL-030283,Várzea,03,02,83,Braga,03-02,03-02-83
+LOCAL-030287,Vila Seca,03,02,87,Braga,03-02,03-02-87
+LOCAL-030290,Alheira e Igreja Nova,03,02,90,Braga,03-02,03-02-90
+LOCAL-030291,Alvito (São Pedro e São Martinho) e Couto,03,02,91,Braga,03-02,03-02-91
+LOCAL-030292,Areias de Vilar e Encourados,03,02,92,Braga,03-02,03-02-92
+LOCAL-030293,"Barcelos, Vila Boa e Vila Frescainha",03,02,93,Braga,03-02,03-02-93
+LOCAL-030294,Campo e Tamel (São Pedro Fins),03,02,94,Braga,03-02,03-02-94
+LOCAL-030295,Carreira e Fonte Coberta,03,02,95,Braga,03-02,03-02-95
+LOCAL-030296,"Chorente, Góios, Courel, Pedra Furada e Gueral",03,02,96,Braga,03-02,03-02-96
+LOCAL-030297,Creixomil e Mariz,03,02,97,Braga,03-02,03-02-97
+LOCAL-030298,Durrães e Tregosa,03,02,98,Braga,03-02,03-02-98
+LOCAL-030299,Gamil e Midões,03,02,99,Braga,03-02,03-02-99
+LOCAL-0302FA,"Milhazes, Vilar de Figos e Faria",03,02,FA,Braga,03-02,03-02-FA
+LOCAL-0302FB,Negreiros e Chavão,03,02,FB,Braga,03-02,03-02-FB
+LOCAL-0302FC,Quintiães e Aguiar,03,02,FC,Braga,03-02,03-02-FC
+LOCAL-0302FD,Sequeade e Bastuço (São João e Santo Estevão),03,02,FD,Braga,03-02,03-02-FD
+LOCAL-0302FE,Silveiros e Rio Covo (Santa Eulália),03,02,FE,Braga,03-02,03-02-FE
+LOCAL-0302FF,Tamel (Santa Leocádia) e Vilar do Monte,03,02,FF,Braga,03-02,03-02-FF
+LOCAL-0302FG,"Viatodos, Grimancelos, Minhotães, Monte de Fralães",03,02,FG,Braga,03-02,03-02-FG
+LOCAL-0302FH,Vila Cova e Feitos,03,02,FH,Braga,03-02,03-02-FH
+LOCAL-030301,Adaúfe,03,03,01,Braga,03-03,03-03-01
+LOCAL-030312,Espinho,03,03,12,Braga,03-03,03-03-12
+LOCAL-030313,Esporões,03,03,13,Braga,03-03,03-03-13
+LOCAL-030315,Figueiredo,03,03,15,Braga,03-03,03-03-15
+LOCAL-030319,Gualtar,03,03,19,Braga,03-03,03-03-19
+LOCAL-030322,Lamas,03,03,22,Braga,03-03,03-03-22
+LOCAL-030325,Mire de Tibães,03,03,25,Braga,03-03,03-03-25
+LOCAL-030330,Padim da Graça,03,03,30,Braga,03-03,03-03-30
+LOCAL-030331,Palmeira,03,03,31,Braga,03-03,03-03-31
+LOCAL-030334,Pedralva,03,03,34,Braga,03-03,03-03-34
+LOCAL-030336,Priscos,03,03,36,Braga,03-03,03-03-36
+LOCAL-030338,Ruilhe,03,03,38,Braga,03-03,03-03-38
+LOCAL-030349,Braga (São Vicente),03,03,49,Braga,03-03,03-03-49
+LOCAL-030351,Braga (São Vítor),03,03,51,Braga,03-03,03-03-51
+LOCAL-030354,Sequeira,03,03,54,Braga,03-03,03-03-54
+LOCAL-030355,Sobreposta,03,03,55,Braga,03-03,03-03-55
+LOCAL-030356,Tadim,03,03,56,Braga,03-03,03-03-56
+LOCAL-030357,Tebosa,03,03,57,Braga,03-03,03-03-57
+LOCAL-030363,Arentim e Cunha,03,03,63,Braga,03-03,03-03-63
+LOCAL-030364,"Braga (Maximinos, Sé e Cividade)",03,03,64,Braga,03-03,03-03-64
+LOCAL-030365,Braga (São José de São Lázaro e São João do Souto),03,03,65,Braga,03-03,03-03-65
+LOCAL-030366,Cabreiros e Passos (São Julião),03,03,66,Braga,03-03,03-03-66
+LOCAL-030367,"Celeirós, Aveleda e Vimieiro",03,03,67,Braga,03-03,03-03-67
+LOCAL-030368,Crespos e Pousada,03,03,68,Braga,03-03,03-03-68
+LOCAL-030369,Escudeiros e Penso (Santo Estêvão e São Vicente),03,03,69,Braga,03-03,03-03-69
+LOCAL-030370,Este (São Pedro e São Mamede),03,03,70,Braga,03-03,03-03-70
+LOCAL-030371,Ferreiros e Gondizalves,03,03,71,Braga,03-03,03-03-71
+LOCAL-030372,Guisande e Oliveira (São Pedro),03,03,72,Braga,03-03,03-03-72
+LOCAL-030373,Lomar e Arcos,03,03,73,Braga,03-03,03-03-73
+LOCAL-030374,"Merelim (São Paio), Panoias e Parada de Tibães",03,03,74,Braga,03-03,03-03-74
+LOCAL-030375,Merelim (São Pedro) e Frossos,03,03,75,Braga,03-03,03-03-75
+LOCAL-030376,Morreira e Trandeiras,03,03,76,Braga,03-03,03-03-76
+LOCAL-030377,"Nogueira, Fraião e Lamaçães",03,03,77,Braga,03-03,03-03-77
+LOCAL-030378,Nogueiró e Tenões,03,03,78,Braga,03-03,03-03-78
+LOCAL-030379,"Real, Dume e Semelhe",03,03,79,Braga,03-03,03-03-79
+LOCAL-030380,Santa Lucrécia de Algeriz e Navarra,03,03,80,Braga,03-03,03-03-80
+LOCAL-030381,Vilaça e Fradelos,03,03,81,Braga,03-03,03-03-81
+LOCAL-030401,Abadim,03,04,01,Braga,03-04,03-04-01
+LOCAL-030404,Basto,03,04,04,Braga,03-04,03-04-04
+LOCAL-030405,Bucos,03,04,05,Braga,03-04,03-04-05
+LOCAL-030406,Cabeceiras de Basto,03,04,06,Braga,03-04,03-04-06
+LOCAL-030407,Cavez,03,04,07,Braga,03-04,03-04-07
+LOCAL-030408,Faia,03,04,08,Braga,03-04,03-04-08
+LOCAL-030413,Pedraça,03,04,13,Braga,03-04,03-04-13
+LOCAL-030415,Rio Douro,03,04,15,Braga,03-04,03-04-15
+LOCAL-030418,Alvite e Passos,03,04,18,Braga,03-04,03-04-18
+LOCAL-030419,Arco de Baúlhe e Vila Nune,03,04,19,Braga,03-04,03-04-19
+LOCAL-030420,Gondiães e Vilar de Cunhas,03,04,20,Braga,03-04,03-04-20
+LOCAL-030421,"Refojos de Basto, Outeiro e Painzela",03,04,21,Braga,03-04,03-04-21
+LOCAL-030501,Agilde,03,05,01,Braga,03-05,03-05-01
+LOCAL-030502,Arnóia,03,05,02,Braga,03-05,03-05-02
+LOCAL-030503,Borba de Montanha,03,05,03,Braga,03-05,03-05-03
+LOCAL-030508,Codeçoso,03,05,08,Braga,03-05,03-05-08
+LOCAL-030510,Fervença,03,05,10,Braga,03-05,03-05-10
+LOCAL-030515,Moreira do Castelo,03,05,15,Braga,03-05,03-05-15
+LOCAL-030517,Rego,03,05,17,Braga,03-05,03-05-17
+LOCAL-030518,Ribas,03,05,18,Braga,03-05,03-05-18
+LOCAL-030520,Basto (São Clemente),03,05,20,Braga,03-05,03-05-20
+LOCAL-030521,Vale de Bouro,03,05,21,Braga,03-05,03-05-21
+LOCAL-030523,"Britelo, Gémeos e Ourilhe",03,05,23,Braga,03-05,03-05-23
+LOCAL-030524,Caçarilhe e Infesta,03,05,24,Braga,03-05,03-05-24
+LOCAL-030525,Canedo de Basto e Corgo,03,05,25,Braga,03-05,03-05-25
+LOCAL-030526,Carvalho e Basto (Santa Tecla),03,05,26,Braga,03-05,03-05-26
+LOCAL-030527,"Veade, Gagos e Molares",03,05,27,Braga,03-05,03-05-27
+LOCAL-030601,Antas,03,06,01,Braga,03-06,03-06-01
+LOCAL-030608,Forjães,03,06,08,Braga,03-06,03-06-08
+LOCAL-030610,Gemeses,03,06,10,Braga,03-06,03-06-10
+LOCAL-030615,Vila Chã,03,06,15,Braga,03-06,03-06-15
+LOCAL-030616,Apúlia e Fão,03,06,16,Braga,03-06,03-06-16
+LOCAL-030617,Belinho e Mar,03,06,17,Braga,03-06,03-06-17
+LOCAL-030618,"Esposende, Marinhas e Gandra",03,06,18,Braga,03-06,03-06-18
+LOCAL-030619,Fonte Boa e Rio Tinto,03,06,19,Braga,03-06,03-06-19
+LOCAL-030620,Palmeira de Faro e Curvos,03,06,20,Braga,03-06,03-06-20
+LOCAL-030705,Armil,03,07,05,Braga,03-07,03-07-05
+LOCAL-030708,Estorãos,03,07,08,Braga,03-07,03-07-08
+LOCAL-030709,Fafe,03,07,09,Braga,03-07,03-07-09
+LOCAL-030712,Fornelos,03,07,12,Braga,03-07,03-07-12
+LOCAL-030714,Golães,03,07,14,Braga,03-07,03-07-14
+LOCAL-030716,Medelo,03,07,16,Braga,03-07,03-07-16
+LOCAL-030719,Paços,03,07,19,Braga,03-07,03-07-19
+LOCAL-030722,Quinchães,03,07,22,Braga,03-07,03-07-22
+LOCAL-030723,Regadas,03,07,23,Braga,03-07,03-07-23
+LOCAL-030724,Revelhe,03,07,24,Braga,03-07,03-07-24
+LOCAL-030725,Ribeiros,03,07,25,Braga,03-07,03-07-25
+LOCAL-030726,Arões (Santa Cristina),03,07,26,Braga,03-07,03-07-26
+LOCAL-030728,São Gens,03,07,28,Braga,03-07,03-07-28
+LOCAL-030729,Silvares (São Martinho),03,07,29,Braga,03-07,03-07-29
+LOCAL-030730,Arões (São Romão),03,07,30,Braga,03-07,03-07-30
+LOCAL-030733,Travassós,03,07,33,Braga,03-07,03-07-33
+LOCAL-030736,Vinhós,03,07,36,Braga,03-07,03-07-36
+LOCAL-030737,"Aboim, Felgueiras, Gontim e Pedraído",03,07,37,Braga,03-07,03-07-37
+LOCAL-030738,Agrela e Serafão,03,07,38,Braga,03-07,03-07-38
+LOCAL-030739,Antime e Silvares (São Clemente),03,07,39,Braga,03-07,03-07-39
+LOCAL-030740,"Ardegão, Arnozela e Seidões",03,07,40,Braga,03-07,03-07-40
+LOCAL-030741,Cepães e Fareja,03,07,41,Braga,03-07,03-07-41
+LOCAL-030742,Freitas e Vila Cova,03,07,42,Braga,03-07,03-07-42
+LOCAL-030743,Monte e Queimadela,03,07,43,Braga,03-07,03-07-43
+LOCAL-030744,Moreira do Rei e Várzea Cova,03,07,44,Braga,03-07,03-07-44
+LOCAL-030801,Aldão,03,08,01,Braga,03-08,03-08-01
+LOCAL-030804,Azurém,03,08,04,Braga,03-08,03-08-04
+LOCAL-030806,Barco,03,08,06,Braga,03-08,03-08-06
+LOCAL-030807,Brito,03,08,07,Braga,03-08,03-08-07
+LOCAL-030808,Caldelas,03,08,08,Braga,03-08,03-08-08
+LOCAL-030812,Costa,03,08,12,Braga,03-08,03-08-12
+LOCAL-030813,Creixomil,03,08,13,Braga,03-08,03-08-13
+LOCAL-030815,Fermentões,03,08,15,Braga,03-08,03-08-15
+LOCAL-030820,Gonça,03,08,20,Braga,03-08,03-08-20
+LOCAL-030821,Gondar,03,08,21,Braga,03-08,03-08-21
+LOCAL-030823,Guardizela,03,08,23,Braga,03-08,03-08-23
+LOCAL-030824,Infantas,03,08,24,Braga,03-08,03-08-24
+LOCAL-030827,Longos,03,08,27,Braga,03-08,03-08-27
+LOCAL-030828,Lordelo,03,08,28,Braga,03-08,03-08-28
+LOCAL-030830,Mesão Frio,03,08,30,Braga,03-08,03-08-30
+LOCAL-030831,Moreira de Cónegos,03,08,31,Braga,03-08,03-08-31
+LOCAL-030832,Nespereira,03,08,32,Braga,03-08,03-08-32
+LOCAL-030835,Pencelo,03,08,35,Braga,03-08,03-08-35
+LOCAL-030836,Pinheiro,03,08,36,Braga,03-08,03-08-36
+LOCAL-030837,Polvoreira,03,08,37,Braga,03-08,03-08-37
+LOCAL-030838,Ponte,03,08,38,Braga,03-08,03-08-38
+LOCAL-030840,Ronfe,03,08,40,Braga,03-08,03-08-40
+LOCAL-030842,Prazins (Santa Eufémia),03,08,42,Braga,03-08,03-08-42
+LOCAL-030850,Selho (São Cristóvão),03,08,50,Braga,03-08,03-08-50
+LOCAL-030854,Selho (São Jorge),03,08,54,Braga,03-08,03-08-54
+LOCAL-030857,Candoso (São Martinho),03,08,57,Braga,03-08,03-08-57
+LOCAL-030858,Sande (São Martinho),03,08,58,Braga,03-08,03-08-58
+LOCAL-030865,São Torcato,03,08,65,Braga,03-08,03-08-65
+LOCAL-030866,Serzedelo,03,08,66,Braga,03-08,03-08-66
+LOCAL-030868,Silvares,03,08,68,Braga,03-08,03-08-68
+LOCAL-030871,Urgezes,03,08,71,Braga,03-08,03-08-71
+LOCAL-030875,Abação e Gémeos,03,08,75,Braga,03-08,03-08-75
+LOCAL-030876,"Airão Santa Maria, Airão São João e Vermil",03,08,76,Braga,03-08,03-08-76
+LOCAL-030877,Arosa e Castelões,03,08,77,Braga,03-08,03-08-77
+LOCAL-030878,Atães e Rendufe,03,08,78,Braga,03-08,03-08-78
+LOCAL-030879,Briteiros Santo Estêvão e Donim,03,08,79,Braga,03-08,03-08-79
+LOCAL-030880,Briteiros São Salvador e Briteiros Santa Leocádia,03,08,80,Braga,03-08,03-08-80
+LOCAL-030881,Candoso São Tiago e Mascotelos,03,08,81,Braga,03-08,03-08-81
+LOCAL-030882,Conde e Gandarela,03,08,82,Braga,03-08,03-08-82
+LOCAL-030883,"Leitões, Oleiros e Figueiredo",03,08,83,Braga,03-08,03-08-83
+LOCAL-030884,"Oliveira, São Paio e São Sebastião",03,08,84,Braga,03-08,03-08-84
+LOCAL-030885,Prazins Santo Tirso e Corvite,03,08,85,Braga,03-08,03-08-85
+LOCAL-030886,Sande São Lourenço e Balazar,03,08,86,Braga,03-08,03-08-86
+LOCAL-030887,Sande Vila Nova e Sande São Clemente,03,08,87,Braga,03-08,03-08-87
+LOCAL-030888,Selho São Lourenço e Gominhães,03,08,88,Braga,03-08,03-08-88
+LOCAL-030889,Serzedo e Calvos,03,08,89,Braga,03-08,03-08-89
+LOCAL-030890,"Souto Santa Maria, Souto São Salvador e Gondomar",03,08,90,Braga,03-08,03-08-90
+LOCAL-030891,Tabuadelo e São Faustino,03,08,91,Braga,03-08,03-08-91
+LOCAL-030906,Covelas,03,09,06,Braga,03-09,03-09-06
+LOCAL-030908,Ferreiros,03,09,08,Braga,03-09,03-09-08
+LOCAL-030912,Galegos,03,09,12,Braga,03-09,03-09-12
+LOCAL-030913,Garfe,03,09,13,Braga,03-09,03-09-13
+LOCAL-030914,Geraz do Minho,03,09,14,Braga,03-09,03-09-14
+LOCAL-030915,Lanhoso,03,09,15,Braga,03-09,03-09-15
+LOCAL-030917,Monsul,03,09,17,Braga,03-09,03-09-17
+LOCAL-030919,Póvoa de Lanhoso (Nossa Senhora do Amparo),03,09,19,Braga,03-09,03-09-19
+LOCAL-030921,Rendufinho,03,09,21,Braga,03-09,03-09-21
+LOCAL-030922,Santo Emilião,03,09,22,Braga,03-09,03-09-22
+LOCAL-030923,São João de Rei,03,09,23,Braga,03-09,03-09-23
+LOCAL-030924,Serzedelo,03,09,24,Braga,03-09,03-09-24
+LOCAL-030925,Sobradelo da Goma,03,09,25,Braga,03-09,03-09-25
+LOCAL-030926,Taíde,03,09,26,Braga,03-09,03-09-26
+LOCAL-030927,Travassos,03,09,27,Braga,03-09,03-09-27
+LOCAL-030929,Vilela,03,09,29,Braga,03-09,03-09-29
+LOCAL-030930,Águas Santas e Moure,03,09,30,Braga,03-09,03-09-30
+LOCAL-030931,Calvos e Frades,03,09,31,Braga,03-09,03-09-31
+LOCAL-030932,Campos e Louredo,03,09,32,Braga,03-09,03-09-32
+LOCAL-030933,Esperança e Brunhais,03,09,33,Braga,03-09,03-09-33
+LOCAL-030934,Fonte Arcada e Oliveira,03,09,34,Braga,03-09,03-09-34
+LOCAL-030935,"Verim, Friande e Ajude",03,09,35,Braga,03-09,03-09-35
+LOCAL-031001,Balança,03,10,01,Braga,03-10,03-10-01
+LOCAL-031003,Campo do Gerês,03,10,03,Braga,03-10,03-10-03
+LOCAL-031004,Carvalheira,03,10,04,Braga,03-10,03-10-04
+LOCAL-031008,Covide,03,10,08,Braga,03-10,03-10-08
+LOCAL-031009,Gondoriz,03,10,09,Braga,03-10,03-10-09
+LOCAL-031010,Moimenta,03,10,10,Braga,03-10,03-10-10
+LOCAL-031012,Ribeira,03,10,12,Braga,03-10,03-10-12
+LOCAL-031013,Rio Caldo,03,10,13,Braga,03-10,03-10-13
+LOCAL-031014,Souto,03,10,14,Braga,03-10,03-10-14
+LOCAL-031015,Valdosende,03,10,15,Braga,03-10,03-10-15
+LOCAL-031017,Vilar da Veiga,03,10,17,Braga,03-10,03-10-17
+LOCAL-031018,Chamoim e Vilar,03,10,18,Braga,03-10,03-10-18
+LOCAL-031019,Chorense e Monte,03,10,19,Braga,03-10,03-10-19
+LOCAL-031020,Cibões e Brufe,03,10,20,Braga,03-10,03-10-20
+LOCAL-031105,Cantelães,03,11,05,Braga,03-11,03-11-05
+LOCAL-031107,Eira Vedra,03,11,07,Braga,03-11,03-11-07
+LOCAL-031108,Guilhofrei,03,11,08,Braga,03-11,03-11-08
+LOCAL-031109,Louredo,03,11,09,Braga,03-11,03-11-09
+LOCAL-031110,Mosteiro,03,11,10,Braga,03-11,03-11-10
+LOCAL-031111,Parada de Bouro,03,11,11,Braga,03-11,03-11-11
+LOCAL-031112,Pinheiro,03,11,12,Braga,03-11,03-11-12
+LOCAL-031113,Rossas,03,11,13,Braga,03-11,03-11-13
+LOCAL-031115,Salamonde,03,11,15,Braga,03-11,03-11-15
+LOCAL-031118,Tabuaças,03,11,18,Braga,03-11,03-11-18
+LOCAL-031120,Vieira do Minho,03,11,20,Braga,03-11,03-11-20
+LOCAL-031122,Anissó e Soutelo,03,11,22,Braga,03-11,03-11-22
+LOCAL-031123,Anjos e Vilar do Chão,03,11,23,Braga,03-11,03-11-23
+LOCAL-031124,Caniçada e Soengas,03,11,24,Braga,03-11,03-11-24
+LOCAL-031125,Ruivães e Campos,03,11,25,Braga,03-11,03-11-25
+LOCAL-031126,Ventosa e Cova,03,11,26,Braga,03-11,03-11-26
+LOCAL-031204,Bairro,03,12,04,Braga,03-12,03-12-04
+LOCAL-031206,Brufe,03,12,06,Braga,03-12,03-12-06
+LOCAL-031210,Castelões,03,12,10,Braga,03-12,03-12-10
+LOCAL-031212,Cruz,03,12,12,Braga,03-12,03-12-12
+LOCAL-031213,Delães,03,12,13,Braga,03-12,03-12-13
+LOCAL-031215,Fradelos,03,12,15,Braga,03-12,03-12-15
+LOCAL-031216,Gavião,03,12,16,Braga,03-12,03-12-16
+LOCAL-031219,Joane,03,12,19,Braga,03-12,03-12-19
+LOCAL-031221,Landim,03,12,21,Braga,03-12,03-12-21
+LOCAL-031223,Louro,03,12,23,Braga,03-12,03-12-23
+LOCAL-031224,Lousado,03,12,24,Braga,03-12,03-12-24
+LOCAL-031225,Mogege,03,12,25,Braga,03-12,03-12-25
+LOCAL-031227,Nine,03,12,27,Braga,03-12,03-12-27
+LOCAL-031230,Pedome,03,12,30,Braga,03-12,03-12-30
+LOCAL-031232,Pousada de Saramagos,03,12,32,Braga,03-12,03-12-32
+LOCAL-031233,Requião,03,12,33,Braga,03-12,03-12-33
+LOCAL-031234,Riba de Ave,03,12,34,Braga,03-12,03-12-34
+LOCAL-031235,Ribeirão,03,12,35,Braga,03-12,03-12-35
+LOCAL-031239,Oliveira (Santa Maria),03,12,39,Braga,03-12,03-12-39
+LOCAL-031241,Vale (São Martinho),03,12,41,Braga,03-12,03-12-41
+LOCAL-031242,Oliveira (São Mateus),03,12,42,Braga,03-12,03-12-42
+LOCAL-031247,Vermoim,03,12,47,Braga,03-12,03-12-47
+LOCAL-031249,Vilarinho das Cambas,03,12,49,Braga,03-12,03-12-49
+LOCAL-031250,Antas e Abade de Vermoim,03,12,50,Braga,03-12,03-12-50
+LOCAL-031251,Arnoso (Santa Maria e Santa Eulália) e Sezures,03,12,51,Braga,03-12,03-12-51
+LOCAL-031252,Avidos e Lagoa,03,12,52,Braga,03-12,03-12-52
+LOCAL-031253,Carreira e Bente,03,12,53,Braga,03-12,03-12-53
+LOCAL-031254,Esmeriz e Cabeçudos,03,12,54,Braga,03-12,03-12-54
+LOCAL-031255,"Gondifelos, Cavalões e Outiz",03,12,55,Braga,03-12,03-12-55
+LOCAL-031256,"Lemenhe, Mouquim e Jesufrei",03,12,56,Braga,03-12,03-12-56
+LOCAL-031257,Ruivães e Novais,03,12,57,Braga,03-12,03-12-57
+LOCAL-031258,Seide,03,12,58,Braga,03-12,03-12-58
+LOCAL-031259,"Vale (São Cosme), Telhado e Portela",03,12,59,Braga,03-12,03-12-59
+LOCAL-031260,Vila Nova de Famalicão e Calendário,03,12,60,Braga,03-12,03-12-60
+LOCAL-031304,Atiães,03,13,04,Braga,03-13,03-13-04
+LOCAL-031308,Cabanelas,03,13,08,Braga,03-13,03-13-08
+LOCAL-031309,Cervães,03,13,09,Braga,03-13,03-13-09
+LOCAL-031311,Coucieiro,03,13,11,Braga,03-13,03-13-11
+LOCAL-031313,Dossãos,03,13,13,Braga,03-13,03-13-13
+LOCAL-031316,Freiriz,03,13,16,Braga,03-13,03-13-16
+LOCAL-031317,Gême,03,13,17,Braga,03-13,03-13-17
+LOCAL-031323,Lage,03,13,23,Braga,03-13,03-13-23
+LOCAL-031324,Lanhas,03,13,24,Braga,03-13,03-13-24
+LOCAL-031325,Loureira,03,13,25,Braga,03-13,03-13-25
+LOCAL-031328,Moure,03,13,28,Braga,03-13,03-13-28
+LOCAL-031330,Oleiros,03,13,30,Braga,03-13,03-13-30
+LOCAL-031331,Parada de Gatim,03,13,31,Braga,03-13,03-13-31
+LOCAL-031335,Pico,03,13,35,Braga,03-13,03-13-35
+LOCAL-031337,Ponte,03,13,37,Braga,03-13,03-13-37
+LOCAL-031340,Sabariz,03,13,40,Braga,03-13,03-13-40
+LOCAL-031342,Vila de Prado,03,13,42,Braga,03-13,03-13-42
+LOCAL-031350,Prado (São Miguel),03,13,50,Braga,03-13,03-13-50
+LOCAL-031352,Soutelo,03,13,52,Braga,03-13,03-13-52
+LOCAL-031354,Turiz,03,13,54,Braga,03-13,03-13-54
+LOCAL-031355,Valdreu,03,13,55,Braga,03-13,03-13-55
+LOCAL-031359,Aboim da Nóbrega e Gondomar,03,13,59,Braga,03-13,03-13-59
+LOCAL-031360,Ribeira do Neiva,03,13,60,Braga,03-13,03-13-60
+LOCAL-031361,Carreiras (São Miguel) e Carreiras (Santiago),03,13,61,Braga,03-13,03-13-61
+LOCAL-031362,Escariz (São Mamede) e Escariz (São Martinho),03,13,62,Braga,03-13,03-13-62
+LOCAL-031363,"Esqueiros, Nevogilde e Travassós",03,13,63,Braga,03-13,03-13-63
+LOCAL-031364,Marrancos e Arcozelo,03,13,64,Braga,03-13,03-13-64
+LOCAL-031365,Oriz (Santa Marinha) e Oriz (São Miguel),03,13,65,Braga,03-13,03-13-65
+LOCAL-031366,"Pico de Regalados, Gondiães e Mós",03,13,66,Braga,03-13,03-13-66
+LOCAL-031367,"Sande, Vilarinho, Barros e Gomide",03,13,67,Braga,03-13,03-13-67
+LOCAL-031368,"Valbom (São Pedro), Passô e Valbom (São Martinho)",03,13,68,Braga,03-13,03-13-68
+LOCAL-031369,Vade,03,13,69,Braga,03-13,03-13-69
+LOCAL-031370,Vila Verde e Barbudo,03,13,70,Braga,03-13,03-13-70
+LOCAL-031401,Santa Eulália,03,14,01,Braga,03-14,03-14-01
+LOCAL-031404,Infias,03,14,04,Braga,03-14,03-14-04
+LOCAL-031406,Vizela (Santo Adrião),03,14,06,Braga,03-14,03-14-06
+LOCAL-031408,Caldas de Vizela (São Miguel e São João),03,14,08,Braga,03-14,03-14-08
+LOCAL-031409,Tagilde e Vizela (São Paio),03,14,09,Braga,03-14,03-14-09
+LOCAL-040102,Alfândega da Fé,04,01,02,Bragança,04-01,04-01-02
+LOCAL-040103,Cerejais,04,01,03,Bragança,04-01,04-01-03
+LOCAL-040111,Sambade,04,01,11,Bragança,04-01,04-01-11
+LOCAL-040118,Vilar Chão,04,01,18,Bragança,04-01,04-01-18
+LOCAL-040119,Vilarelhos,04,01,19,Bragança,04-01,04-01-19
+LOCAL-040120,Vilares de Vilariça,04,01,20,Bragança,04-01,04-01-20
+LOCAL-040121,"Agrobom, Saldonha e Vale Pereiro",04,01,21,Bragança,04-01,04-01-21
+LOCAL-040122,"Eucisia, Gouveia e Valverde",04,01,22,Bragança,04-01,04-01-22
+LOCAL-040123,Ferradosa e Sendim da Serra,04,01,23,Bragança,04-01,04-01-23
+LOCAL-040124,Gebelim e Soeima,04,01,24,Bragança,04-01,04-01-24
+LOCAL-040125,Parada e Sendim da Ribeira,04,01,25,Bragança,04-01,04-01-25
+LOCAL-040126,Pombal e Vales,04,01,26,Bragança,04-01,04-01-26
+LOCAL-040201,Alfaião,04,02,01,Bragança,04-02,04-02-01
+LOCAL-040203,Babe,04,02,03,Bragança,04-02,04-02-03
+LOCAL-040204,Baçal,04,02,04,Bragança,04-02,04-02-04
+LOCAL-040206,Carragosa,04,02,06,Bragança,04-02,04-02-06
+LOCAL-040209,Castro de Avelãs,04,02,09,Bragança,04-02,04-02-09
+LOCAL-040210,Coelhoso,04,02,10,Bragança,04-02,04-02-10
+LOCAL-040212,Donai,04,02,12,Bragança,04-02,04-02-12
+LOCAL-040213,Espinhosela,04,02,13,Bragança,04-02,04-02-13
+LOCAL-040215,França,04,02,15,Bragança,04-02,04-02-15
+LOCAL-040216,Gimonde,04,02,16,Bragança,04-02,04-02-16
+LOCAL-040217,Gondesende,04,02,17,Bragança,04-02,04-02-17
+LOCAL-040218,Gostei,04,02,18,Bragança,04-02,04-02-18
+LOCAL-040219,Grijó de Parada,04,02,19,Bragança,04-02,04-02-19
+LOCAL-040221,Macedo do Mato,04,02,21,Bragança,04-02,04-02-21
+LOCAL-040224,Mós,04,02,24,Bragança,04-02,04-02-24
+LOCAL-040225,Nogueira,04,02,25,Bragança,04-02,04-02-25
+LOCAL-040226,Outeiro,04,02,26,Bragança,04-02,04-02-26
+LOCAL-040229,Parâmio,04,02,29,Bragança,04-02,04-02-29
+LOCAL-040230,Pinela,04,02,30,Bragança,04-02,04-02-30
+LOCAL-040232,Quintanilha,04,02,32,Bragança,04-02,04-02-32
+LOCAL-040233,Quintela de Lampaças,04,02,33,Bragança,04-02,04-02-33
+LOCAL-040234,Rabal,04,02,34,Bragança,04-02,04-02-34
+LOCAL-040236,Rebordãos,04,02,36,Bragança,04-02,04-02-36
+LOCAL-040239,Salsas,04,02,39,Bragança,04-02,04-02-39
+LOCAL-040240,Samil,04,02,40,Bragança,04-02,04-02-40
+LOCAL-040241,Santa Comba de Rossas,04,02,41,Bragança,04-02,04-02-41
+LOCAL-040244,São Pedro de Sarracenos,04,02,44,Bragança,04-02,04-02-44
+LOCAL-040246,Sendas,04,02,46,Bragança,04-02,04-02-46
+LOCAL-040247,Serapicos,04,02,47,Bragança,04-02,04-02-47
+LOCAL-040248,Sortes,04,02,48,Bragança,04-02,04-02-48
+LOCAL-040249,Zoio,04,02,49,Bragança,04-02,04-02-49
+LOCAL-040250,Aveleda e Rio de Onor,04,02,50,Bragança,04-02,04-02-50
+LOCAL-040251,Castrelos e Carrazedo,04,02,51,Bragança,04-02,04-02-51
+LOCAL-040252,"Izeda, Calvelhe e Paradinha Nova",04,02,52,Bragança,04-02,04-02-52
+LOCAL-040253,Parada e Faílde,04,02,53,Bragança,04-02,04-02-53
+LOCAL-040254,Rebordainhos e Pombares,04,02,54,Bragança,04-02,04-02-54
+LOCAL-040255,Rio Frio e Milhão,04,02,55,Bragança,04-02,04-02-55
+LOCAL-040256,São Julião de Palácios e Deilão,04,02,56,Bragança,04-02,04-02-56
+LOCAL-040257,"Sé, Santa Maria e Meixedo",04,02,57,Bragança,04-02,04-02-57
+LOCAL-040304,Carrazeda de Ansiães,04,03,04,Bragança,04-03,04-03-04
+LOCAL-040306,Fonte Longa,04,03,06,Bragança,04-03,04-03-06
+LOCAL-040308,Linhares,04,03,08,Bragança,04-03,04-03-08
+LOCAL-040309,Marzagão,04,03,09,Bragança,04-03,04-03-09
+LOCAL-040311,Parambos,04,03,11,Bragança,04-03,04-03-11
+LOCAL-040312,Pereiros,04,03,12,Bragança,04-03,04-03-12
+LOCAL-040313,Pinhal do Norte,04,03,13,Bragança,04-03,04-03-13
+LOCAL-040314,Pombal,04,03,14,Bragança,04-03,04-03-14
+LOCAL-040316,Seixo de Ansiães,04,03,16,Bragança,04-03,04-03-16
+LOCAL-040318,Vilarinho da Castanheira,04,03,18,Bragança,04-03,04-03-18
+LOCAL-040320,Amedo e Zedes,04,03,20,Bragança,04-03,04-03-20
+LOCAL-040321,Belver e Mogo de Malta,04,03,21,Bragança,04-03,04-03-21
+LOCAL-040322,Castanheiro do Norte e Ribalonga,04,03,22,Bragança,04-03,04-03-22
+LOCAL-040323,"Lavandeira, Beira Grande e Selores",04,03,23,Bragança,04-03,04-03-23
+LOCAL-040404,Ligares,04,04,04,Bragança,04-04,04-04-04
+LOCAL-040406,Poiares,04,04,06,Bragança,04-04,04-04-06
+LOCAL-040407,Freixo de Espada à Cinta e Mazouco,04,04,07,Bragança,04-04,04-04-07
+LOCAL-040408,Lagoaça e Fornos,04,04,08,Bragança,04-04,04-04-08
+LOCAL-040502,Amendoeira,04,05,02,Bragança,04-05,04-05-02
+LOCAL-040503,Arcas,04,05,03,Bragança,04-05,04-05-03
+LOCAL-040507,Carrapatas,04,05,07,Bragança,04-05,04-05-07
+LOCAL-040509,Chacim,04,05,09,Bragança,04-05,04-05-09
+LOCAL-040510,Cortiços,04,05,10,Bragança,04-05,04-05-10
+LOCAL-040511,Corujas,04,05,11,Bragança,04-05,04-05-11
+LOCAL-040514,Ferreira,04,05,14,Bragança,04-05,04-05-14
+LOCAL-040515,Grijó,04,05,15,Bragança,04-05,04-05-15
+LOCAL-040516,Lagoa,04,05,16,Bragança,04-05,04-05-16
+LOCAL-040517,Lamalonga,04,05,17,Bragança,04-05,04-05-17
+LOCAL-040518,Lamas,04,05,18,Bragança,04-05,04-05-18
+LOCAL-040519,Lombo,04,05,19,Bragança,04-05,04-05-19
+LOCAL-040520,Macedo de Cavaleiros,04,05,20,Bragança,04-05,04-05-20
+LOCAL-040521,Morais,04,05,21,Bragança,04-05,04-05-21
+LOCAL-040523,Olmos,04,05,23,Bragança,04-05,04-05-23
+LOCAL-040524,Peredo,04,05,24,Bragança,04-05,04-05-24
+LOCAL-040526,Salselas,04,05,26,Bragança,04-05,04-05-26
+LOCAL-040528,Sezulfe,04,05,28,Bragança,04-05,04-05-28
+LOCAL-040530,Talhas,04,05,30,Bragança,04-05,04-05-30
+LOCAL-040532,Vale Benfeito,04,05,32,Bragança,04-05,04-05-32
+LOCAL-040533,Vale da Porca,04,05,33,Bragança,04-05,04-05-33
+LOCAL-040534,Vale de Prados,04,05,34,Bragança,04-05,04-05-34
+LOCAL-040536,Vilarinho de Agrochão,04,05,36,Bragança,04-05,04-05-36
+LOCAL-040538,Vinhas,04,05,38,Bragança,04-05,04-05-38
+LOCAL-040539,Ala e Vilarinho do Monte,04,05,39,Bragança,04-05,04-05-39
+LOCAL-040540,Bornes e Burga,04,05,40,Bragança,04-05,04-05-40
+LOCAL-040541,Castelãos e Vilar do Monte,04,05,41,Bragança,04-05,04-05-41
+LOCAL-040542,"Espadanedo, Edroso, Murçós e Soutelo Mourisco",04,05,42,Bragança,04-05,04-05-42
+LOCAL-040543,Podence e Santa Combinha,04,05,43,Bragança,04-05,04-05-43
+LOCAL-040544,Talhinhas e Bagueixe,04,05,44,Bragança,04-05,04-05-44
+LOCAL-040604,Duas Igrejas,04,06,04,Bragança,04-06,04-06-04
+LOCAL-040605,Genísio,04,06,05,Bragança,04-06,04-06-05
+LOCAL-040607,Malhadas,04,06,07,Bragança,04-06,04-06-07
+LOCAL-040608,Miranda do Douro,04,06,08,Bragança,04-06,04-06-08
+LOCAL-040609,Palaçoulo,04,06,09,Bragança,04-06,04-06-09
+LOCAL-040611,Picote,04,06,11,Bragança,04-06,04-06-11
+LOCAL-040612,Póvoa,04,06,12,Bragança,04-06,04-06-12
+LOCAL-040613,São Martinho de Angueira,04,06,13,Bragança,04-06,04-06-13
+LOCAL-040616,Vila Chã de Braciosa,04,06,16,Bragança,04-06,04-06-16
+LOCAL-040618,Constantim e Cicouro,04,06,18,Bragança,04-06,04-06-18
+LOCAL-040619,Ifanes e Paradela,04,06,19,Bragança,04-06,04-06-19
+LOCAL-040620,Sendim e Atenor,04,06,20,Bragança,04-06,04-06-20
+LOCAL-040621,Silva e Águas Vivas,04,06,21,Bragança,04-06,04-06-21
+LOCAL-040701,Abambres,04,07,01,Bragança,04-07,04-07-01
+LOCAL-040702,Abreiro,04,07,02,Bragança,04-07,04-07-02
+LOCAL-040703,Aguieiras,04,07,03,Bragança,04-07,04-07-03
+LOCAL-040704,Alvites,04,07,04,Bragança,04-07,04-07-04
+LOCAL-040708,Bouça,04,07,08,Bragança,04-07,04-07-08
+LOCAL-040709,Cabanelas,04,07,09,Bragança,04-07,04-07-09
+LOCAL-040710,Caravelas,04,07,10,Bragança,04-07,04-07-10
+LOCAL-040711,Carvalhais,04,07,11,Bragança,04-07,04-07-11
+LOCAL-040712,Cedães,04,07,12,Bragança,04-07,04-07-12
+LOCAL-040713,Cobro,04,07,13,Bragança,04-07,04-07-13
+LOCAL-040714,Fradizela,04,07,14,Bragança,04-07,04-07-14
+LOCAL-040716,Frechas,04,07,16,Bragança,04-07,04-07-16
+LOCAL-040718,Lamas de Orelhão,04,07,18,Bragança,04-07,04-07-18
+LOCAL-040720,Mascarenhas,04,07,20,Bragança,04-07,04-07-20
+LOCAL-040721,Mirandela,04,07,21,Bragança,04-07,04-07-21
+LOCAL-040722,Múrias,04,07,22,Bragança,04-07,04-07-22
+LOCAL-040724,Passos,04,07,24,Bragança,04-07,04-07-24
+LOCAL-040727,São Pedro Velho,04,07,27,Bragança,04-07,04-07-27
+LOCAL-040728,São Salvador,04,07,28,Bragança,04-07,04-07-28
+LOCAL-040729,Suçães,04,07,29,Bragança,04-07,04-07-29
+LOCAL-040730,Torre de Dona Chama,04,07,30,Bragança,04-07,04-07-30
+LOCAL-040731,Vale de Asnes,04,07,31,Bragança,04-07,04-07-31
+LOCAL-040732,Vale de Gouvinhas,04,07,32,Bragança,04-07,04-07-32
+LOCAL-040733,Vale de Salgueiro,04,07,33,Bragança,04-07,04-07-33
+LOCAL-040734,Vale de Telhas,04,07,34,Bragança,04-07,04-07-34
+LOCAL-040738,Avantos e Romeu,04,07,38,Bragança,04-07,04-07-38
+LOCAL-040739,"Avidagos, Navalho e Pereira",04,07,39,Bragança,04-07,04-07-39
+LOCAL-040740,"Barcel, Marmelos e Valverde da Gestosa",04,07,40,Bragança,04-07,04-07-40
+LOCAL-040741,Franco e Vila Boa,04,07,41,Bragança,04-07,04-07-41
+LOCAL-040742,Freixeda e Vila Verde,04,07,42,Bragança,04-07,04-07-42
+LOCAL-040801,Azinhoso,04,08,01,Bragança,04-08,04-08-01
+LOCAL-040802,Bemposta,04,08,02,Bragança,04-08,04-08-02
+LOCAL-040803,Bruçó,04,08,03,Bragança,04-08,04-08-03
+LOCAL-040804,Brunhoso,04,08,04,Bragança,04-08,04-08-04
+LOCAL-040807,Castelo Branco,04,08,07,Bragança,04-08,04-08-07
+LOCAL-040808,Castro Vicente,04,08,08,Bragança,04-08,04-08-08
+LOCAL-040809,Meirinhos,04,08,09,Bragança,04-08,04-08-09
+LOCAL-040811,Paradela,04,08,11,Bragança,04-08,04-08-11
+LOCAL-040812,Penas Roias,04,08,12,Bragança,04-08,04-08-12
+LOCAL-040813,Peredo da Bemposta,04,08,13,Bragança,04-08,04-08-13
+LOCAL-040815,Saldanha,04,08,15,Bragança,04-08,04-08-15
+LOCAL-040817,São Martinho do Peso,04,08,17,Bragança,04-08,04-08-17
+LOCAL-040819,Tó,04,08,19,Bragança,04-08,04-08-19
+LOCAL-040820,Travanca,04,08,20,Bragança,04-08,04-08-20
+LOCAL-040821,Urrós,04,08,21,Bragança,04-08,04-08-21
+LOCAL-040822,Vale da Madre,04,08,22,Bragança,04-08,04-08-22
+LOCAL-040826,Vila de Ala,04,08,26,Bragança,04-08,04-08-26
+LOCAL-040829,"Brunhozinho, Castanheira e Sanhoane",04,08,29,Bragança,04-08,04-08-29
+LOCAL-040830,"Mogadouro, Valverde, Vale de Porco e Vilar de Rei",04,08,30,Bragança,04-08,04-08-30
+LOCAL-040831,Remondes e Soutelo,04,08,31,Bragança,04-08,04-08-31
+LOCAL-040832,Vilarinho dos Galegos e Ventozelo,04,08,32,Bragança,04-08,04-08-32
+LOCAL-040901,Açoreira,04,09,01,Bragança,04-09,04-09-01
+LOCAL-040903,Cabeça Boa,04,09,03,Bragança,04-09,04-09-03
+LOCAL-040905,Carviçais,04,09,05,Bragança,04-09,04-09-05
+LOCAL-040906,Castedo,04,09,06,Bragança,04-09,04-09-06
+LOCAL-040909,Horta da Vilariça,04,09,09,Bragança,04-09,04-09-09
+LOCAL-040910,Larinho,04,09,10,Bragança,04-09,04-09-10
+LOCAL-040911,Lousa,04,09,11,Bragança,04-09,04-09-11
+LOCAL-040913,Mós,04,09,13,Bragança,04-09,04-09-13
+LOCAL-040916,Torre de Moncorvo,04,09,16,Bragança,04-09,04-09-16
+LOCAL-040918,Adeganha e Cardanha,04,09,18,Bragança,04-09,04-09-18
+LOCAL-040919,Felgar e Souto da Velha,04,09,19,Bragança,04-09,04-09-19
+LOCAL-040920,Felgueiras e Maçores,04,09,20,Bragança,04-09,04-09-20
+LOCAL-040921,Urros e Peredo dos Castelhanos,04,09,21,Bragança,04-09,04-09-21
+LOCAL-041002,Benlhevai,04,10,02,Bragança,04-10,04-10-02
+LOCAL-041005,Freixiel,04,10,05,Bragança,04-10,04-10-05
+LOCAL-041009,Roios,04,10,09,Bragança,04-10,04-10-09
+LOCAL-041010,Samões,04,10,10,Bragança,04-10,04-10-10
+LOCAL-041011,Sampaio,04,10,11,Bragança,04-10,04-10-11
+LOCAL-041012,Santa Comba de Vilariça,04,10,12,Bragança,04-10,04-10-12
+LOCAL-041013,Seixo de Manhoses,04,10,13,Bragança,04-10,04-10-13
+LOCAL-041014,Trindade,04,10,14,Bragança,04-10,04-10-14
+LOCAL-041015,Vale Frechoso,04,10,15,Bragança,04-10,04-10-15
+LOCAL-041020,Assares e Lodões,04,10,20,Bragança,04-10,04-10-20
+LOCAL-041021,Candoso e Carvalho de Egas,04,10,21,Bragança,04-10,04-10-21
+LOCAL-041022,Valtorno e Mourão,04,10,22,Bragança,04-10,04-10-22
+LOCAL-041023,Vila Flor e Nabo,04,10,23,Bragança,04-10,04-10-23
+LOCAL-041024,Vilas Boas e Vilarinho das Azenhas,04,10,24,Bragança,04-10,04-10-24
+LOCAL-041103,Argozelo,04,11,03,Bragança,04-11,04-11-03
+LOCAL-041107,Carção,04,11,07,Bragança,04-11,04-11-07
+LOCAL-041108,Matela,04,11,08,Bragança,04-11,04-11-08
+LOCAL-041109,Pinelo,04,11,09,Bragança,04-11,04-11-09
+LOCAL-041110,Santulhão,04,11,10,Bragança,04-11,04-11-10
+LOCAL-041113,Vilar Seco,04,11,13,Bragança,04-11,04-11-13
+LOCAL-041114,Vimioso,04,11,14,Bragança,04-11,04-11-14
+LOCAL-041115,"Algoso, Campo de Víboras e Uva",04,11,15,Bragança,04-11,04-11-15
+LOCAL-041116,Caçarelhos e Angueira,04,11,16,Bragança,04-11,04-11-16
+LOCAL-041117,Vale de Frades e Avelanoso,04,11,17,Bragança,04-11,04-11-17
+LOCAL-041201,Agrochão,04,12,01,Bragança,04-12,04-12-01
+LOCAL-041203,Candedo,04,12,03,Bragança,04-12,04-12-03
+LOCAL-041204,Celas,04,12,04,Bragança,04-12,04-12-04
+LOCAL-041206,Edral,04,12,06,Bragança,04-12,04-12-06
+LOCAL-041207,Edrosa,04,12,07,Bragança,04-12,04-12-07
+LOCAL-041208,Ervedosa,04,12,08,Bragança,04-12,04-12-08
+LOCAL-041215,Paçó,04,12,15,Bragança,04-12,04-12-15
+LOCAL-041216,Penhas Juntas,04,12,16,Bragança,04-12,04-12-16
+LOCAL-041219,Rebordelo,04,12,19,Bragança,04-12,04-12-19
+LOCAL-041221,Santalha,04,12,21,Bragança,04-12,04-12-21
+LOCAL-041226,Tuizelo,04,12,26,Bragança,04-12,04-12-26
+LOCAL-041227,Vale das Fontes,04,12,27,Bragança,04-12,04-12-27
+LOCAL-041229,Vila Boa de Ousilhão,04,12,29,Bragança,04-12,04-12-29
+LOCAL-041230,Vila Verde,04,12,30,Bragança,04-12,04-12-30
+LOCAL-041232,Vilar de Ossos,04,12,32,Bragança,04-12,04-12-32
+LOCAL-041233,Vilar de Peregrinos,04,12,33,Bragança,04-12,04-12-33
+LOCAL-041234,Vilar Seco de Lomba,04,12,34,Bragança,04-12,04-12-34
+LOCAL-041235,Vinhais,04,12,35,Bragança,04-12,04-12-35
+LOCAL-041236,Curopos e Vale de Janeiro,04,12,36,Bragança,04-12,04-12-36
+LOCAL-041237,Moimenta e Montouto,04,12,37,Bragança,04-12,04-12-37
+LOCAL-041238,Nunes e Ousilhão,04,12,38,Bragança,04-12,04-12-38
+LOCAL-041239,Quirás e Pinheiro Novo,04,12,39,Bragança,04-12,04-12-39
+LOCAL-041240,Sobreiro de Baixo e Alvaredos,04,12,40,Bragança,04-12,04-12-40
+LOCAL-041241,"Soeira, Fresulfe e Mofreita",04,12,41,Bragança,04-12,04-12-41
+LOCAL-041242,Travanca e Santa Cruz,04,12,42,Bragança,04-12,04-12-42
+LOCAL-041243,Vilar de Lomba e São Jomil,04,12,43,Bragança,04-12,04-12-43
+LOCAL-050102,Caria,05,01,02,Castelo Branco,05-01,05-01-02
+LOCAL-050104,Inguias,05,01,04,Castelo Branco,05-01,05-01-04
+LOCAL-050105,Maçainhas,05,01,05,Castelo Branco,05-01,05-01-05
+LOCAL-050106,Belmonte e Colmeal da Torre,05,01,06,Castelo Branco,05-01,05-01-06
+LOCAL-050201,Alcains,05,02,01,Castelo Branco,05-02,05-02-01
+LOCAL-050202,Almaceda,05,02,02,Castelo Branco,05-02,05-02-02
+LOCAL-050203,Benquerenças,05,02,03,Castelo Branco,05-02,05-02-03
+LOCAL-050205,Castelo Branco,05,02,05,Castelo Branco,05-02,05-02-05
+LOCAL-050211,Lardosa,05,02,11,Castelo Branco,05-02,05-02-11
+LOCAL-050212,Louriçal do Campo,05,02,12,Castelo Branco,05-02,05-02-12
+LOCAL-050214,Malpica do Tejo,05,02,14,Castelo Branco,05-02,05-02-14
+LOCAL-050216,Monforte da Beira,05,02,16,Castelo Branco,05-02,05-02-16
+LOCAL-050220,Salgueiro do Campo,05,02,20,Castelo Branco,05-02,05-02-20
+LOCAL-050221,Santo André das Tojeiras,05,02,21,Castelo Branco,05-02,05-02-21
+LOCAL-050222,São Vicente da Beira,05,02,22,Castelo Branco,05-02,05-02-22
+LOCAL-050223,Sarzedas,05,02,23,Castelo Branco,05-02,05-02-23
+LOCAL-050225,Tinalhas,05,02,25,Castelo Branco,05-02,05-02-25
+LOCAL-050226,Cebolais de Cima e Retaxo,05,02,26,Castelo Branco,05-02,05-02-26
+LOCAL-050227,Escalos de Baixo e Mata,05,02,27,Castelo Branco,05-02,05-02-27
+LOCAL-050228,Escalos de Cima e Lousa,05,02,28,Castelo Branco,05-02,05-02-28
+LOCAL-050229,Freixial e Juncal do Campo,05,02,29,Castelo Branco,05-02,05-02-29
+LOCAL-050230,Ninho do Açor e Sobral do Campo,05,02,30,Castelo Branco,05-02,05-02-30
+LOCAL-050231,Póvoa de Rio de Moinhos e Cafede,05,02,31,Castelo Branco,05-02,05-02-31
+LOCAL-050302,Aldeia de São Francisco de Assis,05,03,02,Castelo Branco,05-03,05-03-02
+LOCAL-050305,Boidobra,05,03,05,Castelo Branco,05-03,05-03-05
+LOCAL-050308,Cortes do Meio,05,03,08,Castelo Branco,05-03,05-03-08
+LOCAL-050309,Dominguizo,05,03,09,Castelo Branco,05-03,05-03-09
+LOCAL-050310,Erada,05,03,10,Castelo Branco,05-03,05-03-10
+LOCAL-050311,Ferro,05,03,11,Castelo Branco,05-03,05-03-11
+LOCAL-050312,Orjais,05,03,12,Castelo Branco,05-03,05-03-12
+LOCAL-050314,Paul,05,03,14,Castelo Branco,05-03,05-03-14
+LOCAL-050315,Peraboa,05,03,15,Castelo Branco,05-03,05-03-15
+LOCAL-050318,São Jorge da Beira,05,03,18,Castelo Branco,05-03,05-03-18
+LOCAL-050322,Sobral de São Miguel,05,03,22,Castelo Branco,05-03,05-03-22
+LOCAL-050324,Tortosendo,05,03,24,Castelo Branco,05-03,05-03-24
+LOCAL-050325,Unhais da Serra,05,03,25,Castelo Branco,05-03,05-03-25
+LOCAL-050327,Verdelhos,05,03,27,Castelo Branco,05-03,05-03-27
+LOCAL-050332,Barco e Coutada,05,03,32,Castelo Branco,05-03,05-03-32
+LOCAL-050333,Cantar-Galo e Vila do Carvalho,05,03,33,Castelo Branco,05-03,05-03-33
+LOCAL-050334,Casegas e Ourondo,05,03,34,Castelo Branco,05-03,05-03-34
+LOCAL-050335,Covilhã e Canhoso,05,03,35,Castelo Branco,05-03,05-03-35
+LOCAL-050336,Peso e Vales do Rio,05,03,36,Castelo Branco,05-03,05-03-36
+LOCAL-050337,Teixoso e Sarzedo,05,03,37,Castelo Branco,05-03,05-03-37
+LOCAL-050338,Vale Formoso e Aldeia do Souto,05,03,38,Castelo Branco,05-03,05-03-38
+LOCAL-050401,Alcaide,05,04,01,Castelo Branco,05-04,05-04-01
+LOCAL-050402,Alcaria,05,04,02,Castelo Branco,05-04,05-04-02
+LOCAL-050403,Alcongosta,05,04,03,Castelo Branco,05-04,05-04-03
+LOCAL-050406,Alpedrinha,05,04,06,Castelo Branco,05-04,05-04-06
+LOCAL-050408,Barroca,05,04,08,Castelo Branco,05-04,05-04-08
+LOCAL-050410,Bogas de Cima,05,04,10,Castelo Branco,05-04,05-04-10
+LOCAL-050411,Capinha,05,04,11,Castelo Branco,05-04,05-04-11
+LOCAL-050412,Castelejo,05,04,12,Castelo Branco,05-04,05-04-12
+LOCAL-050413,Castelo Novo,05,04,13,Castelo Branco,05-04,05-04-13
+LOCAL-050416,Fatela,05,04,16,Castelo Branco,05-04,05-04-16
+LOCAL-050419,Lavacolhos,05,04,19,Castelo Branco,05-04,05-04-19
+LOCAL-050420,Orca,05,04,20,Castelo Branco,05-04,05-04-20
+LOCAL-050421,Pêro Viseu,05,04,21,Castelo Branco,05-04,05-04-21
+LOCAL-050424,Silvares,05,04,24,Castelo Branco,05-04,05-04-24
+LOCAL-050425,Soalheira,05,04,25,Castelo Branco,05-04,05-04-25
+LOCAL-050426,Souto da Casa,05,04,26,Castelo Branco,05-04,05-04-26
+LOCAL-050427,Telhado,05,04,27,Castelo Branco,05-04,05-04-27
+LOCAL-050431,Enxames,05,04,31,Castelo Branco,05-04,05-04-31
+LOCAL-050432,Três Povos,05,04,32,Castelo Branco,05-04,05-04-32
+LOCAL-050433,Janeiro de Cima e Bogas de Baixo,05,04,33,Castelo Branco,05-04,05-04-33
+LOCAL-050434,"Fundão, Valverde, Donas e Aldeias de Joanes e Cabo",05,04,34,Castelo Branco,05-04,05-04-34
+LOCAL-050435,Póvoa de Atalaia e Atalaia do Campo,05,04,35,Castelo Branco,05-04,05-04-35
+LOCAL-050436,Vale de Prazeres e Mata da Rainha,05,04,36,Castelo Branco,05-04,05-04-36
+LOCAL-050502,Aldeia de Santa Margarida,05,05,02,Castelo Branco,05-05,05-05-02
+LOCAL-050505,Ladoeiro,05,05,05,Castelo Branco,05-05,05-05-05
+LOCAL-050506,Medelim,05,05,06,Castelo Branco,05-05,05-05-06
+LOCAL-050509,Oledo,05,05,09,Castelo Branco,05-05,05-05-09
+LOCAL-050510,Penha Garcia,05,05,10,Castelo Branco,05-05,05-05-10
+LOCAL-050511,Proença-a-Velha,05,05,11,Castelo Branco,05-05,05-05-11
+LOCAL-050512,Rosmaninhal,05,05,12,Castelo Branco,05-05,05-05-12
+LOCAL-050514,São Miguel de Acha,05,05,14,Castelo Branco,05-05,05-05-14
+LOCAL-050516,Toulões,05,05,16,Castelo Branco,05-05,05-05-16
+LOCAL-050518,Idanha-a-Nova e Alcafozes,05,05,18,Castelo Branco,05-05,05-05-18
+LOCAL-050519,Monfortinho e Salvaterra do Extremo,05,05,19,Castelo Branco,05-05,05-05-19
+LOCAL-050520,Monsanto e Idanha-a-Velha,05,05,20,Castelo Branco,05-05,05-05-20
+LOCAL-050521,Zebreira e Segura,05,05,21,Castelo Branco,05-05,05-05-21
+LOCAL-050601,Álvaro,05,06,01,Castelo Branco,05-06,05-06-01
+LOCAL-050603,Cambas,05,06,03,Castelo Branco,05-06,05-06-03
+LOCAL-050605,Isna,05,06,05,Castelo Branco,05-06,05-06-05
+LOCAL-050606,Madeirã,05,06,06,Castelo Branco,05-06,05-06-06
+LOCAL-050607,Mosteiro,05,06,07,Castelo Branco,05-06,05-06-07
+LOCAL-050609,Orvalho,05,06,09,Castelo Branco,05-06,05-06-09
+LOCAL-050610,Sarnadas de São Simão,05,06,10,Castelo Branco,05-06,05-06-10
+LOCAL-050611,Sobral,05,06,11,Castelo Branco,05-06,05-06-11
+LOCAL-050613,Estreito-Vilar Barroco,05,06,13,Castelo Branco,05-06,05-06-13
+LOCAL-050614,Oleiros-Amieira,05,06,14,Castelo Branco,05-06,05-06-14
+LOCAL-050704,Aranhas,05,07,04,Castelo Branco,05-07,05-07-04
+LOCAL-050706,Benquerença,05,07,06,Castelo Branco,05-07,05-07-06
+LOCAL-050707,Meimão,05,07,07,Castelo Branco,05-07,05-07-07
+LOCAL-050708,Meimoa,05,07,08,Castelo Branco,05-07,05-07-08
+LOCAL-050710,Penamacor,05,07,10,Castelo Branco,05-07,05-07-10
+LOCAL-050711,Salvador,05,07,11,Castelo Branco,05-07,05-07-11
+LOCAL-050712,Vale da Senhora da Póvoa,05,07,12,Castelo Branco,05-07,05-07-12
+LOCAL-050713,"Aldeia do Bispo, Águas e Aldeia de João Pires",05,07,13,Castelo Branco,05-07,05-07-13
+LOCAL-050714,Pedrógão de São Pedro e Bemposta,05,07,14,Castelo Branco,05-07,05-07-14
+LOCAL-050802,Montes da Senhora,05,08,02,Castelo Branco,05-08,05-08-02
+LOCAL-050805,São Pedro do Esteval,05,08,05,Castelo Branco,05-08,05-08-05
+LOCAL-050807,Proença-a-Nova e Peral,05,08,07,Castelo Branco,05-08,05-08-07
+LOCAL-050808,Sobreira Formosa e Alvito da Beira,05,08,08,Castelo Branco,05-08,05-08-08
+LOCAL-050901,Cabeçudo,05,09,01,Castelo Branco,05-09,05-09-01
+LOCAL-050902,Carvalhal,05,09,02,Castelo Branco,05-09,05-09-02
+LOCAL-050903,Castelo,05,09,03,Castelo Branco,05-09,05-09-03
+LOCAL-050911,Pedrógão Pequeno,05,09,11,Castelo Branco,05-09,05-09-11
+LOCAL-050912,Sertã,05,09,12,Castelo Branco,05-09,05-09-12
+LOCAL-050913,Troviscal,05,09,13,Castelo Branco,05-09,05-09-13
+LOCAL-050914,Várzea dos Cavaleiros,05,09,14,Castelo Branco,05-09,05-09-14
+LOCAL-050915,"Cernache do Bonjardim, Nesperal e Palhais",05,09,15,Castelo Branco,05-09,05-09-15
+LOCAL-050916,Cumeada e Marmeleiro,05,09,16,Castelo Branco,05-09,05-09-16
+LOCAL-050917,Ermida e Figueiredo,05,09,17,Castelo Branco,05-09,05-09-17
+LOCAL-051001,Fundada,05,10,01,Castelo Branco,05-10,05-10-01
+LOCAL-051002,São João do Peso,05,10,02,Castelo Branco,05-10,05-10-02
+LOCAL-051003,Vila de Rei,05,10,03,Castelo Branco,05-10,05-10-03
+LOCAL-051101,Fratel,05,11,01,Castelo Branco,05-11,05-11-01
+LOCAL-051102,Perais,05,11,02,Castelo Branco,05-11,05-11-02
+LOCAL-051103,Sarnadas de Ródão,05,11,03,Castelo Branco,05-11,05-11-03
+LOCAL-051104,Vila Velha de Ródão,05,11,04,Castelo Branco,05-11,05-11-04
+LOCAL-060102,Arganil,06,01,02,Coimbra,06-01,06-01-02
+LOCAL-060104,Benfeita,06,01,04,Coimbra,06-01,06-01-04
+LOCAL-060105,Celavisa,06,01,05,Coimbra,06-01,06-01-05
+LOCAL-060109,Folques,06,01,09,Coimbra,06-01,06-01-09
+LOCAL-060111,Piódão,06,01,11,Coimbra,06-01,06-01-11
+LOCAL-060112,Pomares,06,01,12,Coimbra,06-01,06-01-12
+LOCAL-060113,Pombeiro da Beira,06,01,13,Coimbra,06-01,06-01-13
+LOCAL-060114,São Martinho da Cortiça,06,01,14,Coimbra,06-01,06-01-14
+LOCAL-060115,Sarzedo,06,01,15,Coimbra,06-01,06-01-15
+LOCAL-060116,Secarias,06,01,16,Coimbra,06-01,06-01-16
+LOCAL-060119,Cepos e Teixeira,06,01,19,Coimbra,06-01,06-01-19
+LOCAL-060120,Cerdeira e Moura da Serra,06,01,20,Coimbra,06-01,06-01-20
+LOCAL-060121,Côja e Barril de Alva,06,01,21,Coimbra,06-01,06-01-21
+LOCAL-060122,Vila Cova de Alva e Anseriz,06,01,22,Coimbra,06-01,06-01-22
+LOCAL-060201,Ançã,06,02,01,Coimbra,06-02,06-02-01
+LOCAL-060203,Cadima,06,02,03,Coimbra,06-02,06-02-03
+LOCAL-060205,Cordinhã,06,02,05,Coimbra,06-02,06-02-05
+LOCAL-060207,Febres,06,02,07,Coimbra,06-02,06-02-07
+LOCAL-060208,Murtede,06,02,08,Coimbra,06-02,06-02-08
+LOCAL-060209,Ourentã,06,02,09,Coimbra,06-02,06-02-09
+LOCAL-060214,Tocha,06,02,14,Coimbra,06-02,06-02-14
+LOCAL-060215,São Caetano,06,02,15,Coimbra,06-02,06-02-15
+LOCAL-060218,Sanguinheira,06,02,18,Coimbra,06-02,06-02-18
+LOCAL-060220,Cantanhede e Pocariça,06,02,20,Coimbra,06-02,06-02-20
+LOCAL-060221,Covões e Camarneira,06,02,21,Coimbra,06-02,06-02-21
+LOCAL-060222,Portunhos e Outil,06,02,22,Coimbra,06-02,06-02-22
+LOCAL-060223,Sepins e Bolho,06,02,23,Coimbra,06-02,06-02-23
+LOCAL-060224,Vilamar e Corticeiro de Cima,06,02,24,Coimbra,06-02,06-02-24
+LOCAL-060301,Almalaguês,06,03,01,Coimbra,06-03,06-03-01
+LOCAL-060309,Brasfemes,06,03,09,Coimbra,06-03,06-03-09
+LOCAL-060311,Ceira,06,03,11,Coimbra,06-03,06-03-11
+LOCAL-060312,Cernache,06,03,12,Coimbra,06-03,06-03-12
+LOCAL-060318,Santo António dos Olivais,06,03,18,Coimbra,06-03,06-03-18
+LOCAL-060320,São João do Campo,06,03,20,Coimbra,06-03,06-03-20
+LOCAL-060324,São Silvestre,06,03,24,Coimbra,06-03,06-03-24
+LOCAL-060329,Torres do Mondego,06,03,29,Coimbra,06-03,06-03-29
+LOCAL-060332,Antuzede e Vil de Matos,06,03,32,Coimbra,06-03,06-03-32
+LOCAL-060333,Assafarge e Antanhol,06,03,33,Coimbra,06-03,06-03-33
+LOCAL-060334,"Sé Nova, Santa Cruz, Almedina e São Bartolomeu",06,03,34,Coimbra,06-03,06-03-34
+LOCAL-060335,Eiras e São Paulo de Frades,06,03,35,Coimbra,06-03,06-03-35
+LOCAL-060336,Santa Clara e Castelo Viegas,06,03,36,Coimbra,06-03,06-03-36
+LOCAL-060337,São Martinho de Árvore e Lamarosa,06,03,37,Coimbra,06-03,06-03-37
+LOCAL-060338,São Martinho do Bispo e Ribeira de Frades,06,03,38,Coimbra,06-03,06-03-38
+LOCAL-060339,Souselas e Botão,06,03,39,Coimbra,06-03,06-03-39
+LOCAL-060340,"Taveiro, Ameal e Arzila",06,03,40,Coimbra,06-03,06-03-40
+LOCAL-060341,Trouxemil e Torre de Vilela,06,03,41,Coimbra,06-03,06-03-41
+LOCAL-060401,Anobra,06,04,01,Coimbra,06-04,06-04-01
+LOCAL-060406,Ega,06,04,06,Coimbra,06-04,06-04-06
+LOCAL-060407,Furadouro,06,04,07,Coimbra,06-04,06-04-07
+LOCAL-060410,Zambujal,06,04,10,Coimbra,06-04,06-04-10
+LOCAL-060411,Condeixa-a-Velha e Condeixa-a-Nova,06,04,11,Coimbra,06-04,06-04-11
+LOCAL-060412,Sebal e Belide,06,04,12,Coimbra,06-04,06-04-12
+LOCAL-060413,Vila Seca e Bem da Fé,06,04,13,Coimbra,06-04,06-04-13
+LOCAL-060502,Alqueidão,06,05,02,Coimbra,06-05,06-05-02
+LOCAL-060507,Maiorca,06,05,07,Coimbra,06-05,06-05-07
+LOCAL-060508,Marinha das Ondas,06,05,08,Coimbra,06-05,06-05-08
+LOCAL-060512,Tavarede,06,05,12,Coimbra,06-05,06-05-12
+LOCAL-060513,Vila Verde,06,05,13,Coimbra,06-05,06-05-13
+LOCAL-060514,São Pedro,06,05,14,Coimbra,06-05,06-05-14
+LOCAL-060515,Bom Sucesso,06,05,15,Coimbra,06-05,06-05-15
+LOCAL-060518,Moinhos da Gândara,06,05,18,Coimbra,06-05,06-05-18
+LOCAL-060519,Alhadas,06,05,19,Coimbra,06-05,06-05-19
+LOCAL-060520,Buarcos e São Julião,06,05,20,Coimbra,06-05,06-05-20
+LOCAL-060521,Ferreira-a-Nova,06,05,21,Coimbra,06-05,06-05-21
+LOCAL-060522,Lavos,06,05,22,Coimbra,06-05,06-05-22
+LOCAL-060523,Paião,06,05,23,Coimbra,06-05,06-05-23
+LOCAL-060524,Quiaios,06,05,24,Coimbra,06-05,06-05-24
+LOCAL-060601,Alvares,06,06,01,Coimbra,06-06,06-06-01
+LOCAL-060604,Góis,06,06,04,Coimbra,06-06,06-06-04
+LOCAL-060605,Vila Nova do Ceira,06,06,05,Coimbra,06-06,06-06-05
+LOCAL-060606,Cadafaz e Colmeal,06,06,06,Coimbra,06-06,06-06-06
+LOCAL-060704,Serpins,06,07,04,Coimbra,06-07,06-07-04
+LOCAL-060706,Gândaras,06,07,06,Coimbra,06-07,06-07-06
+LOCAL-060707,Foz de Arouce e Casal de Ermio,06,07,07,Coimbra,06-07,06-07-07
+LOCAL-060708,Lousã e Vilarinho,06,07,08,Coimbra,06-07,06-07-08
+LOCAL-060801,Mira,06,08,01,Coimbra,06-08,06-08-01
+LOCAL-060802,Seixo,06,08,02,Coimbra,06-08,06-08-02
+LOCAL-060803,Carapelhos,06,08,03,Coimbra,06-08,06-08-03
+LOCAL-060804,Praia de Mira,06,08,04,Coimbra,06-08,06-08-04
+LOCAL-060901,Lamas,06,09,01,Coimbra,06-09,06-09-01
+LOCAL-060902,Miranda do Corvo,06,09,02,Coimbra,06-09,06-09-02
+LOCAL-060905,Vila Nova,06,09,05,Coimbra,06-09,06-09-05
+LOCAL-060906,Semide e Rio Vide,06,09,06,Coimbra,06-09,06-09-06
+LOCAL-061002,Arazede,06,10,02,Coimbra,06-10,06-10-02
+LOCAL-061003,Carapinheira,06,10,03,Coimbra,06-10,06-10-03
+LOCAL-061005,Liceia,06,10,05,Coimbra,06-10,06-10-05
+LOCAL-061006,Meãs do Campo,06,10,06,Coimbra,06-10,06-10-06
+LOCAL-061008,Pereira,06,10,08,Coimbra,06-10,06-10-08
+LOCAL-061009,Santo Varão,06,10,09,Coimbra,06-10,06-10-09
+LOCAL-061010,Seixo de Gatões,06,10,10,Coimbra,06-10,06-10-10
+LOCAL-061011,Tentúgal,06,10,11,Coimbra,06-10,06-10-11
+LOCAL-061014,Ereira,06,10,14,Coimbra,06-10,06-10-14
+LOCAL-061015,"Abrunheira, Verride e Vila Nova da Barca",06,10,15,Coimbra,06-10,06-10-15
+LOCAL-061016,Montemor-o-Velho e Gatões,06,10,16,Coimbra,06-10,06-10-16
+LOCAL-061101,Aldeia das Dez,06,11,01,Coimbra,06-11,06-11-01
+LOCAL-061102,Alvoco das Várzeas,06,11,02,Coimbra,06-11,06-11-02
+LOCAL-061103,Avô,06,11,03,Coimbra,06-11,06-11-03
+LOCAL-061104,Bobadela,06,11,04,Coimbra,06-11,06-11-04
+LOCAL-061106,Lagares,06,11,06,Coimbra,06-11,06-11-06
+LOCAL-061109,Lourosa,06,11,09,Coimbra,06-11,06-11-09
+LOCAL-061110,Meruge,06,11,10,Coimbra,06-11,06-11-10
+LOCAL-061111,Nogueira do Cravo,06,11,11,Coimbra,06-11,06-11-11
+LOCAL-061115,São Gião,06,11,15,Coimbra,06-11,06-11-15
+LOCAL-061118,Seixo da Beira,06,11,18,Coimbra,06-11,06-11-18
+LOCAL-061119,Travanca de Lagos,06,11,19,Coimbra,06-11,06-11-19
+LOCAL-061122,Ervedal e Vila Franca da Beira,06,11,22,Coimbra,06-11,06-11-22
+LOCAL-061123,Lagos da Beira e Lajeosa,06,11,23,Coimbra,06-11,06-11-23
+LOCAL-061124,Oliveira do Hospital e São Paio de Gramaços,06,11,24,Coimbra,06-11,06-11-24
+LOCAL-061125,Penalva de Alva e São Sebastião da Feira,06,11,25,Coimbra,06-11,06-11-25
+LOCAL-061126,Santa Ovaia e Vila Pouca da Beira,06,11,26,Coimbra,06-11,06-11-26
+LOCAL-061201,Cabril,06,12,01,Coimbra,06-12,06-12-01
+LOCAL-061202,Dornelas do Zêzere,06,12,02,Coimbra,06-12,06-12-02
+LOCAL-061204,Janeiro de Baixo,06,12,04,Coimbra,06-12,06-12-04
+LOCAL-061206,Pampilhosa da Serra,06,12,06,Coimbra,06-12,06-12-06
+LOCAL-061207,Pessegueiro,06,12,07,Coimbra,06-12,06-12-07
+LOCAL-061209,Unhais-o-Velho,06,12,09,Coimbra,06-12,06-12-09
+LOCAL-061211,Fajão-Vidual,06,12,11,Coimbra,06-12,06-12-11
+LOCAL-061212,Portela do Fojo-Machio,06,12,12,Coimbra,06-12,06-12-12
+LOCAL-061301,Carvalho,06,13,01,Coimbra,06-13,06-13-01
+LOCAL-061302,Figueira de Lorvão,06,13,02,Coimbra,06-13,06-13-02
+LOCAL-061304,Lorvão,06,13,04,Coimbra,06-13,06-13-04
+LOCAL-061307,Penacova,06,13,07,Coimbra,06-13,06-13-07
+LOCAL-061310,Sazes do Lorvão,06,13,10,Coimbra,06-13,06-13-10
+LOCAL-061312,Friúmes e Paradela,06,13,12,Coimbra,06-13,06-13-12
+LOCAL-061313,Oliveira do Mondego e Travanca do Mondego,06,13,13,Coimbra,06-13,06-13-13
+LOCAL-061314,São Pedro de Alva e São Paio de Mondego,06,13,14,Coimbra,06-13,06-13-14
+LOCAL-061401,Cumeeira,06,14,01,Coimbra,06-14,06-14-01
+LOCAL-061402,Espinhal,06,14,02,Coimbra,06-14,06-14-02
+LOCAL-061403,Podentes,06,14,03,Coimbra,06-14,06-14-03
+LOCAL-061407,"São Miguel, Santa Eufémia e Rabaçal",06,14,07,Coimbra,06-14,06-14-07
+LOCAL-061501,Alfarelos,06,15,01,Coimbra,06-15,06-15-01
+LOCAL-061504,Figueiró do Campo,06,15,04,Coimbra,06-15,06-15-04
+LOCAL-061506,Granja do Ulmeiro,06,15,06,Coimbra,06-15,06-15-06
+LOCAL-061508,Samuel,06,15,08,Coimbra,06-15,06-15-08
+LOCAL-061509,Soure,06,15,09,Coimbra,06-15,06-15-09
+LOCAL-061510,Tapéus,06,15,10,Coimbra,06-15,06-15-10
+LOCAL-061511,Vila Nova de Anços,06,15,11,Coimbra,06-15,06-15-11
+LOCAL-061512,Vinha da Rainha,06,15,12,Coimbra,06-15,06-15-12
+LOCAL-061513,Degracias e Pombalinho,06,15,13,Coimbra,06-15,06-15-13
+LOCAL-061514,Gesteira e Brunhós,06,15,14,Coimbra,06-15,06-15-14
+LOCAL-061602,Candosa,06,16,02,Coimbra,06-16,06-16-02
+LOCAL-061603,Carapinha,06,16,03,Coimbra,06-16,06-16-03
+LOCAL-061608,Midões,06,16,08,Coimbra,06-16,06-16-08
+LOCAL-061609,Mouronho,06,16,09,Coimbra,06-16,06-16-09
+LOCAL-061611,Póvoa de Midões,06,16,11,Coimbra,06-16,06-16-11
+LOCAL-061612,São João da Boa Vista,06,16,12,Coimbra,06-16,06-16-12
+LOCAL-061614,Tábua,06,16,14,Coimbra,06-16,06-16-14
+LOCAL-061616,Ázere e Covelo,06,16,16,Coimbra,06-16,06-16-16
+LOCAL-061617,Covas e Vila Nova de Oliveirinha,06,16,17,Coimbra,06-16,06-16-17
+LOCAL-061618,Espariz e Sinde,06,16,18,Coimbra,06-16,06-16-18
+LOCAL-061619,Pinheiro de Coja e Meda de Mouros,06,16,19,Coimbra,06-16,06-16-19
+LOCAL-061701,Arrifana,06,17,01,Coimbra,06-17,06-17-01
+LOCAL-061702,Lavegadas,06,17,02,Coimbra,06-17,06-17-02
+LOCAL-061703,Poiares (Santo André),06,17,03,Coimbra,06-17,06-17-03
+LOCAL-061704,São Miguel de Poiares,06,17,04,Coimbra,06-17,06-17-04
+LOCAL-070103,Santiago Maior,07,01,03,Évora,07-01,07-01-03
+LOCAL-070104,Capelins (Santo António),07,01,04,Évora,07-01,07-01-04
+LOCAL-070105,Terena (São Pedro),07,01,05,Évora,07-01,07-01-05
+LOCAL-070107,"N.S. Conceição, S.Brás Matos, Juromenha",07,01,07,Évora,07-01,07-01-07
+LOCAL-070201,Arraiolos,07,02,01,Évora,07-02,07-02-01
+LOCAL-070202,Igrejinha,07,02,02,Évora,07-02,07-02-02
+LOCAL-070206,Vimieiro,07,02,06,Évora,07-02,07-02-06
+LOCAL-070208,Gafanhoeira (São Pedro) e Sabugueiro,07,02,08,Évora,07-02,07-02-08
+LOCAL-070209,São Gregório e Santa Justa,07,02,09,Évora,07-02,07-02-09
+LOCAL-070301,Borba (Matriz),07,03,01,Évora,07-03,07-03-01
+LOCAL-070302,Orada,07,03,02,Évora,07-03,07-03-02
+LOCAL-070303,Rio de Moinhos,07,03,03,Évora,07-03,07-03-03
+LOCAL-070304,Borba (São Bartolomeu),07,03,04,Évora,07-03,07-03-04
+LOCAL-070401,Arcos,07,04,01,Évora,07-04,07-04-01
+LOCAL-070402,Glória,07,04,02,Évora,07-04,07-04-02
+LOCAL-070404,Évora Monte (Santa Maria),07,04,04,Évora,07-04,07-04-04
+LOCAL-070411,São Domingos de Ana Loura,07,04,11,Évora,07-04,07-04-11
+LOCAL-070413,Veiros,07,04,13,Évora,07-04,07-04-13
+LOCAL-070414,Estremoz (Santa Maria e Santo André),07,04,14,Évora,07-04,07-04-14
+LOCAL-070415,São Bento do Cortiço e Santo Estêvão,07,04,15,Évora,07-04,07-04-15
+LOCAL-070416,São Lourenço de Mamporcão e São Bento de Ana Loura,07,04,16,Évora,07-04,07-04-16
+LOCAL-070417,Ameixial (Santa Vitória e São Bento),07,04,17,Évora,07-04,07-04-17
+LOCAL-070502,Nossa Senhora da Graça do Divor,07,05,02,Évora,07-05,07-05-02
+LOCAL-070503,Nossa Senhora de Machede,07,05,03,Évora,07-05,07-05-03
+LOCAL-070506,São Bento do Mato,07,05,06,Évora,07-05,07-05-06
+LOCAL-070509,São Miguel de Machede,07,05,09,Évora,07-05,07-05-09
+LOCAL-070513,Torre de Coelheiros,07,05,13,Évora,07-05,07-05-13
+LOCAL-070515,Canaviais,07,05,15,Évora,07-05,07-05-15
+LOCAL-070522,Bacelo e Senhora da Saúde,07,05,22,Évora,07-05,07-05-22
+LOCAL-070523,"Évora (São Mamede, Sé, São Pedro e Santo Antão)",07,05,23,Évora,07-05,07-05-23
+LOCAL-070524,Malagueira e Horta das Figueiras,07,05,24,Évora,07-05,07-05-24
+LOCAL-070525,N.S. da Tourega e N.S. de Guadalupe,07,05,25,Évora,07-05,07-05-25
+LOCAL-070526,São Manços e São Vicente do Pigeiro,07,05,26,Évora,07-05,07-05-26
+LOCAL-070527,S.Sebastião da Giesteira e N.S. da Boa Fé,07,05,27,Évora,07-05,07-05-27
+LOCAL-070601,Cabrela,07,06,01,Évora,07-06,07-06-01
+LOCAL-070605,Santiago do Escoural,07,06,05,Évora,07-06,07-06-05
+LOCAL-070606,São Cristóvão,07,06,06,Évora,07-06,07-06-06
+LOCAL-070607,Ciborro,07,06,07,Évora,07-06,07-06-07
+LOCAL-070610,Foros de Vale de Figueira,07,06,10,Évora,07-06,07-06-10
+LOCAL-070611,Cortiçadas de Lavre e Lavre,07,06,11,Évora,07-06,07-06-11
+LOCAL-070612,"N.S. da Vila, N.S. do Bispo e Silveiras",07,06,12,Évora,07-06,07-06-12
+LOCAL-070701,Brotas,07,07,01,Évora,07-07,07-07-01
+LOCAL-070702,Cabeção,07,07,02,Évora,07-07,07-07-02
+LOCAL-070703,Mora,07,07,03,Évora,07-07,07-07-03
+LOCAL-070704,Pavia,07,07,04,Évora,07-07,07-07-04
+LOCAL-070801,Granja,07,08,01,Évora,07-08,07-08-01
+LOCAL-070802,Luz,07,08,02,Évora,07-08,07-08-02
+LOCAL-070803,Mourão,07,08,03,Évora,07-08,07-08-03
+LOCAL-070903,Monte do Trigo,07,09,03,Évora,07-09,07-09-03
+LOCAL-070905,Portel,07,09,05,Évora,07-09,07-09-05
+LOCAL-070906,Santana,07,09,06,Évora,07-09,07-09-06
+LOCAL-070908,Vera Cruz,07,09,08,Évora,07-09,07-09-08
+LOCAL-070909,Amieira e Alqueva,07,09,09,Évora,07-09,07-09-09
+LOCAL-070910,São Bartolomeu do Outeiro e Oriola,07,09,10,Évora,07-09,07-09-10
+LOCAL-071001,Montoito,07,10,01,Évora,07-10,07-10-01
+LOCAL-071002,Redondo,07,10,02,Évora,07-10,07-10-02
+LOCAL-071102,Corval,07,11,02,Évora,07-11,07-11-02
+LOCAL-071103,Monsaraz,07,11,03,Évora,07-11,07-11-03
+LOCAL-071104,Reguengos de Monsaraz,07,11,04,Évora,07-11,07-11-04
+LOCAL-071106,Campo e Campinho,07,11,06,Évora,07-11,07-11-06
+LOCAL-071201,Vendas Novas,07,12,01,Évora,07-12,07-12-01
+LOCAL-071202,Landeira,07,12,02,Évora,07-12,07-12-02
+LOCAL-071301,Alcáçovas,07,13,01,Évora,07-13,07-13-01
+LOCAL-071302,Viana do Alentejo,07,13,02,Évora,07-13,07-13-02
+LOCAL-071303,Aguiar,07,13,03,Évora,07-13,07-13-03
+LOCAL-071401,Bencatel,07,14,01,Évora,07-14,07-14-01
+LOCAL-071402,Ciladas,07,14,02,Évora,07-14,07-14-02
+LOCAL-071404,Pardais,07,14,04,Évora,07-14,07-14-04
+LOCAL-071406,Nossa Senhora da Conceição e São Bartolomeu,07,14,06,Évora,07-14,07-14-06
+LOCAL-080102,Guia,08,01,02,Faro,08-01,08-01-02
+LOCAL-080103,Paderne,08,01,03,Faro,08-01,08-01-03
+LOCAL-080104,Ferreiras,08,01,04,Faro,08-01,08-01-04
+LOCAL-080106,Albufeira e Olhos de Água,08,01,06,Faro,08-01,08-01-06
+LOCAL-080202,Giões,08,02,02,Faro,08-02,08-02-02
+LOCAL-080203,Martim Longo,08,02,03,Faro,08-02,08-02-03
+LOCAL-080205,Vaqueiros,08,02,05,Faro,08-02,08-02-05
+LOCAL-080206,Alcoutim e Pereiro,08,02,06,Faro,08-02,08-02-06
+LOCAL-080301,Aljezur,08,03,01,Faro,08-03,08-03-01
+LOCAL-080302,Bordeira,08,03,02,Faro,08-03,08-03-02
+LOCAL-080303,Odeceixe,08,03,03,Faro,08-03,08-03-03
+LOCAL-080304,Rogil,08,03,04,Faro,08-03,08-03-04
+LOCAL-080401,Azinhal,08,04,01,Faro,08-04,08-04-01
+LOCAL-080402,Castro Marim,08,04,02,Faro,08-04,08-04-02
+LOCAL-080403,Odeleite,08,04,03,Faro,08-04,08-04-03
+LOCAL-080404,Altura,08,04,04,Faro,08-04,08-04-04
+LOCAL-080503,Santa Bárbara de Nexe,08,05,03,Faro,08-05,08-05-03
+LOCAL-080506,Montenegro,08,05,06,Faro,08-05,08-05-06
+LOCAL-080507,Conceição e Estoi,08,05,07,Faro,08-05,08-05-07
+LOCAL-080508,Faro (Sé e São Pedro),08,05,08,Faro,08-05,08-05-08
+LOCAL-080602,Ferragudo,08,06,02,Faro,08-06,08-06-02
+LOCAL-080604,Porches,08,06,04,Faro,08-06,08-06-04
+LOCAL-080607,Estômbar e Parchal,08,06,07,Faro,08-06,08-06-07
+LOCAL-080608,Lagoa e Carvoeiro,08,06,08,Faro,08-06,08-06-08
+LOCAL-080703,Luz,08,07,03,Faro,08-07,08-07-03
+LOCAL-080704,Odiáxere,08,07,04,Faro,08-07,08-07-04
+LOCAL-080707,Bensafrim e Barão de São João,08,07,07,Faro,08-07,08-07-07
+LOCAL-080708,São Gonçalo de Lagos,08,07,08,Faro,08-07,08-07-08
+LOCAL-080801,Almancil,08,08,01,Faro,08-08,08-08-01
+LOCAL-080802,Alte,08,08,02,Faro,08-08,08-08-02
+LOCAL-080803,Ameixial,08,08,03,Faro,08-08,08-08-03
+LOCAL-080804,Boliqueime,08,08,04,Faro,08-08,08-08-04
+LOCAL-080805,Quarteira,08,08,05,Faro,08-08,08-08-05
+LOCAL-080807,Salir,08,08,07,Faro,08-08,08-08-07
+LOCAL-080808,Loulé (São Clemente),08,08,08,Faro,08-08,08-08-08
+LOCAL-080809,Loulé (São Sebastião),08,08,09,Faro,08-08,08-08-09
+LOCAL-080812,"Querença, Tôr e Benafim",08,08,12,Faro,08-08,08-08-12
+LOCAL-080901,Alferce,08,09,01,Faro,08-09,08-09-01
+LOCAL-080902,Marmelete,08,09,02,Faro,08-09,08-09-02
+LOCAL-080903,Monchique,08,09,03,Faro,08-09,08-09-03
+LOCAL-081003,Olhão,08,10,03,Faro,08-10,08-10-03
+LOCAL-081004,Pechão,08,10,04,Faro,08-10,08-10-04
+LOCAL-081005,Quelfes,08,10,05,Faro,08-10,08-10-05
+LOCAL-081006,Moncarapacho e Fuseta,08,10,06,Faro,08-10,08-10-06
+LOCAL-081101,Alvor,08,11,01,Faro,08-11,08-11-01
+LOCAL-081102,Mexilhoeira Grande,08,11,02,Faro,08-11,08-11-02
+LOCAL-081103,Portimão,08,11,03,Faro,08-11,08-11-03
+LOCAL-081201,São Brás de Alportel,08,12,01,Faro,08-12,08-12-01
+LOCAL-081303,Armação de Pêra,08,13,03,Faro,08-13,08-13-03
+LOCAL-081305,São Bartolomeu de Messines,08,13,05,Faro,08-13,08-13-05
+LOCAL-081306,São Marcos da Serra,08,13,06,Faro,08-13,08-13-06
+LOCAL-081307,Silves,08,13,07,Faro,08-13,08-13-07
+LOCAL-081309,Alcantarilha e Pêra,08,13,09,Faro,08-13,08-13-09
+LOCAL-081310,Algoz e Tunes,08,13,10,Faro,08-13,08-13-10
+LOCAL-081401,Cachopo,08,14,01,Faro,08-14,08-14-01
+LOCAL-081404,Santa Catarina da Fonte do Bispo,08,14,04,Faro,08-14,08-14-04
+LOCAL-081408,Santa Luzia,08,14,08,Faro,08-14,08-14-08
+LOCAL-081410,Conceição e Cabanas de Tavira,08,14,10,Faro,08-14,08-14-10
+LOCAL-081411,Luz de Tavira e Santo Estêvão,08,14,11,Faro,08-14,08-14-11
+LOCAL-081412,Tavira (Santa Maria e Santiago),08,14,12,Faro,08-14,08-14-12
+LOCAL-081501,Barão de São Miguel,08,15,01,Faro,08-15,08-15-01
+LOCAL-081502,Budens,08,15,02,Faro,08-15,08-15-02
+LOCAL-081504,Sagres,08,15,04,Faro,08-15,08-15-04
+LOCAL-081506,Vila do Bispo e Raposeira,08,15,06,Faro,08-15,08-15-06
+LOCAL-081601,Vila Nova de Cacela,08,16,01,Faro,08-16,08-16-01
+LOCAL-081602,Vila Real de Santo António,08,16,02,Faro,08-16,08-16-02
+LOCAL-081603,Monte Gordo,08,16,03,Faro,08-16,08-16-03
+LOCAL-090102,Carapito,09,01,02,Guarda,09-01,09-01-02
+LOCAL-090103,Cortiçada,09,01,03,Guarda,09-01,09-01-03
+LOCAL-090105,Dornelas,09,01,05,Guarda,09-01,09-01-05
+LOCAL-090106,Eirado,09,01,06,Guarda,09-01,09-01-06
+LOCAL-090107,Forninhos,09,01,07,Guarda,09-01,09-01-07
+LOCAL-090109,Pena Verde,09,01,09,Guarda,09-01,09-01-09
+LOCAL-090110,Pinheiro,09,01,10,Guarda,09-01,09-01-10
+LOCAL-090114,Aguiar da Beira e Coruche,09,01,14,Guarda,09-01,09-01-14
+LOCAL-090115,Sequeiros e Gradiz,09,01,15,Guarda,09-01,09-01-15
+LOCAL-090116,Souto de Aguiar da Beira e Valverde,09,01,16,Guarda,09-01,09-01-16
+LOCAL-090203,Almeida,09,02,03,Guarda,09-02,09-02-03
+LOCAL-090207,Castelo Bom,09,02,07,Guarda,09-02,09-02-07
+LOCAL-090209,Freineda,09,02,09,Guarda,09-02,09-02-09
+LOCAL-090210,Freixo,09,02,10,Guarda,09-02,09-02-10
+LOCAL-090213,Malhada Sorda,09,02,13,Guarda,09-02,09-02-13
+LOCAL-090219,Nave de Haver,09,02,19,Guarda,09-02,09-02-19
+LOCAL-090224,São Pedro de Rio Seco,09,02,24,Guarda,09-02,09-02-24
+LOCAL-090227,Vale da Mula,09,02,27,Guarda,09-02,09-02-27
+LOCAL-090229,Vilar Formoso,09,02,29,Guarda,09-02,09-02-29
+LOCAL-090230,"Amoreira, Parada e Cabreira",09,02,30,Guarda,09-02,09-02-30
+LOCAL-090231,"Azinhal, Peva e Valverde",09,02,31,Guarda,09-02,09-02-31
+LOCAL-090232,"Castelo Mendo, Ade, Monteperobolso e Mesquitela",09,02,32,Guarda,09-02,09-02-32
+LOCAL-090233,Junça e Naves,09,02,33,Guarda,09-02,09-02-33
+LOCAL-090234,"Leomil, Mido, Senouras e Aldeia Nova",09,02,34,Guarda,09-02,09-02-34
+LOCAL-090235,Malpartida e Vale de Coelha,09,02,35,Guarda,09-02,09-02-35
+LOCAL-090236,Miuzela e Porto de Ovelha,09,02,36,Guarda,09-02,09-02-36
+LOCAL-090302,Baraçal,09,03,02,Guarda,09-03,09-03-02
+LOCAL-090304,Carrapichana,09,03,04,Guarda,09-03,09-03-04
+LOCAL-090306,Forno Telheiro,09,03,06,Guarda,09-03,09-03-06
+LOCAL-090307,Lajeosa do Mondego,09,03,07,Guarda,09-03,09-03-07
+LOCAL-090308,Linhares,09,03,08,Guarda,09-03,09-03-08
+LOCAL-090309,Maçal do Chão,09,03,09,Guarda,09-03,09-03-09
+LOCAL-090310,Mesquitela,09,03,10,Guarda,09-03,09-03-10
+LOCAL-090311,Minhocal,09,03,11,Guarda,09-03,09-03-11
+LOCAL-090312,Prados,09,03,12,Guarda,09-03,09-03-12
+LOCAL-090314,Ratoeira,09,03,14,Guarda,09-03,09-03-14
+LOCAL-090318,Vale de Azares,09,03,18,Guarda,09-03,09-03-18
+LOCAL-090322,Casas do Soeiro,09,03,22,Guarda,09-03,09-03-22
+LOCAL-090323,Açores e Velosa,09,03,23,Guarda,09-03,09-03-23
+LOCAL-090324,São Pedro e Santa Maria e Vila Boa do Mondego,09,03,24,Guarda,09-03,09-03-24
+LOCAL-090325,"Cortiçô da Serra, Vide entre Vinhas e Salgueirais",09,03,25,Guarda,09-03,09-03-25
+LOCAL-090326,Rapa e Cadafaz,09,03,26,Guarda,09-03,09-03-26
+LOCAL-090403,Castelo Rodrigo,09,04,03,Guarda,09-04,09-04-03
+LOCAL-090406,Escalhão,09,04,06,Guarda,09-04,09-04-06
+LOCAL-090408,Figueira de Castelo Rodrigo,09,04,08,Guarda,09-04,09-04-08
+LOCAL-090410,Mata de Lobos,09,04,10,Guarda,09-04,09-04-10
+LOCAL-090415,Vermiosa,09,04,15,Guarda,09-04,09-04-15
+LOCAL-090418,"Algodres, Vale de Afonsinho e Vilar de Amargo",09,04,18,Guarda,09-04,09-04-18
+LOCAL-090419,Almofala e Escarigo,09,04,19,Guarda,09-04,09-04-19
+LOCAL-090420,Cinco Vilas e Reigada,09,04,20,Guarda,09-04,09-04-20
+LOCAL-090421,"Freixeda Torrão, Quintã Pêro Martins, Penha Águia",09,04,21,Guarda,09-04,09-04-21
+LOCAL-090422,Colmeal e Vilar Torpim,09,04,22,Guarda,09-04,09-04-22
+LOCAL-090501,Algodres,09,05,01,Guarda,09-05,09-05-01
+LOCAL-090502,Casal Vasco,09,05,02,Guarda,09-05,09-05-02
+LOCAL-090504,Figueiró da Granja,09,05,04,Guarda,09-05,09-05-04
+LOCAL-090505,Fornos de Algodres,09,05,05,Guarda,09-05,09-05-05
+LOCAL-090507,Infias,09,05,07,Guarda,09-05,09-05-07
+LOCAL-090509,Maceira,09,05,09,Guarda,09-05,09-05-09
+LOCAL-090510,Matança,09,05,10,Guarda,09-05,09-05-10
+LOCAL-090511,Muxagata,09,05,11,Guarda,09-05,09-05-11
+LOCAL-090512,Queiriz,09,05,12,Guarda,09-05,09-05-12
+LOCAL-090517,Cortiçô e Vila Chã,09,05,17,Guarda,09-05,09-05-17
+LOCAL-090518,"Juncais, Vila Ruiva e Vila Soeiro do Chão",09,05,18,Guarda,09-05,09-05-18
+LOCAL-090519,Sobral Pichorro e Fuinhas,09,05,19,Guarda,09-05,09-05-19
+LOCAL-090602,Arcozelo,09,06,02,Guarda,09-06,09-06-02
+LOCAL-090603,Cativelos,09,06,03,Guarda,09-06,09-06-03
+LOCAL-090605,Folgosinho,09,06,05,Guarda,09-06,09-06-05
+LOCAL-090612,Nespereira,09,06,12,Guarda,09-06,09-06-12
+LOCAL-090613,Paços da Serra,09,06,13,Guarda,09-06,09-06-13
+LOCAL-090614,Ribamondego,09,06,14,Guarda,09-06,09-06-14
+LOCAL-090617,São Paio,09,06,17,Guarda,09-06,09-06-17
+LOCAL-090619,Vila Cortês da Serra,09,06,19,Guarda,09-06,09-06-19
+LOCAL-090620,Vila Franca da Serra,09,06,20,Guarda,09-06,09-06-20
+LOCAL-090621,Vila Nova de Tazem,09,06,21,Guarda,09-06,09-06-21
+LOCAL-090623,Aldeias e Mangualde da Serra,09,06,23,Guarda,09-06,09-06-23
+LOCAL-090624,Figueiró da Serra e Freixo da Serra,09,06,24,Guarda,09-06,09-06-24
+LOCAL-090625,Gouveia,09,06,25,Guarda,09-06,09-06-25
+LOCAL-090626,Melo e Nabais,09,06,26,Guarda,09-06,09-06-26
+LOCAL-090627,Moimenta da Serra e Vinhó,09,06,27,Guarda,09-06,09-06-27
+LOCAL-090628,Rio Torto e Lagarinhos,09,06,28,Guarda,09-06,09-06-28
+LOCAL-090703,Aldeia do Bispo,09,07,03,Guarda,09-07,09-07-03
+LOCAL-090704,Aldeia Viçosa,09,07,04,Guarda,09-07,09-07-04
+LOCAL-090705,Alvendre,09,07,05,Guarda,09-07,09-07-05
+LOCAL-090706,Arrifana,09,07,06,Guarda,09-07,09-07-06
+LOCAL-090708,Avelãs da Ribeira,09,07,08,Guarda,09-07,09-07-08
+LOCAL-090709,Benespera,09,07,09,Guarda,09-07,09-07-09
+LOCAL-090711,Casal de Cinza,09,07,11,Guarda,09-07,09-07-11
+LOCAL-090712,Castanheira,09,07,12,Guarda,09-07,09-07-12
+LOCAL-090713,Cavadoude,09,07,13,Guarda,09-07,09-07-13
+LOCAL-090714,Codesseiro,09,07,14,Guarda,09-07,09-07-14
+LOCAL-090716,Faia,09,07,16,Guarda,09-07,09-07-16
+LOCAL-090717,Famalicão,09,07,17,Guarda,09-07,09-07-17
+LOCAL-090718,Fernão Joanes,09,07,18,Guarda,09-07,09-07-18
+LOCAL-090721,Gonçalo Bocas,09,07,21,Guarda,09-07,09-07-21
+LOCAL-090722,João Antão,09,07,22,Guarda,09-07,09-07-22
+LOCAL-090723,Maçainhas,09,07,23,Guarda,09-07,09-07-23
+LOCAL-090724,Marmeleiro,09,07,24,Guarda,09-07,09-07-24
+LOCAL-090725,Meios,09,07,25,Guarda,09-07,09-07-25
+LOCAL-090728,Panoias de Cima,09,07,28,Guarda,09-07,09-07-28
+LOCAL-090729,Pega,09,07,29,Guarda,09-07,09-07-29
+LOCAL-090730,Pêra do Moço,09,07,30,Guarda,09-07,09-07-30
+LOCAL-090732,Porto da Carne,09,07,32,Guarda,09-07,09-07-32
+LOCAL-090734,Ramela,09,07,34,Guarda,09-07,09-07-34
+LOCAL-090738,Santana da Azinha,09,07,38,Guarda,09-07,09-07-38
+LOCAL-090744,Sobral da Serra,09,07,44,Guarda,09-07,09-07-44
+LOCAL-090746,Vale de Estrela,09,07,46,Guarda,09-07,09-07-46
+LOCAL-090747,Valhelhas,09,07,47,Guarda,09-07,09-07-47
+LOCAL-090748,Vela,09,07,48,Guarda,09-07,09-07-48
+LOCAL-090749,Videmonte,09,07,49,Guarda,09-07,09-07-49
+LOCAL-090750,Vila Cortês do Mondego,09,07,50,Guarda,09-07,09-07-50
+LOCAL-090751,Vila Fernando,09,07,51,Guarda,09-07,09-07-51
+LOCAL-090752,Vila Franca do Deão,09,07,52,Guarda,09-07,09-07-52
+LOCAL-090753,Vila Garcia,09,07,53,Guarda,09-07,09-07-53
+LOCAL-090757,Gonçalo,09,07,57,Guarda,09-07,09-07-57
+LOCAL-090758,Guarda,09,07,58,Guarda,09-07,09-07-58
+LOCAL-090759,Jarmelo São Miguel,09,07,59,Guarda,09-07,09-07-59
+LOCAL-090760,Jarmelo São Pedro,09,07,60,Guarda,09-07,09-07-60
+LOCAL-090761,Avelãs de Ambom e Rocamondo,09,07,61,Guarda,09-07,09-07-61
+LOCAL-090762,Corujeira e Trinta,09,07,62,Guarda,09-07,09-07-62
+LOCAL-090763,"Mizarela, Pêro Soares e Vila Soeiro",09,07,63,Guarda,09-07,09-07-63
+LOCAL-090764,Pousade e Albardo,09,07,64,Guarda,09-07,09-07-64
+LOCAL-090765,Rochoso e Monte Margarida,09,07,65,Guarda,09-07,09-07-65
+LOCAL-090766,Adão,09,07,66,Guarda,09-07,09-07-66
+LOCAL-090801,Sameiro,09,08,01,Guarda,09-08,09-08-01
+LOCAL-090802,Manteigas (Santa Maria),09,08,02,Guarda,09-08,09-08-02
+LOCAL-090803,Manteigas (São Pedro),09,08,03,Guarda,09-08,09-08-03
+LOCAL-090804,Vale de Amoreira,09,08,04,Guarda,09-08,09-08-04
+LOCAL-090901,Aveloso,09,09,01,Guarda,09-09,09-09-01
+LOCAL-090902,Barreira,09,09,02,Guarda,09-09,09-09-02
+LOCAL-090905,Coriscada,09,09,05,Guarda,09-09,09-09-05
+LOCAL-090907,Longroiva,09,09,07,Guarda,09-09,09-09-07
+LOCAL-090908,Marialva,09,09,08,Guarda,09-09,09-09-08
+LOCAL-090912,Poço do Canto,09,09,12,Guarda,09-09,09-09-12
+LOCAL-090914,Rabaçal,09,09,14,Guarda,09-09,09-09-14
+LOCAL-090915,Ranhados,09,09,15,Guarda,09-09,09-09-15
+LOCAL-090917,"Mêda, Outeiro de Gatos e Fonte Longa",09,09,17,Guarda,09-09,09-09-17
+LOCAL-090918,Prova e Casteição,09,09,18,Guarda,09-09,09-09-18
+LOCAL-090919,"Vale Flor, Carvalhal e Pai Penela",09,09,19,Guarda,09-09,09-09-19
+LOCAL-091009,Ervedosa,09,10,09,Guarda,09-10,09-10-09
+LOCAL-091010,Freixedas,09,10,10,Guarda,09-10,09-10-10
+LOCAL-091012,Lamegal,09,10,12,Guarda,09-10,09-10-12
+LOCAL-091013,Lameiras,09,10,13,Guarda,09-10,09-10-13
+LOCAL-091014,Manigoto,09,10,14,Guarda,09-10,09-10-14
+LOCAL-091015,Pala,09,10,15,Guarda,09-10,09-10-15
+LOCAL-091017,Pinhel,09,10,17,Guarda,09-10,09-10-17
+LOCAL-091018,Pínzio,09,10,18,Guarda,09-10,09-10-18
+LOCAL-091024,Souro Pires,09,10,24,Guarda,09-10,09-10-24
+LOCAL-091027,Vascoveiro,09,10,27,Guarda,09-10,09-10-27
+LOCAL-091028,Agregação das freguesias Sul de Pinhel,09,10,28,Guarda,09-10,09-10-28
+LOCAL-091029,Alverca da Beira/Bouça Cova,09,10,29,Guarda,09-10,09-10-29
+LOCAL-091030,Terras de Massueime,09,10,30,Guarda,09-10,09-10-30
+LOCAL-091031,Valbom/Bogalhal,09,10,31,Guarda,09-10,09-10-31
+LOCAL-091032,Alto do Palurdo,09,10,32,Guarda,09-10,09-10-32
+LOCAL-091033,Vale do Côa,09,10,33,Guarda,09-10,09-10-33
+LOCAL-091034,Vale do Massueime,09,10,34,Guarda,09-10,09-10-34
+LOCAL-091035,Atalaia e Safurdão,09,10,35,Guarda,09-10,09-10-35
+LOCAL-091101,Águas Belas,09,11,01,Guarda,09-11,09-11-01
+LOCAL-091102,Aldeia do Bispo,09,11,02,Guarda,09-11,09-11-02
+LOCAL-091103,Aldeia da Ponte,09,11,03,Guarda,09-11,09-11-03
+LOCAL-091106,Aldeia Velha,09,11,06,Guarda,09-11,09-11-06
+LOCAL-091107,Alfaiates,09,11,07,Guarda,09-11,09-11-07
+LOCAL-091109,Baraçal,09,11,09,Guarda,09-11,09-11-09
+LOCAL-091110,Bendada,09,11,10,Guarda,09-11,09-11-10
+LOCAL-091111,Bismula,09,11,11,Guarda,09-11,09-11-11
+LOCAL-091112,Casteleiro,09,11,12,Guarda,09-11,09-11-12
+LOCAL-091113,Cerdeira,09,11,13,Guarda,09-11,09-11-13
+LOCAL-091114,Fóios,09,11,14,Guarda,09-11,09-11-14
+LOCAL-091118,Malcata,09,11,18,Guarda,09-11,09-11-18
+LOCAL-091120,Nave,09,11,20,Guarda,09-11,09-11-20
+LOCAL-091123,Quadrazais,09,11,23,Guarda,09-11,09-11-23
+LOCAL-091124,Quintas de São Bartolomeu,09,11,24,Guarda,09-11,09-11-24
+LOCAL-091125,Rapoula do Côa,09,11,25,Guarda,09-11,09-11-25
+LOCAL-091126,Rebolosa,09,11,26,Guarda,09-11,09-11-26
+LOCAL-091127,Rendo,09,11,27,Guarda,09-11,09-11-27
+LOCAL-091133,Sortelha,09,11,33,Guarda,09-11,09-11-33
+LOCAL-091134,Souto,09,11,34,Guarda,09-11,09-11-34
+LOCAL-091136,Vale de Espinho,09,11,36,Guarda,09-11,09-11-36
+LOCAL-091138,Vila Boa,09,11,38,Guarda,09-11,09-11-38
+LOCAL-091139,Vila do Touro,09,11,39,Guarda,09-11,09-11-39
+LOCAL-091141,"Aldeia da Ribeira, Vilar Maior e Badamalos",09,11,41,Guarda,09-11,09-11-41
+LOCAL-091142,Lajeosa e Forcalhos,09,11,42,Guarda,09-11,09-11-42
+LOCAL-091143,"Pousafoles do Bispo, Pena Lobo e Lomba",09,11,43,Guarda,09-11,09-11-43
+LOCAL-091144,"Ruvina, Ruivós e Vale das Éguas",09,11,44,Guarda,09-11,09-11-44
+LOCAL-091145,Sabugal e Aldeia de Santo António,09,11,45,Guarda,09-11,09-11-45
+LOCAL-091146,Santo Estêvão e Moita,09,11,46,Guarda,09-11,09-11-46
+LOCAL-091147,Seixo do Côa e Vale Longo,09,11,47,Guarda,09-11,09-11-47
+LOCAL-091201,Alvoco da Serra,09,12,01,Guarda,09-12,09-12-01
+LOCAL-091205,Girabolhos,09,12,05,Guarda,09-12,09-12-05
+LOCAL-091207,Loriga,09,12,07,Guarda,09-12,09-12-07
+LOCAL-091208,Paranhos,09,12,08,Guarda,09-12,09-12-08
+LOCAL-091209,Pinhanços,09,12,09,Guarda,09-12,09-12-09
+LOCAL-091210,Sabugueiro,09,12,10,Guarda,09-12,09-12-10
+LOCAL-091212,Sandomil,09,12,12,Guarda,09-12,09-12-12
+LOCAL-091213,Santa Comba,09,12,13,Guarda,09-12,09-12-13
+LOCAL-091216,Santiago,09,12,16,Guarda,09-12,09-12-16
+LOCAL-091219,Sazes da Beira,09,12,19,Guarda,09-12,09-12-19
+LOCAL-091221,Teixeira,09,12,21,Guarda,09-12,09-12-21
+LOCAL-091224,Travancinha,09,12,24,Guarda,09-12,09-12-24
+LOCAL-091225,Valezim,09,12,25,Guarda,09-12,09-12-25
+LOCAL-091228,Vila Cova à Coelheira,09,12,28,Guarda,09-12,09-12-28
+LOCAL-091230,Carragozela e Várzea de Meruge,09,12,30,Guarda,09-12,09-12-30
+LOCAL-091231,Sameice e Santa Eulália,09,12,31,Guarda,09-12,09-12-31
+LOCAL-091232,Santa Marinha e São Martinho,09,12,32,Guarda,09-12,09-12-32
+LOCAL-091233,"Seia, São Romão e Lapa dos Dinheiros",09,12,33,Guarda,09-12,09-12-33
+LOCAL-091234,Torrozelo e Folhadosa,09,12,34,Guarda,09-12,09-12-34
+LOCAL-091235,Tourais e Lajes,09,12,35,Guarda,09-12,09-12-35
+LOCAL-091236,Vide e Cabeça,09,12,36,Guarda,09-12,09-12-36
+LOCAL-091301,Aldeia Nova,09,13,01,Guarda,09-13,09-13-01
+LOCAL-091303,Castanheira,09,13,03,Guarda,09-13,09-13-03
+LOCAL-091304,Cogula,09,13,04,Guarda,09-13,09-13-04
+LOCAL-091305,Cótimos,09,13,05,Guarda,09-13,09-13-05
+LOCAL-091307,Fiães,09,13,07,Guarda,09-13,09-13-07
+LOCAL-091309,Granja,09,13,09,Guarda,09-13,09-13-09
+LOCAL-091310,Guilheiro,09,13,10,Guarda,09-13,09-13-10
+LOCAL-091311,Moimentinha,09,13,11,Guarda,09-13,09-13-11
+LOCAL-091312,Moreira de Rei,09,13,12,Guarda,09-13,09-13-12
+LOCAL-091313,Palhais,09,13,13,Guarda,09-13,09-13-13
+LOCAL-091314,Póvoa do Concelho,09,13,14,Guarda,09-13,09-13-14
+LOCAL-091315,Reboleiro,09,13,15,Guarda,09-13,09-13-15
+LOCAL-091316,Rio de Mel,09,13,16,Guarda,09-13,09-13-16
+LOCAL-091321,Tamanhos,09,13,21,Guarda,09-13,09-13-21
+LOCAL-091325,Valdujo,09,13,25,Guarda,09-13,09-13-25
+LOCAL-091330,Freches e Torres,09,13,30,Guarda,09-13,09-13-30
+LOCAL-091331,"Torre do Terrenho, Sebadelhe da Serra e Terrenho",09,13,31,Guarda,09-13,09-13-31
+LOCAL-091332,Trancoso (São Pedro e Santa Maria) e Souto Maior,09,13,32,Guarda,09-13,09-13-32
+LOCAL-091333,Vale do Seixo e Vila Garcia,09,13,33,Guarda,09-13,09-13-33
+LOCAL-091334,Vila Franca das Naves e Feital,09,13,34,Guarda,09-13,09-13-34
+LOCAL-091335,Vilares e Carnicães,09,13,35,Guarda,09-13,09-13-35
+LOCAL-091401,Almendra,09,14,01,Guarda,09-14,09-14-01
+LOCAL-091402,Castelo Melhor,09,14,02,Guarda,09-14,09-14-02
+LOCAL-091403,Cedovim,09,14,03,Guarda,09-14,09-14-03
+LOCAL-091404,Chãs,09,14,04,Guarda,09-14,09-14-04
+LOCAL-091405,Custóias,09,14,05,Guarda,09-14,09-14-05
+LOCAL-091407,Horta,09,14,07,Guarda,09-14,09-14-07
+LOCAL-091410,Muxagata,09,14,10,Guarda,09-14,09-14-10
+LOCAL-091411,Numão,09,14,11,Guarda,09-14,09-14-11
+LOCAL-091412,Santa Comba,09,14,12,Guarda,09-14,09-14-12
+LOCAL-091414,Sebadelhe,09,14,14,Guarda,09-14,09-14-14
+LOCAL-091415,Seixas,09,14,15,Guarda,09-14,09-14-15
+LOCAL-091416,Touça,09,14,16,Guarda,09-14,09-14-16
+LOCAL-091418,Freixo de Numão,09,14,18,Guarda,09-14,09-14-18
+LOCAL-091419,Vila Nova de Foz Côa,09,14,19,Guarda,09-14,09-14-19
+LOCAL-100102,Alfeizerão,10,01,02,Leiria,10-01,10-01-02
+LOCAL-100104,Bárrio,10,01,04,Leiria,10-01,10-01-04
+LOCAL-100105,Benedita,10,01,05,Leiria,10-01,10-01-05
+LOCAL-100106,Cela,10,01,06,Leiria,10-01,10-01-06
+LOCAL-100108,Évora de Alcobaça,10,01,08,Leiria,10-01,10-01-08
+LOCAL-100109,Maiorga,10,01,09,Leiria,10-01,10-01-09
+LOCAL-100112,São Martinho do Porto,10,01,12,Leiria,10-01,10-01-12
+LOCAL-100114,Turquel,10,01,14,Leiria,10-01,10-01-14
+LOCAL-100116,Vimeiro,10,01,16,Leiria,10-01,10-01-16
+LOCAL-100120,Aljubarrota,10,01,20,Leiria,10-01,10-01-20
+LOCAL-100121,Alcobaça e Vestiaria,10,01,21,Leiria,10-01,10-01-21
+LOCAL-100122,"Coz, Alpedriz e Montes",10,01,22,Leiria,10-01,10-01-22
+LOCAL-100123,Pataias e Martingança,10,01,23,Leiria,10-01,10-01-23
+LOCAL-100201,Almoster,10,02,01,Leiria,10-02,10-02-01
+LOCAL-100204,Maçãs de Dona Maria,10,02,04,Leiria,10-02,10-02-04
+LOCAL-100205,Pelmá,10,02,05,Leiria,10-02,10-02-05
+LOCAL-100208,Alvaiázere,10,02,08,Leiria,10-02,10-02-08
+LOCAL-100209,Pussos São Pedro,10,02,09,Leiria,10-02,10-02-09
+LOCAL-100301,Alvorge,10,03,01,Leiria,10-03,10-03-01
+LOCAL-100303,Avelar,10,03,03,Leiria,10-03,10-03-03
+LOCAL-100304,Chão de Couce,10,03,04,Leiria,10-03,10-03-04
+LOCAL-100306,Pousaflores,10,03,06,Leiria,10-03,10-03-06
+LOCAL-100307,Santiago da Guarda,10,03,07,Leiria,10-03,10-03-07
+LOCAL-100309,Ansião,10,03,09,Leiria,10-03,10-03-09
+LOCAL-100401,Batalha,10,04,01,Leiria,10-04,10-04-01
+LOCAL-100402,Reguengo do Fetal,10,04,02,Leiria,10-04,10-04-02
+LOCAL-100403,São Mamede,10,04,03,Leiria,10-04,10-04-03
+LOCAL-100404,Golpilheira,10,04,04,Leiria,10-04,10-04-04
+LOCAL-100502,Carvalhal,10,05,02,Leiria,10-05,10-05-02
+LOCAL-100503,Roliça,10,05,03,Leiria,10-05,10-05-03
+LOCAL-100505,Pó,10,05,05,Leiria,10-05,10-05-05
+LOCAL-100506,Bombarral e Vale Covo,10,05,06,Leiria,10-05,10-05-06
+LOCAL-100601,A dos Francos,10,06,01,Leiria,10-06,10-06-01
+LOCAL-100602,Alvorninha,10,06,02,Leiria,10-06,10-06-02
+LOCAL-100604,Carvalhal Benfeito,10,06,04,Leiria,10-06,10-06-04
+LOCAL-100606,Foz do Arelho,10,06,06,Leiria,10-06,10-06-06
+LOCAL-100607,Landal,10,06,07,Leiria,10-06,10-06-07
+LOCAL-100608,Nadadouro,10,06,08,Leiria,10-06,10-06-08
+LOCAL-100609,Salir de Matos,10,06,09,Leiria,10-06,10-06-09
+LOCAL-100611,Santa Catarina,10,06,11,Leiria,10-06,10-06-11
+LOCAL-100615,Vidais,10,06,15,Leiria,10-06,10-06-15
+LOCAL-100617,"Nossa Senhora do Pópulo, Coto e São Gregório",10,06,17,Leiria,10-06,10-06-17
+LOCAL-100618,Caldas da Rainha - Santo Onofre e Serra do Bouro,10,06,18,Leiria,10-06,10-06-18
+LOCAL-100619,Tornada e Salir do Porto,10,06,19,Leiria,10-06,10-06-19
+LOCAL-100703,Castanheira de Pêra e Coentral,10,07,03,Leiria,10-07,10-07-03
+LOCAL-100801,Aguda,10,08,01,Leiria,10-08,10-08-01
+LOCAL-100802,Arega,10,08,02,Leiria,10-08,10-08-02
+LOCAL-100803,Campelo,10,08,03,Leiria,10-08,10-08-03
+LOCAL-100806,Figueiró dos Vinhos e Bairradas,10,08,06,Leiria,10-08,10-08-06
+LOCAL-100901,Amor,10,09,01,Leiria,10-09,10-09-01
+LOCAL-100902,Arrabal,10,09,02,Leiria,10-09,10-09-02
+LOCAL-100907,Caranguejeira,10,09,07,Leiria,10-09,10-09-07
+LOCAL-100909,Coimbrão,10,09,09,Leiria,10-09,10-09-09
+LOCAL-100913,Maceira,10,09,13,Leiria,10-09,10-09-13
+LOCAL-100915,Milagres,10,09,15,Leiria,10-09,10-09-15
+LOCAL-100921,Regueira de Pontes,10,09,21,Leiria,10-09,10-09-21
+LOCAL-100925,Bajouca,10,09,25,Leiria,10-09,10-09-25
+LOCAL-100926,Bidoeira de Cima,10,09,26,Leiria,10-09,10-09-26
+LOCAL-100932,Colmeias e Memória,10,09,32,Leiria,10-09,10-09-32
+LOCAL-100933,"Leiria, Pousos, Barreira e Cortes",10,09,33,Leiria,10-09,10-09-33
+LOCAL-100934,Marrazes e Barosa,10,09,34,Leiria,10-09,10-09-34
+LOCAL-100935,Monte Real e Carvide,10,09,35,Leiria,10-09,10-09-35
+LOCAL-100936,Monte Redondo e Carreira,10,09,36,Leiria,10-09,10-09-36
+LOCAL-100937,Parceiros e Azoia,10,09,37,Leiria,10-09,10-09-37
+LOCAL-100938,Santa Catarina da Serra e Chainça,10,09,38,Leiria,10-09,10-09-38
+LOCAL-100939,Santa Eufémia e Boa Vista,10,09,39,Leiria,10-09,10-09-39
+LOCAL-100940,Souto da Carpalhosa e Ortigosa,10,09,40,Leiria,10-09,10-09-40
+LOCAL-101001,Marinha Grande,10,10,01,Leiria,10-10,10-10-01
+LOCAL-101002,Vieira de Leiria,10,10,02,Leiria,10-10,10-10-02
+LOCAL-101003,Moita,10,10,03,Leiria,10-10,10-10-03
+LOCAL-101101,Famalicão,10,11,01,Leiria,10-11,10-11-01
+LOCAL-101102,Nazaré,10,11,02,Leiria,10-11,10-11-02
+LOCAL-101103,Valado dos Frades,10,11,03,Leiria,10-11,10-11-03
+LOCAL-101201,A dos Negros,10,12,01,Leiria,10-12,10-12-01
+LOCAL-101202,Amoreira,10,12,02,Leiria,10-12,10-12-02
+LOCAL-101203,Olho Marinho,10,12,03,Leiria,10-12,10-12-03
+LOCAL-101207,Vau,10,12,07,Leiria,10-12,10-12-07
+LOCAL-101208,Gaeiras,10,12,08,Leiria,10-12,10-12-08
+LOCAL-101209,Usseira,10,12,09,Leiria,10-12,10-12-09
+LOCAL-101210,"Santa Maria, São Pedro e Sobral da Lagoa",10,12,10,Leiria,10-12,10-12-10
+LOCAL-101301,Graça,10,13,01,Leiria,10-13,10-13-01
+LOCAL-101302,Pedrógão Grande,10,13,02,Leiria,10-13,10-13-02
+LOCAL-101303,Vila Facaia,10,13,03,Leiria,10-13,10-13-03
+LOCAL-101402,Atouguia da Baleia,10,14,02,Leiria,10-14,10-14-02
+LOCAL-101405,Serra d'El-Rei,10,14,05,Leiria,10-14,10-14-05
+LOCAL-101406,Ferrel,10,14,06,Leiria,10-14,10-14-06
+LOCAL-101407,Peniche,10,14,07,Leiria,10-14,10-14-07
+LOCAL-101501,Abiul,10,15,01,Leiria,10-15,10-15-01
+LOCAL-101503,Almagreira,10,15,03,Leiria,10-15,10-15-03
+LOCAL-101504,Carnide,10,15,04,Leiria,10-15,10-15-04
+LOCAL-101505,Carriço,10,15,05,Leiria,10-15,10-15-05
+LOCAL-101506,Louriçal,10,15,06,Leiria,10-15,10-15-06
+LOCAL-101508,Pelariga,10,15,08,Leiria,10-15,10-15-08
+LOCAL-101509,Pombal,10,15,09,Leiria,10-15,10-15-09
+LOCAL-101510,Redinha,10,15,10,Leiria,10-15,10-15-10
+LOCAL-101513,Vermoil,10,15,13,Leiria,10-15,10-15-13
+LOCAL-101514,Vila Cã,10,15,14,Leiria,10-15,10-15-14
+LOCAL-101515,Meirinhas,10,15,15,Leiria,10-15,10-15-15
+LOCAL-101518,"Guia, Ilha e Mata Mourisca",10,15,18,Leiria,10-15,10-15-18
+LOCAL-101519,Santiago e S.Simão de Litém e Albergaria dos Doze,10,15,19,Leiria,10-15,10-15-19
+LOCAL-101602,Alqueidão da Serra,10,16,02,Leiria,10-16,10-16-02
+LOCAL-101605,Calvaria de Cima,10,16,05,Leiria,10-16,10-16-05
+LOCAL-101606,Juncal,10,16,06,Leiria,10-16,10-16-06
+LOCAL-101608,Mira de Aire,10,16,08,Leiria,10-16,10-16-08
+LOCAL-101609,Pedreiras,10,16,09,Leiria,10-16,10-16-09
+LOCAL-101610,São Bento,10,16,10,Leiria,10-16,10-16-10
+LOCAL-101613,Serro Ventoso,10,16,13,Leiria,10-16,10-16-13
+LOCAL-101614,Porto de Mós - São João Baptista e São Pedro,10,16,14,Leiria,10-16,10-16-14
+LOCAL-101615,Alvados e Alcaria,10,16,15,Leiria,10-16,10-16-15
+LOCAL-101616,Arrimal e Mendiga,10,16,16,Leiria,10-16,10-16-16
+LOCAL-110106,Carnota,11,01,06,Lisboa,11-01,11-01-06
+LOCAL-110107,Meca,11,01,07,Lisboa,11-01,11-01-07
+LOCAL-110108,Olhalvo,11,01,08,Lisboa,11-01,11-01-08
+LOCAL-110109,Ota,11,01,09,Lisboa,11-01,11-01-09
+LOCAL-110113,Ventosa,11,01,13,Lisboa,11-01,11-01-13
+LOCAL-110114,Vila Verde dos Francos,11,01,14,Lisboa,11-01,11-01-14
+LOCAL-110117,Abrigada e Cabanas de Torres,11,01,17,Lisboa,11-01,11-01-17
+LOCAL-110118,Aldeia Galega da Merceana e Aldeia Gavinha,11,01,18,Lisboa,11-01,11-01-18
+LOCAL-110119,Alenquer (Santo Estêvão e Triana),11,01,19,Lisboa,11-01,11-01-19
+LOCAL-110120,Carregado e Cadafais,11,01,20,Lisboa,11-01,11-01-20
+LOCAL-110121,Ribafria e Pereiro de Palhacana,11,01,21,Lisboa,11-01,11-01-21
+LOCAL-110201,Arranhó,11,02,01,Lisboa,11-02,11-02-01
+LOCAL-110202,Arruda dos Vinhos,11,02,02,Lisboa,11-02,11-02-02
+LOCAL-110203,Cardosas,11,02,03,Lisboa,11-02,11-02-03
+LOCAL-110204,São Tiago dos Velhos,11,02,04,Lisboa,11-02,11-02-04
+LOCAL-110301,Alcoentre,11,03,01,Lisboa,11-03,11-03-01
+LOCAL-110302,Aveiras de Baixo,11,03,02,Lisboa,11-03,11-03-02
+LOCAL-110303,Aveiras de Cima,11,03,03,Lisboa,11-03,11-03-03
+LOCAL-110304,Azambuja,11,03,04,Lisboa,11-03,11-03-04
+LOCAL-110306,Vale do Paraíso,11,03,06,Lisboa,11-03,11-03-06
+LOCAL-110307,Vila Nova da Rainha,11,03,07,Lisboa,11-03,11-03-07
+LOCAL-110310,"Manique do Intendente, V.N.de S.Pedro e Maçussa",11,03,10,Lisboa,11-03,11-03-10
+LOCAL-110401,Alguber,11,04,01,Lisboa,11-04,11-04-01
+LOCAL-110407,Peral,11,04,07,Lisboa,11-04,11-04-07
+LOCAL-110409,Vermelha,11,04,09,Lisboa,11-04,11-04-09
+LOCAL-110410,Vilar,11,04,10,Lisboa,11-04,11-04-10
+LOCAL-110411,Cadaval e Pêro Moniz,11,04,11,Lisboa,11-04,11-04-11
+LOCAL-110412,Lamas e Cercal,11,04,12,Lisboa,11-04,11-04-12
+LOCAL-110413,Painho e Figueiros,11,04,13,Lisboa,11-04,11-04-13
+LOCAL-110501,Alcabideche,11,05,01,Lisboa,11-05,11-05-01
+LOCAL-110506,São Domingos de Rana,11,05,06,Lisboa,11-05,11-05-06
+LOCAL-110507,Carcavelos e Parede,11,05,07,Lisboa,11-05,11-05-07
+LOCAL-110508,Cascais e Estoril,11,05,08,Lisboa,11-05,11-05-08
+LOCAL-110601,Ajuda,11,06,01,Lisboa,11-06,11-06-01
+LOCAL-110602,Alcântara,11,06,02,Lisboa,11-06,11-06-02
+LOCAL-110607,Beato,11,06,07,Lisboa,11-06,11-06-07
+LOCAL-110608,Benfica,11,06,08,Lisboa,11-06,11-06-08
+LOCAL-110610,Campolide,11,06,10,Lisboa,11-06,11-06-10
+LOCAL-110611,Carnide,11,06,11,Lisboa,11-06,11-06-11
+LOCAL-110618,Lumiar,11,06,18,Lisboa,11-06,11-06-18
+LOCAL-110621,Marvila,11,06,21,Lisboa,11-06,11-06-21
+LOCAL-110633,Olivais,11,06,33,Lisboa,11-06,11-06-33
+LOCAL-110639,São Domingos de Benfica,11,06,39,Lisboa,11-06,11-06-39
+LOCAL-110654,Alvalade,11,06,54,Lisboa,11-06,11-06-54
+LOCAL-110655,Areeiro,11,06,55,Lisboa,11-06,11-06-55
+LOCAL-110656,Arroios,11,06,56,Lisboa,11-06,11-06-56
+LOCAL-110657,Avenidas Novas,11,06,57,Lisboa,11-06,11-06-57
+LOCAL-110658,Belém,11,06,58,Lisboa,11-06,11-06-58
+LOCAL-110659,Campo de Ourique,11,06,59,Lisboa,11-06,11-06-59
+LOCAL-110660,Estrela,11,06,60,Lisboa,11-06,11-06-60
+LOCAL-110661,Misericórdia,11,06,61,Lisboa,11-06,11-06-61
+LOCAL-110662,Parque das Nações,11,06,62,Lisboa,11-06,11-06-62
+LOCAL-110663,Penha de França,11,06,63,Lisboa,11-06,11-06-63
+LOCAL-110664,Santa Clara,11,06,64,Lisboa,11-06,11-06-64
+LOCAL-110665,Santa Maria Maior,11,06,65,Lisboa,11-06,11-06-65
+LOCAL-110666,Santo António,11,06,66,Lisboa,11-06,11-06-66
+LOCAL-110667,São Vicente,11,06,67,Lisboa,11-06,11-06-67
+LOCAL-110702,Bucelas,11,07,02,Lisboa,11-07,11-07-02
+LOCAL-110705,Fanhões,11,07,05,Lisboa,11-07,11-07-05
+LOCAL-110707,Loures,11,07,07,Lisboa,11-07,11-07-07
+LOCAL-110708,Lousa,11,07,08,Lisboa,11-07,11-07-08
+LOCAL-110726,Moscavide e Portela,11,07,26,Lisboa,11-07,11-07-26
+LOCAL-110727,Sacavém e Prior Velho,11,07,27,Lisboa,11-07,11-07-27
+LOCAL-110728,"Santa Iria de Azoia, São João da Talha e Bobadela",11,07,28,Lisboa,11-07,11-07-28
+LOCAL-110729,Santo Antão e São Julião do Tojal,11,07,29,Lisboa,11-07,11-07-29
+LOCAL-110730,Santo António dos Cavaleiros e Frielas,11,07,30,Lisboa,11-07,11-07-30
+LOCAL-110731,"Camarate, Unhos e Apelação",11,07,31,Lisboa,11-07,11-07-31
+LOCAL-110803,Moita dos Ferreiros,11,08,03,Lisboa,11-08,11-08-03
+LOCAL-110805,Reguengo Grande,11,08,05,Lisboa,11-08,11-08-05
+LOCAL-110806,Santa Bárbara,11,08,06,Lisboa,11-08,11-08-06
+LOCAL-110808,Vimeiro,11,08,08,Lisboa,11-08,11-08-08
+LOCAL-110810,Ribamar,11,08,10,Lisboa,11-08,11-08-10
+LOCAL-110812,Lourinhã e Atalaia,11,08,12,Lisboa,11-08,11-08-12
+LOCAL-110813,Miragaia e Marteleira,11,08,13,Lisboa,11-08,11-08-13
+LOCAL-110814,São Bartolomeu dos Galegos e Moledo,11,08,14,Lisboa,11-08,11-08-14
+LOCAL-110902,Carvoeira,11,09,02,Lisboa,11-09,11-09-02
+LOCAL-110904,Encarnação,11,09,04,Lisboa,11-09,11-09-04
+LOCAL-110906,Ericeira,11,09,06,Lisboa,11-09,11-09-06
+LOCAL-110909,Mafra,11,09,09,Lisboa,11-09,11-09-09
+LOCAL-110911,Milharado,11,09,11,Lisboa,11-09,11-09-11
+LOCAL-110913,Santo Isidoro,11,09,13,Lisboa,11-09,11-09-13
+LOCAL-110918,Azueira e Sobral da Abelheira,11,09,18,Lisboa,11-09,11-09-18
+LOCAL-110919,"Enxara do Bispo, Gradil e Vila Franca do Rosário",11,09,19,Lisboa,11-09,11-09-19
+LOCAL-110920,Igreja Nova e Cheleiros,11,09,20,Lisboa,11-09,11-09-20
+LOCAL-110921,Malveira e São Miguel de Alcainça,11,09,21,Lisboa,11-09,11-09-21
+LOCAL-110922,Venda do Pinheiro e Santo Estêvão das Galés,11,09,22,Lisboa,11-09,11-09-22
+LOCAL-111002,Barcarena,11,10,02,Lisboa,11-10,11-10-02
+LOCAL-111009,Porto Salvo,11,10,09,Lisboa,11-10,11-10-09
+LOCAL-111012,"Algés, Linda-a-Velha e Cruz Quebrada-Dafundo",11,10,12,Lisboa,11-10,11-10-12
+LOCAL-111013,Carnaxide e Queijas,11,10,13,Lisboa,11-10,11-10-13
+LOCAL-111014,"Oeiras e S.Julião da Barra, Paço de Arcos e Caxias",11,10,14,Lisboa,11-10,11-10-14
+LOCAL-111102,Algueirão-Mem Martins,11,11,02,Lisboa,11-11,11-11-02
+LOCAL-111105,Colares,11,11,05,Lisboa,11-11,11-11-05
+LOCAL-111108,Rio de Mouro,11,11,08,Lisboa,11-11,11-11-08
+LOCAL-111115,Casal de Cambra,11,11,15,Lisboa,11-11,11-11-15
+LOCAL-111122,Agualva e Mira-Sintra,11,11,22,Lisboa,11-11,11-11-22
+LOCAL-111123,"Almargem do Bispo, Pêro Pinheiro e Montelavar",11,11,23,Lisboa,11-11,11-11-23
+LOCAL-111124,Cacém e São Marcos,11,11,24,Lisboa,11-11,11-11-24
+LOCAL-111125,Massamá e Monte Abraão,11,11,25,Lisboa,11-11,11-11-25
+LOCAL-111126,Queluz e Belas,11,11,26,Lisboa,11-11,11-11-26
+LOCAL-111127,São João das Lampas e Terrugem,11,11,27,Lisboa,11-11,11-11-27
+LOCAL-111128,"S.Maria, S.Miguel, S.Martinho, S.Pedro Penaferrim",11,11,28,Lisboa,11-11,11-11-28
+LOCAL-111201,Santo Quintino,11,12,01,Lisboa,11-12,11-12-01
+LOCAL-111202,Sapataria,11,12,02,Lisboa,11-12,11-12-02
+LOCAL-111203,Sobral de Monte Agraço,11,12,03,Lisboa,11-12,11-12-03
+LOCAL-111306,Freiria,11,13,06,Lisboa,11-13,11-13-06
+LOCAL-111310,Ponte do Rol,11,13,10,Lisboa,11-13,11-13-10
+LOCAL-111311,Ramalhal,11,13,11,Lisboa,11-13,11-13-11
+LOCAL-111314,São Pedro da Cadeira,11,13,14,Lisboa,11-13,11-13-14
+LOCAL-111316,Silveira,11,13,16,Lisboa,11-13,11-13-16
+LOCAL-111317,Turcifal,11,13,17,Lisboa,11-13,11-13-17
+LOCAL-111318,Ventosa,11,13,18,Lisboa,11-13,11-13-18
+LOCAL-111321,A dos Cunhados e Maceira,11,13,21,Lisboa,11-13,11-13-21
+LOCAL-111322,Campelos e Outeiro da Cabeça,11,13,22,Lisboa,11-13,11-13-22
+LOCAL-111323,Carvoeira e Carmões,11,13,23,Lisboa,11-13,11-13-23
+LOCAL-111324,Dois Portos e Runa,11,13,24,Lisboa,11-13,11-13-24
+LOCAL-111325,Maxial e Monte Redondo,11,13,25,Lisboa,11-13,11-13-25
+LOCAL-111326,"Santa Maria, São Pedro e Matacães",11,13,26,Lisboa,11-13,11-13-26
+LOCAL-111408,Vialonga,11,14,08,Lisboa,11-14,11-14-08
+LOCAL-111409,Vila Franca de Xira,11,14,09,Lisboa,11-14,11-14-09
+LOCAL-111412,"Alhandra, São João dos Montes e Calhandriz",11,14,12,Lisboa,11-14,11-14-12
+LOCAL-111413,Alverca do Ribatejo e Sobralinho,11,14,13,Lisboa,11-14,11-14-13
+LOCAL-111414,Castanheira do Ribatejo e Cachoeiras,11,14,14,Lisboa,11-14,11-14-14
+LOCAL-111415,Póvoa de Santa Iria e Forte da Casa,11,14,15,Lisboa,11-14,11-14-15
+LOCAL-111512,Alfragide,11,15,12,Lisboa,11-15,11-15-12
+LOCAL-111513,Águas Livres,11,15,13,Lisboa,11-15,11-15-13
+LOCAL-111514,Encosta do Sol,11,15,14,Lisboa,11-15,11-15-14
+LOCAL-111515,Falagueira-Venda Nova,11,15,15,Lisboa,11-15,11-15-15
+LOCAL-111516,Mina de Água,11,15,16,Lisboa,11-15,11-15-16
+LOCAL-111517,Venteira,11,15,17,Lisboa,11-15,11-15-17
+LOCAL-111603,Odivelas,11,16,03,Lisboa,11-16,11-16-03
+LOCAL-111608,Pontinha e Famões,11,16,08,Lisboa,11-16,11-16-08
+LOCAL-111609,Póvoa de Santo Adrião e Olival Basto,11,16,09,Lisboa,11-16,11-16-09
+LOCAL-111610,Ramada e Caneças,11,16,10,Lisboa,11-16,11-16-10
+LOCAL-120101,Alter do Chão,12,01,01,Portalegre,12-01,12-01-01
+LOCAL-120102,Chancelaria,12,01,02,Portalegre,12-01,12-01-02
+LOCAL-120103,Seda,12,01,03,Portalegre,12-01,12-01-03
+LOCAL-120104,Cunheira,12,01,04,Portalegre,12-01,12-01-04
+LOCAL-120201,Assunção,12,02,01,Portalegre,12-02,12-02-01
+LOCAL-120202,Esperança,12,02,02,Portalegre,12-02,12-02-02
+LOCAL-120203,Mosteiros,12,02,03,Portalegre,12-02,12-02-03
+LOCAL-120302,Aldeia Velha,12,03,02,Portalegre,12-03,12-03-02
+LOCAL-120303,Avis,12,03,03,Portalegre,12-03,12-03-03
+LOCAL-120305,Ervedal,12,03,05,Portalegre,12-03,12-03-05
+LOCAL-120306,Figueira e Barros,12,03,06,Portalegre,12-03,12-03-06
+LOCAL-120309,Alcórrego e Maranhão,12,03,09,Portalegre,12-03,12-03-09
+LOCAL-120310,Benavila e Valongo,12,03,10,Portalegre,12-03,12-03-10
+LOCAL-120401,Nossa Senhora da Expectação,12,04,01,Portalegre,12-04,12-04-01
+LOCAL-120402,Nossa Senhora da Graça dos Degolados,12,04,02,Portalegre,12-04,12-04-02
+LOCAL-120403,São João Baptista,12,04,03,Portalegre,12-04,12-04-03
+LOCAL-120501,Nossa Senhora da Graça de Póvoa e Meadas,12,05,01,Portalegre,12-05,12-05-01
+LOCAL-120502,Santa Maria da Devesa,12,05,02,Portalegre,12-05,12-05-02
+LOCAL-120503,Santiago Maior,12,05,03,Portalegre,12-05,12-05-03
+LOCAL-120504,São João Baptista,12,05,04,Portalegre,12-05,12-05-04
+LOCAL-120601,Aldeia da Mata,12,06,01,Portalegre,12-06,12-06-01
+LOCAL-120604,Gáfete,12,06,04,Portalegre,12-06,12-06-04
+LOCAL-120605,Monte da Pedra,12,06,05,Portalegre,12-06,12-06-05
+LOCAL-120607,"Crato e Mártires, Flor da Rosa e Vale do Peso",12,06,07,Portalegre,12-06,12-06-07
+LOCAL-120706,Santa Eulália,12,07,06,Portalegre,12-07,12-07-06
+LOCAL-120707,São Brás e São Lourenço,12,07,07,Portalegre,12-07,12-07-07
+LOCAL-120708,São Vicente e Ventosa,12,07,08,Portalegre,12-07,12-07-08
+LOCAL-120712,"Assunção, Ajuda, Salvador e Santo Ildefonso",12,07,12,Portalegre,12-07,12-07-12
+LOCAL-120713,"Caia, São Pedro e Alcáçova",12,07,13,Portalegre,12-07,12-07-13
+LOCAL-120714,Barbacena e Vila Fernando,12,07,14,Portalegre,12-07,12-07-14
+LOCAL-120715,Terrugem e Vila Boim,12,07,15,Portalegre,12-07,12-07-15
+LOCAL-120801,Cabeço de Vide,12,08,01,Portalegre,12-08,12-08-01
+LOCAL-120802,Fronteira,12,08,02,Portalegre,12-08,12-08-02
+LOCAL-120803,São Saturnino,12,08,03,Portalegre,12-08,12-08-03
+LOCAL-120902,Belver,12,09,02,Portalegre,12-09,12-09-02
+LOCAL-120903,Comenda,12,09,03,Portalegre,12-09,12-09-03
+LOCAL-120905,Margem,12,09,05,Portalegre,12-09,12-09-05
+LOCAL-120906,Gavião e Atalaia,12,09,06,Portalegre,12-09,12-09-06
+LOCAL-121001,Beirã,12,10,01,Portalegre,12-10,12-10-01
+LOCAL-121002,Santa Maria de Marvão,12,10,02,Portalegre,12-10,12-10-02
+LOCAL-121003,Santo António das Areias,12,10,03,Portalegre,12-10,12-10-03
+LOCAL-121004,São Salvador da Aramenha,12,10,04,Portalegre,12-10,12-10-04
+LOCAL-121101,Assumar,12,11,01,Portalegre,12-11,12-11-01
+LOCAL-121102,Monforte,12,11,02,Portalegre,12-11,12-11-02
+LOCAL-121103,Santo Aleixo,12,11,03,Portalegre,12-11,12-11-03
+LOCAL-121104,Vaiamonte,12,11,04,Portalegre,12-11,12-11-04
+LOCAL-121201,Alpalhão,12,12,01,Portalegre,12-12,12-12-01
+LOCAL-121205,Montalvão,12,12,05,Portalegre,12-12,12-12-05
+LOCAL-121207,Santana,12,12,07,Portalegre,12-12,12-12-07
+LOCAL-121208,São Matias,12,12,08,Portalegre,12-12,12-12-08
+LOCAL-121210,Tolosa,12,12,10,Portalegre,12-12,12-12-10
+LOCAL-121211,Arez e Amieira do Tejo,12,12,11,Portalegre,12-12,12-12-11
+LOCAL-121212,"Espírito Santo, Nossa Senhora da Graça e São Simão",12,12,12,Portalegre,12-12,12-12-12
+LOCAL-121301,Galveias,12,13,01,Portalegre,12-13,12-13-01
+LOCAL-121302,Montargil,12,13,02,Portalegre,12-13,12-13-02
+LOCAL-121304,Foros de Arrão,12,13,04,Portalegre,12-13,12-13-04
+LOCAL-121305,Longomel,12,13,05,Portalegre,12-13,12-13-05
+LOCAL-121308,"Ponte de Sor, Tramaga e Vale de Açor",12,13,08,Portalegre,12-13,12-13-08
+LOCAL-121401,Alagoa,12,14,01,Portalegre,12-14,12-14-01
+LOCAL-121402,Alegrete,12,14,02,Portalegre,12-14,12-14-02
+LOCAL-121404,Fortios,12,14,04,Portalegre,12-14,12-14-04
+LOCAL-121410,Urra,12,14,10,Portalegre,12-14,12-14-10
+LOCAL-121411,Sé e São Lourenço,12,14,11,Portalegre,12-14,12-14-11
+LOCAL-121412,Reguengo e São Julião,12,14,12,Portalegre,12-14,12-14-12
+LOCAL-121413,Ribeira de Nisa e Carreiras,12,14,13,Portalegre,12-14,12-14-13
+LOCAL-121501,Cano,12,15,01,Portalegre,12-15,12-15-01
+LOCAL-121502,Casa Branca,12,15,02,Portalegre,12-15,12-15-02
+LOCAL-121503,Santo Amaro,12,15,03,Portalegre,12-15,12-15-03
+LOCAL-121504,Sousel,12,15,04,Portalegre,12-15,12-15-04
+LOCAL-130103,Ansiães,13,01,03,Porto,13-01,13-01-03
+LOCAL-130107,Candemil,13,01,07,Porto,13-01,13-01-07
+LOCAL-130112,Fregim,13,01,12,Porto,13-01,13-01-12
+LOCAL-130115,Fridão,13,01,15,Porto,13-01,13-01-15
+LOCAL-130117,Gondar,13,01,17,Porto,13-01,13-01-17
+LOCAL-130118,Jazente,13,01,18,Porto,13-01,13-01-18
+LOCAL-130119,Lomba,13,01,19,Porto,13-01,13-01-19
+LOCAL-130120,Louredo,13,01,20,Porto,13-01,13-01-20
+LOCAL-130121,Lufrei,13,01,21,Porto,13-01,13-01-21
+LOCAL-130123,Mancelos,13,01,23,Porto,13-01,13-01-23
+LOCAL-130126,Padronelo,13,01,26,Porto,13-01,13-01-26
+LOCAL-130128,Rebordelo,13,01,28,Porto,13-01,13-01-28
+LOCAL-130129,Salvador do Monte,13,01,29,Porto,13-01,13-01-29
+LOCAL-130134,Gouveia (São Simão),13,01,34,Porto,13-01,13-01-34
+LOCAL-130135,Telões,13,01,35,Porto,13-01,13-01-35
+LOCAL-130136,Travanca,13,01,36,Porto,13-01,13-01-36
+LOCAL-130138,Vila Caiz,13,01,38,Porto,13-01,13-01-38
+LOCAL-130139,Vila Chã do Marão,13,01,39,Porto,13-01,13-01-39
+LOCAL-130141,"Aboadela, Sanche e Várzea",13,01,41,Porto,13-01,13-01-41
+LOCAL-130142,"Amarante (São Gonçalo), Madalena, Cepelos e Gatão",13,01,42,Porto,13-01,13-01-42
+LOCAL-130143,"Bustelo, Carneiro e Carvalho de Rei",13,01,43,Porto,13-01,13-01-43
+LOCAL-130144,Figueiró (Santiago e Santa Cristina),13,01,44,Porto,13-01,13-01-44
+LOCAL-130145,Freixo de Cima e de Baixo,13,01,45,Porto,13-01,13-01-45
+LOCAL-130146,Olo e Canadelo,13,01,46,Porto,13-01,13-01-46
+LOCAL-130147,Vila Meã,13,01,47,Porto,13-01,13-01-47
+LOCAL-130148,"Vila Garcia, Aboim e Chapa",13,01,48,Porto,13-01,13-01-48
+LOCAL-130204,Frende,13,02,04,Porto,13-02,13-02-04
+LOCAL-130205,Gestaçô,13,02,05,Porto,13-02,13-02-05
+LOCAL-130206,Gove,13,02,06,Porto,13-02,13-02-06
+LOCAL-130207,Grilo,13,02,07,Porto,13-02,13-02-07
+LOCAL-130208,Loivos do Monte,13,02,08,Porto,13-02,13-02-08
+LOCAL-130215,Santa Marinha do Zêzere,13,02,15,Porto,13-02,13-02-15
+LOCAL-130219,Valadares,13,02,19,Porto,13-02,13-02-19
+LOCAL-130220,Viariz,13,02,20,Porto,13-02,13-02-20
+LOCAL-130221,Ancede e Ribadouro,13,02,21,Porto,13-02,13-02-21
+LOCAL-130222,Baião (Santa Leocádia) e Mesquinhata,13,02,22,Porto,13-02,13-02-22
+LOCAL-130223,Campelo e Ovil,13,02,23,Porto,13-02,13-02-23
+LOCAL-130224,Loivos da Ribeira e Tresouras,13,02,24,Porto,13-02,13-02-24
+LOCAL-130225,Santa Cruz do Douro e São Tomé de Covelas,13,02,25,Porto,13-02,13-02-25
+LOCAL-130226,Teixeira e Teixeiró,13,02,26,Porto,13-02,13-02-26
+LOCAL-130301,Aião,13,03,01,Porto,13-03,13-03-01
+LOCAL-130302,Airães,13,03,02,Porto,13-03,13-03-02
+LOCAL-130305,Friande,13,03,05,Porto,13-03,13-03-05
+LOCAL-130306,Idães,13,03,06,Porto,13-03,13-03-06
+LOCAL-130307,Jugueiros,13,03,07,Porto,13-03,13-03-07
+LOCAL-130313,Penacova,13,03,13,Porto,13-03,13-03-13
+LOCAL-130314,Pinheiro,13,03,14,Porto,13-03,13-03-14
+LOCAL-130315,Pombeiro de Ribavizela,13,03,15,Porto,13-03,13-03-15
+LOCAL-130317,Refontoura,13,03,17,Porto,13-03,13-03-17
+LOCAL-130318,Regilde,13,03,18,Porto,13-03,13-03-18
+LOCAL-130319,Revinhade,13,03,19,Porto,13-03,13-03-19
+LOCAL-130324,Sendim,13,03,24,Porto,13-03,13-03-24
+LOCAL-130334,Macieira da Lixa e Caramos,13,03,34,Porto,13-03,13-03-34
+LOCAL-130335,"Margaride, Várzea, Lagares, Varziela e Moure",13,03,35,Porto,13-03,13-03-35
+LOCAL-130336,"Pedreira, Rande e Sernande",13,03,36,Porto,13-03,13-03-36
+LOCAL-130337,Torrados e Sousa,13,03,37,Porto,13-03,13-03-37
+LOCAL-130338,Unhão e Lordelo,13,03,38,Porto,13-03,13-03-38
+LOCAL-130339,Vila Cova da Lixa e Borba de Godim,13,03,39,Porto,13-03,13-03-39
+LOCAL-130340,Vila Fria e Vizela (São Jorge),13,03,40,Porto,13-03,13-03-40
+LOCAL-130341,Vila Verde e Santão,13,03,41,Porto,13-03,13-03-41
+LOCAL-130405,Lomba,13,04,05,Porto,13-04,13-04-05
+LOCAL-130408,Rio Tinto,13,04,08,Porto,13-04,13-04-08
+LOCAL-130412,Baguim do Monte (Rio Tinto),13,04,12,Porto,13-04,13-04-12
+LOCAL-130413,Fânzeres e São Pedro da Cova,13,04,13,Porto,13-04,13-04-13
+LOCAL-130414,Foz do Sousa e Covelo,13,04,14,Porto,13-04,13-04-14
+LOCAL-130415,"Gondomar (São Cosme), Valbom e Jovim",13,04,15,Porto,13-04,13-04-15
+LOCAL-130416,Melres e Medas,13,04,16,Porto,13-04,13-04-16
+LOCAL-130502,Aveleda,13,05,02,Porto,13-05,13-05-02
+LOCAL-130504,Caíde de Rei,13,05,04,Porto,13-05,13-05-04
+LOCAL-130510,Lodares,13,05,10,Porto,13-05,13-05-10
+LOCAL-130512,Macieira,13,05,12,Porto,13-05,13-05-12
+LOCAL-130513,Meinedo,13,05,13,Porto,13-05,13-05-13
+LOCAL-130515,Nevogilde,13,05,15,Porto,13-05,13-05-15
+LOCAL-130524,Sousela,13,05,24,Porto,13-05,13-05-24
+LOCAL-130525,Torno,13,05,25,Porto,13-05,13-05-25
+LOCAL-130526,Vilar do Torno e Alentém,13,05,26,Porto,13-05,13-05-26
+LOCAL-130527,Cernadelo e Lousada (São Miguel e Santa Margarida),13,05,27,Porto,13-05,13-05-27
+LOCAL-130528,"Cristelos, Boim e Ordem",13,05,28,Porto,13-05,13-05-28
+LOCAL-130529,Figueiras e Covas,13,05,29,Porto,13-05,13-05-29
+LOCAL-130530,Lustosa e Barrosas (Santo Estêvão),13,05,30,Porto,13-05,13-05-30
+LOCAL-130531,Nespereira e Casais,13,05,31,Porto,13-05,13-05-31
+LOCAL-130532,"Silvares, Pias, Nogueira e Alvarenga",13,05,32,Porto,13-05,13-05-32
+LOCAL-130601,Águas Santas,13,06,01,Porto,13-06,13-06-01
+LOCAL-130603,Folgosa,13,06,03,Porto,13-06,13-06-03
+LOCAL-130608,Milheirós,13,06,08,Porto,13-06,13-06-08
+LOCAL-130609,Moreira,13,06,09,Porto,13-06,13-06-09
+LOCAL-130613,São Pedro Fins,13,06,13,Porto,13-06,13-06-13
+LOCAL-130616,Vila Nova da Telha,13,06,16,Porto,13-06,13-06-16
+LOCAL-130617,Pedrouços,13,06,17,Porto,13-06,13-06-17
+LOCAL-130618,Castêlo da Maia,13,06,18,Porto,13-06,13-06-18
+LOCAL-130619,Cidade da Maia,13,06,19,Porto,13-06,13-06-19
+LOCAL-130620,Nogueira e Silva Escura,13,06,20,Porto,13-06,13-06-20
+LOCAL-130704,Banho e Carvalhosa,13,07,04,Porto,13-07,13-07-04
+LOCAL-130705,Constance,13,07,05,Porto,13-07,13-07-05
+LOCAL-130722,Soalhães,13,07,22,Porto,13-07,13-07-22
+LOCAL-130723,Sobretâmega,13,07,23,Porto,13-07,13-07-23
+LOCAL-130724,Tabuado,13,07,24,Porto,13-07,13-07-24
+LOCAL-130730,Vila Boa do Bispo,13,07,30,Porto,13-07,13-07-30
+LOCAL-130732,"Alpendorada, Várzea e Torrão",13,07,32,Porto,13-07,13-07-32
+LOCAL-130733,Avessadas e Rosém,13,07,33,Porto,13-07,13-07-33
+LOCAL-130734,Bem Viver,13,07,34,Porto,13-07,13-07-34
+LOCAL-130735,Santo Isidoro e Livração,13,07,35,Porto,13-07,13-07-35
+LOCAL-130736,Marco,13,07,36,Porto,13-07,13-07-36
+LOCAL-130737,Paredes de Viadores e Manhuncelos,13,07,37,Porto,13-07,13-07-37
+LOCAL-130738,Penha Longa e Paços de Gaiolo,13,07,38,Porto,13-07,13-07-38
+LOCAL-130739,Sande e São Lourenço do Douro,13,07,39,Porto,13-07,13-07-39
+LOCAL-130740,"Várzea, Aliviada e Folhada",13,07,40,Porto,13-07,13-07-40
+LOCAL-130741,Vila Boa de Quires e Maureles,13,07,41,Porto,13-07,13-07-41
+LOCAL-130811,"Custóias, Leça do Balio e Guifões",13,08,11,Porto,13-08,13-08-11
+LOCAL-130812,Matosinhos e Leça da Palmeira,13,08,12,Porto,13-08,13-08-12
+LOCAL-130813,"Perafita, Lavra e Santa Cruz do Bispo",13,08,13,Porto,13-08,13-08-13
+LOCAL-130814,São Mamede de Infesta e Senhora da Hora,13,08,14,Porto,13-08,13-08-14
+LOCAL-130902,Carvalhosa,13,09,02,Porto,13-09,13-09-02
+LOCAL-130904,Eiriz,13,09,04,Porto,13-09,13-09-04
+LOCAL-130905,Ferreira,13,09,05,Porto,13-09,13-09-05
+LOCAL-130906,Figueiró,13,09,06,Porto,13-09,13-09-06
+LOCAL-130908,Freamunde,13,09,08,Porto,13-09,13-09-08
+LOCAL-130910,Meixomil,13,09,10,Porto,13-09,13-09-10
+LOCAL-130913,Penamaior,13,09,13,Porto,13-09,13-09-13
+LOCAL-130914,Raimonda,13,09,14,Porto,13-09,13-09-14
+LOCAL-130916,Seroa,13,09,16,Porto,13-09,13-09-16
+LOCAL-130917,Frazão Arreigada,13,09,17,Porto,13-09,13-09-17
+LOCAL-130918,Paços de Ferreira,13,09,18,Porto,13-09,13-09-18
+LOCAL-130919,Sanfins Lamoso Codessos,13,09,19,Porto,13-09,13-09-19
+LOCAL-131001,Aguiar de Sousa,13,10,01,Porto,13-10,13-10-01
+LOCAL-131002,Astromil,13,10,02,Porto,13-10,13-10-02
+LOCAL-131003,Baltar,13,10,03,Porto,13-10,13-10-03
+LOCAL-131004,Beire,13,10,04,Porto,13-10,13-10-04
+LOCAL-131008,Cete,13,10,08,Porto,13-10,13-10-08
+LOCAL-131009,Cristelo,13,10,09,Porto,13-10,13-10-09
+LOCAL-131010,Duas Igrejas,13,10,10,Porto,13-10,13-10-10
+LOCAL-131011,Gandra,13,10,11,Porto,13-10,13-10-11
+LOCAL-131013,Lordelo,13,10,13,Porto,13-10,13-10-13
+LOCAL-131014,Louredo,13,10,14,Porto,13-10,13-10-14
+LOCAL-131017,Parada de Todeia,13,10,17,Porto,13-10,13-10-17
+LOCAL-131018,Rebordosa,13,10,18,Porto,13-10,13-10-18
+LOCAL-131019,Recarei,13,10,19,Porto,13-10,13-10-19
+LOCAL-131020,Sobreira,13,10,20,Porto,13-10,13-10-20
+LOCAL-131021,Sobrosa,13,10,21,Porto,13-10,13-10-21
+LOCAL-131022,Vandoma,13,10,22,Porto,13-10,13-10-22
+LOCAL-131024,Vilela,13,10,24,Porto,13-10,13-10-24
+LOCAL-131025,Paredes,13,10,25,Porto,13-10,13-10-25
+LOCAL-131101,Abragão,13,11,01,Porto,13-11,13-11-01
+LOCAL-131102,Boelhe,13,11,02,Porto,13-11,13-11-02
+LOCAL-131103,Bustelo,13,11,03,Porto,13-11,13-11-03
+LOCAL-131104,Cabeça Santa,13,11,04,Porto,13-11,13-11-04
+LOCAL-131105,Canelas,13,11,05,Porto,13-11,13-11-05
+LOCAL-131106,Capela,13,11,06,Porto,13-11,13-11-06
+LOCAL-131107,Castelões,13,11,07,Porto,13-11,13-11-07
+LOCAL-131108,Croca,13,11,08,Porto,13-11,13-11-08
+LOCAL-131109,Duas Igrejas,13,11,09,Porto,13-11,13-11-09
+LOCAL-131110,Eja,13,11,10,Porto,13-11,13-11-10
+LOCAL-131112,Fonte Arcada,13,11,12,Porto,13-11,13-11-12
+LOCAL-131113,Galegos,13,11,13,Porto,13-11,13-11-13
+LOCAL-131115,Irivo,13,11,15,Porto,13-11,13-11-15
+LOCAL-131121,Oldrões,13,11,21,Porto,13-11,13-11-21
+LOCAL-131122,Paço de Sousa,13,11,22,Porto,13-11,13-11-22
+LOCAL-131125,Perozelo,13,11,25,Porto,13-11,13-11-25
+LOCAL-131128,Rans,13,11,28,Porto,13-11,13-11-28
+LOCAL-131129,Rio de Moinhos,13,11,29,Porto,13-11,13-11-29
+LOCAL-131132,Recezinhos (São Mamede),13,11,32,Porto,13-11,13-11-32
+LOCAL-131133,Recezinhos (São Martinho),13,11,33,Porto,13-11,13-11-33
+LOCAL-131134,Sebolido,13,11,34,Porto,13-11,13-11-34
+LOCAL-131136,Valpedre,13,11,36,Porto,13-11,13-11-36
+LOCAL-131138,Rio Mau,13,11,38,Porto,13-11,13-11-38
+LOCAL-131139,Penafiel,13,11,39,Porto,13-11,13-11-39
+LOCAL-131140,Luzim e Vila Cova,13,11,40,Porto,13-11,13-11-40
+LOCAL-131141,Guilhufe e Urrô,13,11,41,Porto,13-11,13-11-41
+LOCAL-131142,Lagares e Figueira,13,11,42,Porto,13-11,13-11-42
+LOCAL-131143,Termas de São Vicente,13,11,43,Porto,13-11,13-11-43
+LOCAL-131202,Bonfim,13,12,02,Porto,13-12,13-12-02
+LOCAL-131203,Campanhã,13,12,03,Porto,13-12,13-12-03
+LOCAL-131210,Paranhos,13,12,10,Porto,13-12,13-12-10
+LOCAL-131211,Ramalde,13,12,11,Porto,13-12,13-12-11
+LOCAL-131216,"Aldoar, Foz do Douro e Nevogilde",13,12,16,Porto,13-12,13-12-16
+LOCAL-131217,"Cedofeita,Ildefonso,Sé,Miragaia,Nicolau,Vitória",13,12,17,Porto,13-12,13-12-17
+LOCAL-131218,Lordelo do Ouro e Massarelos,13,12,18,Porto,13-12,13-12-18
+LOCAL-131305,Balazar,13,13,05,Porto,13-13,13-13-05
+LOCAL-131307,Estela,13,13,07,Porto,13-13,13-13-07
+LOCAL-131308,Laundos,13,13,08,Porto,13-13,13-13-08
+LOCAL-131311,Rates,13,13,11,Porto,13-13,13-13-11
+LOCAL-131313,"Aver-o-Mar, Amorim e Terroso",13,13,13,Porto,13-13,13-13-13
+LOCAL-131314,Aguçadoura e Navais,13,13,14,Porto,13-13,13-13-14
+LOCAL-131315,"Póvoa de Varzim, Beiriz e Argivai",13,13,15,Porto,13-13,13-13-15
+LOCAL-131401,Agrela,13,14,01,Porto,13-14,13-14-01
+LOCAL-131402,Água Longa,13,14,02,Porto,13-14,13-14-02
+LOCAL-131405,Aves,13,14,05,Porto,13-14,13-14-05
+LOCAL-131413,Monte Córdova,13,14,13,Porto,13-14,13-14-13
+LOCAL-131416,Rebordões,13,14,16,Porto,13-14,13-14-16
+LOCAL-131418,Reguenga,13,14,18,Porto,13-14,13-14-18
+LOCAL-131419,Roriz,13,14,19,Porto,13-14,13-14-19
+LOCAL-131430,Negrelos (São Tomé),13,14,30,Porto,13-14,13-14-30
+LOCAL-131432,Vilarinho,13,14,32,Porto,13-14,13-14-32
+LOCAL-131433,"Areias, Sequeiró, Lama e Palmeira",13,14,33,Porto,13-14,13-14-33
+LOCAL-131434,Vila Nova do Campo,13,14,34,Porto,13-14,13-14-34
+LOCAL-131435,Carreira e Refojos de Riba de Ave,13,14,35,Porto,13-14,13-14-35
+LOCAL-131436,Lamelas e Guimarei,13,14,36,Porto,13-14,13-14-36
+LOCAL-131437,"St.Tirso, Couto (S.Cristina e S.Miguel) e Burgães",13,14,37,Porto,13-14,13-14-37
+LOCAL-131501,Alfena,13,15,01,Porto,13-15,13-15-01
+LOCAL-131503,Ermesinde,13,15,03,Porto,13-15,13-15-03
+LOCAL-131505,Valongo,13,15,05,Porto,13-15,13-15-05
+LOCAL-131506,Campo e Sobrado,13,15,06,Porto,13-15,13-15-06
+LOCAL-131602,Árvore,13,16,02,Porto,13-16,13-16-02
+LOCAL-131603,Aveleda,13,16,03,Porto,13-16,13-16-03
+LOCAL-131604,Azurara,13,16,04,Porto,13-16,13-16-04
+LOCAL-131607,Fajozes,13,16,07,Porto,13-16,13-16-07
+LOCAL-131610,Gião,13,16,10,Porto,13-16,13-16-10
+LOCAL-131611,Guilhabreu,13,16,11,Porto,13-16,13-16-11
+LOCAL-131612,Junqueira,13,16,12,Porto,13-16,13-16-12
+LOCAL-131613,Labruge,13,16,13,Porto,13-16,13-16-13
+LOCAL-131614,Macieira da Maia,13,16,14,Porto,13-16,13-16-14
+LOCAL-131616,Mindelo,13,16,16,Porto,13-16,13-16-16
+LOCAL-131617,Modivas,13,16,17,Porto,13-16,13-16-17
+LOCAL-131627,Vila Chã,13,16,27,Porto,13-16,13-16-27
+LOCAL-131628,Vila do Conde,13,16,28,Porto,13-16,13-16-28
+LOCAL-131630,Vilar de Pinheiro,13,16,30,Porto,13-16,13-16-30
+LOCAL-131631,"Bagunte, Ferreiró, Outeiro Maior e Parada",13,16,31,Porto,13-16,13-16-31
+LOCAL-131632,Fornelo e Vairão,13,16,32,Porto,13-16,13-16-32
+LOCAL-131633,Malta e Canidelo,13,16,33,Porto,13-16,13-16-33
+LOCAL-131634,Retorta e Tougues,13,16,34,Porto,13-16,13-16-34
+LOCAL-131635,Rio Mau e Arcos,13,16,35,Porto,13-16,13-16-35
+LOCAL-131636,Touguinha e Touguinhó,13,16,36,Porto,13-16,13-16-36
+LOCAL-131637,Vilar e Mosteiró,13,16,37,Porto,13-16,13-16-37
+LOCAL-131701,Arcozelo,13,17,01,Porto,13-17,13-17-01
+LOCAL-131702,Avintes,13,17,02,Porto,13-17,13-17-02
+LOCAL-131703,Canelas,13,17,03,Porto,13-17,13-17-03
+LOCAL-131704,Canidelo,13,17,04,Porto,13-17,13-17-04
+LOCAL-131709,Madalena,13,17,09,Porto,13-17,13-17-09
+LOCAL-131712,Oliveira do Douro,13,17,12,Porto,13-17,13-17-12
+LOCAL-131717,São Félix da Marinha,13,17,17,Porto,13-17,13-17-17
+LOCAL-131723,Vilar de Andorinho,13,17,23,Porto,13-17,13-17-23
+LOCAL-131725,Grijó e Sermonde,13,17,25,Porto,13-17,13-17-25
+LOCAL-131726,Gulpilhares e Valadares,13,17,26,Porto,13-17,13-17-26
+LOCAL-131727,Mafamude e Vilar do Paraíso,13,17,27,Porto,13-17,13-17-27
+LOCAL-131728,Pedroso e Seixezelo,13,17,28,Porto,13-17,13-17-28
+LOCAL-131729,"Sandim, Olival, Lever e Crestuma",13,17,29,Porto,13-17,13-17-29
+LOCAL-131730,Santa Marinha e São Pedro da Afurada,13,17,30,Porto,13-17,13-17-30
+LOCAL-131731,Serzedo e Perosinho,13,17,31,Porto,13-17,13-17-31
+LOCAL-131806,Covelas,13,18,06,Porto,13-18,13-18-06
+LOCAL-131808,Muro,13,18,08,Porto,13-18,13-18-08
+LOCAL-131809,Alvarelhos e Guidões,13,18,09,Porto,13-18,13-18-09
+LOCAL-131810,Bougado (São Martinho e Santiago),13,18,10,Porto,13-18,13-18-10
+LOCAL-131811,Coronado (São Romão e São Mamede),13,18,11,Porto,13-18,13-18-11
+LOCAL-140104,Bemposta,14,01,04,Santarém,14-01,14-01-04
+LOCAL-140105,Martinchel,14,01,05,Santarém,14-01,14-01-05
+LOCAL-140106,Mouriscas,14,01,06,Santarém,14-01,14-01-06
+LOCAL-140107,Pego,14,01,07,Santarém,14-01,14-01-07
+LOCAL-140108,Rio de Moinhos,14,01,08,Santarém,14-01,14-01-08
+LOCAL-140115,Tramagal,14,01,15,Santarém,14-01,14-01-15
+LOCAL-140118,Fontes,14,01,18,Santarém,14-01,14-01-18
+LOCAL-140119,Carvalhal,14,01,19,Santarém,14-01,14-01-19
+LOCAL-140120,Abrantes (São Vicente e São João) e Alferrarede,14,01,20,Santarém,14-01,14-01-20
+LOCAL-140121,Aldeia do Mato e Souto,14,01,21,Santarém,14-01,14-01-21
+LOCAL-140122,Alvega e Concavada,14,01,22,Santarém,14-01,14-01-22
+LOCAL-140123,São Facundo e Vale das Mós,14,01,23,Santarém,14-01,14-01-23
+LOCAL-140124,São Miguel do Rio Torto e Rossio ao Sul do Tejo,14,01,24,Santarém,14-01,14-01-24
+LOCAL-140202,Bugalhos,14,02,02,Santarém,14-02,14-02-02
+LOCAL-140206,Minde,14,02,06,Santarém,14-02,14-02-06
+LOCAL-140207,Moitas Venda,14,02,07,Santarém,14-02,14-02-07
+LOCAL-140208,Monsanto,14,02,08,Santarém,14-02,14-02-08
+LOCAL-140209,Serra de Santo António,14,02,09,Santarém,14-02,14-02-09
+LOCAL-140211,Alcanena e Vila Moreira,14,02,11,Santarém,14-02,14-02-11
+LOCAL-140212,"Malhou, Louriceira e Espinheiro",14,02,12,Santarém,14-02,14-02-12
+LOCAL-140301,Almeirim,14,03,01,Santarém,14-03,14-03-01
+LOCAL-140302,Benfica do Ribatejo,14,03,02,Santarém,14-03,14-03-02
+LOCAL-140303,Fazendas de Almeirim,14,03,03,Santarém,14-03,14-03-03
+LOCAL-140304,Raposa,14,03,04,Santarém,14-03,14-03-04
+LOCAL-140401,Alpiarça,14,04,01,Santarém,14-04,14-04-01
+LOCAL-140501,Benavente,14,05,01,Santarém,14-05,14-05-01
+LOCAL-140502,Samora Correia,14,05,02,Santarém,14-05,14-05-02
+LOCAL-140503,Santo Estêvão,14,05,03,Santarém,14-05,14-05-03
+LOCAL-140504,Barrosa,14,05,04,Santarém,14-05,14-05-04
+LOCAL-140604,Pontével,14,06,04,Santarém,14-06,14-06-04
+LOCAL-140605,Valada,14,06,05,Santarém,14-06,14-06-05
+LOCAL-140607,Vila Chã de Ourique,14,06,07,Santarém,14-06,14-06-07
+LOCAL-140608,Vale da Pedra,14,06,08,Santarém,14-06,14-06-08
+LOCAL-140609,Cartaxo e Vale da Pinta,14,06,09,Santarém,14-06,14-06-09
+LOCAL-140610,Ereira e Lapa,14,06,10,Santarém,14-06,14-06-10
+LOCAL-140704,Ulme,14,07,04,Santarém,14-07,14-07-04
+LOCAL-140705,Vale de Cavalos,14,07,05,Santarém,14-07,14-07-05
+LOCAL-140707,Carregueira,14,07,07,Santarém,14-07,14-07-07
+LOCAL-140708,Chamusca e Pinheiro Grande,14,07,08,Santarém,14-07,14-07-08
+LOCAL-140709,Parreira e Chouto,14,07,09,Santarém,14-07,14-07-09
+LOCAL-140801,Constância,14,08,01,Santarém,14-08,14-08-01
+LOCAL-140802,Montalvo,14,08,02,Santarém,14-08,14-08-02
+LOCAL-140803,Santa Margarida da Coutada,14,08,03,Santarém,14-08,14-08-03
+LOCAL-140902,Couço,14,09,02,Santarém,14-09,14-09-02
+LOCAL-140903,São José da Lamarosa,14,09,03,Santarém,14-09,14-09-03
+LOCAL-140905,Branca,14,09,05,Santarém,14-09,14-09-05
+LOCAL-140907,Biscainho,14,09,07,Santarém,14-09,14-09-07
+LOCAL-140908,Santana do Mato,14,09,08,Santarém,14-09,14-09-08
+LOCAL-140909,"Coruche, Fajarda e Erra",14,09,09,Santarém,14-09,14-09-09
+LOCAL-141001,São João Baptista,14,10,01,Santarém,14-10,14-10-01
+LOCAL-141002,Nossa Senhora de Fátima,14,10,02,Santarém,14-10,14-10-02
+LOCAL-141101,Águas Belas,14,11,01,Santarém,14-11,14-11-01
+LOCAL-141103,Beco,14,11,03,Santarém,14-11,14-11-03
+LOCAL-141104,Chãos,14,11,04,Santarém,14-11,14-11-04
+LOCAL-141106,Ferreira do Zêzere,14,11,06,Santarém,14-11,14-11-06
+LOCAL-141107,Igreja Nova do Sobral,14,11,07,Santarém,14-11,14-11-07
+LOCAL-141110,Nossa Senhora do Pranto,14,11,10,Santarém,14-11,14-11-10
+LOCAL-141111,Areias e Pias,14,11,11,Santarém,14-11,14-11-11
+LOCAL-141201,Azinhaga,14,12,01,Santarém,14-12,14-12-01
+LOCAL-141202,Golegã,14,12,02,Santarém,14-12,14-12-02
+LOCAL-141203,Pombalinho,14,12,03,Santarém,14-12,14-12-03
+LOCAL-141302,Amêndoa,14,13,02,Santarém,14-13,14-13-02
+LOCAL-141303,Cardigos,14,13,03,Santarém,14-13,14-13-03
+LOCAL-141304,Carvoeiro,14,13,04,Santarém,14-13,14-13-04
+LOCAL-141305,Envendos,14,13,05,Santarém,14-13,14-13-05
+LOCAL-141307,Ortiga,14,13,07,Santarém,14-13,14-13-07
+LOCAL-141309,"Mação, Penhascoso e Aboboreira",14,13,09,Santarém,14-13,14-13-09
+LOCAL-141401,Alcobertas,14,14,01,Santarém,14-14,14-14-01
+LOCAL-141402,Arrouquelas,14,14,02,Santarém,14-14,14-14-02
+LOCAL-141405,Fráguas,14,14,05,Santarém,14-14,14-14-05
+LOCAL-141408,Rio Maior,14,14,08,Santarém,14-14,14-14-08
+LOCAL-141410,Asseiceira,14,14,10,Santarém,14-14,14-14-10
+LOCAL-141411,São Sebastião,14,14,11,Santarém,14-14,14-14-11
+LOCAL-141415,Azambujeira e Malaqueijo,14,14,15,Santarém,14-14,14-14-15
+LOCAL-141416,Marmeleira e Assentiz,14,14,16,Santarém,14-14,14-14-16
+LOCAL-141417,Outeiro da Cortiçada e Arruda dos Pisões,14,14,17,Santarém,14-14,14-14-17
+LOCAL-141418,São João da Ribeira e Ribeira de São João,14,14,18,Santarém,14-14,14-14-18
+LOCAL-141502,Marinhais,14,15,02,Santarém,14-15,14-15-02
+LOCAL-141503,Muge,14,15,03,Santarém,14-15,14-15-03
+LOCAL-141507,Glória do Ribatejo e Granho,14,15,07,Santarém,14-15,14-15-07
+LOCAL-141508,Salvaterra de Magos e Foros de Salvaterra,14,15,08,Santarém,14-15,14-15-08
+LOCAL-141601,Abitureiras,14,16,01,Santarém,14-16,14-16-01
+LOCAL-141602,Abrã,14,16,02,Santarém,14-16,14-16-02
+LOCAL-141604,Alcanede,14,16,04,Santarém,14-16,14-16-04
+LOCAL-141605,Alcanhões,14,16,05,Santarém,14-16,14-16-05
+LOCAL-141606,Almoster,14,16,06,Santarém,14-16,14-16-06
+LOCAL-141607,Amiais de Baixo,14,16,07,Santarém,14-16,14-16-07
+LOCAL-141608,Arneiro das Milhariças,14,16,08,Santarém,14-16,14-16-08
+LOCAL-141613,Moçarria,14,16,13,Santarém,14-16,14-16-13
+LOCAL-141614,Pernes,14,16,14,Santarém,14-16,14-16-14
+LOCAL-141616,Póvoa da Isenta,14,16,16,Santarém,14-16,14-16-16
+LOCAL-141625,Vale de Santarém,14,16,25,Santarém,14-16,14-16-25
+LOCAL-141628,Gançaria,14,16,28,Santarém,14-16,14-16-28
+LOCAL-141629,"Achete, Azoia de Baixo e Póvoa de Santarém",14,16,29,Santarém,14-16,14-16-29
+LOCAL-141630,Azoia de Cima e Tremês,14,16,30,Santarém,14-16,14-16-30
+LOCAL-141631,Casével e Vaqueiros,14,16,31,Santarém,14-16,14-16-31
+LOCAL-141632,Romeira e Várzea,14,16,32,Santarém,14-16,14-16-32
+LOCAL-141633,Cidade de Santarém,14,16,33,Santarém,14-16,14-16-33
+LOCAL-141634,São Vicente do Paul e Vale de Figueira,14,16,34,Santarém,14-16,14-16-34
+LOCAL-141701,Alcaravela,14,17,01,Santarém,14-17,14-17-01
+LOCAL-141702,Santiago de Montalegre,14,17,02,Santarém,14-17,14-17-02
+LOCAL-141703,Sardoal,14,17,03,Santarém,14-17,14-17-03
+LOCAL-141704,Valhascos,14,17,04,Santarém,14-17,14-17-04
+LOCAL-141802,Asseiceira,14,18,02,Santarém,14-18,14-18-02
+LOCAL-141804,Carregueiros,14,18,04,Santarém,14-18,14-18-04
+LOCAL-141808,Olalhas,14,18,08,Santarém,14-18,14-18-08
+LOCAL-141809,Paialvo,14,18,09,Santarém,14-18,14-18-09
+LOCAL-141813,São Pedro de Tomar,14,18,13,Santarém,14-18,14-18-13
+LOCAL-141814,Sabacheira,14,18,14,Santarém,14-18,14-18-14
+LOCAL-141817,Além da Ribeira e Pedreira,14,18,17,Santarém,14-18,14-18-17
+LOCAL-141818,Casais e Alviobeira,14,18,18,Santarém,14-18,14-18-18
+LOCAL-141819,Madalena e Beselga,14,18,19,Santarém,14-18,14-18-19
+LOCAL-141820,Serra e Junceira,14,18,20,Santarém,14-18,14-18-20
+LOCAL-141821,São João Baptista e Santa Maria dos Olivais,14,18,21,Santarém,14-18,14-18-21
+LOCAL-141902,Assentiz,14,19,02,Santarém,14-19,14-19-02
+LOCAL-141904,Chancelaria,14,19,04,Santarém,14-19,14-19-04
+LOCAL-141909,Pedrógão,14,19,09,Santarém,14-19,14-19-09
+LOCAL-141910,Riachos,14,19,10,Santarém,14-19,14-19-10
+LOCAL-141916,Zibreira,14,19,16,Santarém,14-19,14-19-16
+LOCAL-141917,Meia Via,14,19,17,Santarém,14-19,14-19-17
+LOCAL-141918,"Brogueira, Parceiros de Igreja e Alcorochel",14,19,18,Santarém,14-19,14-19-18
+LOCAL-141919,Olaia e Paço,14,19,19,Santarém,14-19,14-19-19
+LOCAL-141920,"Torres Novas (Santa Maria, Salvador e Santiago)",14,19,20,Santarém,14-19,14-19-20
+LOCAL-141921,"Torres Novas (São Pedro), Lapas e Ribeira Branca",14,19,21,Santarém,14-19,14-19-21
+LOCAL-142001,Atalaia,14,20,01,Santarém,14-20,14-20-01
+LOCAL-142002,Praia do Ribatejo,14,20,02,Santarém,14-20,14-20-02
+LOCAL-142003,Tancos,14,20,03,Santarém,14-20,14-20-03
+LOCAL-142006,Vila Nova da Barquinha,14,20,06,Santarém,14-20,14-20-06
+LOCAL-142101,Alburitel,14,21,01,Santarém,14-21,14-21-01
+LOCAL-142102,Atouguia,14,21,02,Santarém,14-21,14-21-02
+LOCAL-142104,Caxarias,14,21,04,Santarém,14-21,14-21-04
+LOCAL-142105,Espite,14,21,05,Santarém,14-21,14-21-05
+LOCAL-142106,Fátima,14,21,06,Santarém,14-21,14-21-06
+LOCAL-142111,Nossa Senhora das Misericórdias,14,21,11,Santarém,14-21,14-21-11
+LOCAL-142113,Seiça,14,21,13,Santarém,14-21,14-21-13
+LOCAL-142114,Urqueira,14,21,14,Santarém,14-21,14-21-14
+LOCAL-142115,Nossa Senhora da Piedade,14,21,15,Santarém,14-21,14-21-15
+LOCAL-142119,"Freixianda, Ribeira do Fárrio e Formigais",14,21,19,Santarém,14-21,14-21-19
+LOCAL-142120,Gondemaria e Olival,14,21,20,Santarém,14-21,14-21-20
+LOCAL-142121,Matas e Cercal,14,21,21,Santarém,14-21,14-21-21
+LOCAL-142122,Rio de Couros e Casal dos Bernardos,14,21,22,Santarém,14-21,14-21-22
+LOCAL-150104,Torrão,15,01,04,Setúbal,15-01,15-01-04
+LOCAL-150105,São Martinho,15,01,05,Setúbal,15-01,15-01-05
+LOCAL-150106,Comporta,15,01,06,Setúbal,15-01,15-01-06
+LOCAL-150107,Santa Maria do Castelo e Santiago e Santa Susana,15,01,07,Setúbal,15-01,15-01-07
+LOCAL-150201,Alcochete,15,02,01,Setúbal,15-02,15-02-01
+LOCAL-150202,Samouco,15,02,02,Setúbal,15-02,15-02-02
+LOCAL-150203,São Francisco,15,02,03,Setúbal,15-02,15-02-03
+LOCAL-150303,Costa da Caparica,15,03,03,Setúbal,15-03,15-03-03
+LOCAL-150312,"Almada, Cova da Piedade, Pragal e Cacilhas",15,03,12,Setúbal,15-03,15-03-12
+LOCAL-150313,Caparica e Trafaria,15,03,13,Setúbal,15-03,15-03-13
+LOCAL-150314,Charneca de Caparica e Sobreda,15,03,14,Setúbal,15-03,15-03-14
+LOCAL-150315,Laranjeiro e Feijó,15,03,15,Setúbal,15-03,15-03-15
+LOCAL-150407,Santo António da Charneca,15,04,07,Setúbal,15-04,15-04-07
+LOCAL-150409,"Alto do Seixalinho, Santo André e Verderena",15,04,09,Setúbal,15-04,15-04-09
+LOCAL-150410,Barreiro e Lavradio,15,04,10,Setúbal,15-04,15-04-10
+LOCAL-150411,Palhais e Coina,15,04,11,Setúbal,15-04,15-04-11
+LOCAL-150501,Azinheira dos Barros e São Mamede do Sádão,15,05,01,Setúbal,15-05,15-05-01
+LOCAL-150503,Melides,15,05,03,Setúbal,15-05,15-05-03
+LOCAL-150505,Carvalhal,15,05,05,Setúbal,15-05,15-05-05
+LOCAL-150506,Grândola e Santa Margarida da Serra,15,05,06,Setúbal,15-05,15-05-06
+LOCAL-150601,Alhos Vedros,15,06,01,Setúbal,15-06,15-06-01
+LOCAL-150603,Moita,15,06,03,Setúbal,15-06,15-06-03
+LOCAL-150607,Baixa da Banheira e Vale da Amoreira,15,06,07,Setúbal,15-06,15-06-07
+LOCAL-150608,Gaio-Rosário e Sarilhos Pequenos,15,06,08,Setúbal,15-06,15-06-08
+LOCAL-150701,Canha,15,07,01,Setúbal,15-07,15-07-01
+LOCAL-150704,Sarilhos Grandes,15,07,04,Setúbal,15-07,15-07-04
+LOCAL-150709,Atalaia e Alto Estanqueiro-Jardia,15,07,09,Setúbal,15-07,15-07-09
+LOCAL-150710,Montijo e Afonsoeiro,15,07,10,Setúbal,15-07,15-07-10
+LOCAL-150711,Pegões,15,07,11,Setúbal,15-07,15-07-11
+LOCAL-150802,Palmela,15,08,02,Setúbal,15-08,15-08-02
+LOCAL-150803,Pinhal Novo,15,08,03,Setúbal,15-08,15-08-03
+LOCAL-150804,Quinta do Anjo,15,08,04,Setúbal,15-08,15-08-04
+LOCAL-150806,Poceirão e Marateca,15,08,06,Setúbal,15-08,15-08-06
+LOCAL-150901,Abela,15,09,01,Setúbal,15-09,15-09-01
+LOCAL-150902,Alvalade,15,09,02,Setúbal,15-09,15-09-02
+LOCAL-150903,Cercal,15,09,03,Setúbal,15-09,15-09-03
+LOCAL-150904,Ermidas-Sado,15,09,04,Setúbal,15-09,15-09-04
+LOCAL-150907,Santo André,15,09,07,Setúbal,15-09,15-09-07
+LOCAL-150910,São Francisco da Serra,15,09,10,Setúbal,15-09,15-09-10
+LOCAL-150912,"Santiago do Cacém, S.Cruz e S.Bartolomeu da Serra",15,09,12,Setúbal,15-09,15-09-12
+LOCAL-150913,São Domingos e Vale de Água,15,09,13,Setúbal,15-09,15-09-13
+LOCAL-151002,Amora,15,10,02,Setúbal,15-10,15-10-02
+LOCAL-151005,Corroios,15,10,05,Setúbal,15-10,15-10-05
+LOCAL-151006,Fernão Ferro,15,10,06,Setúbal,15-10,15-10-06
+LOCAL-151007,"Seixal, Arrentela e Aldeia de Paio Pires",15,10,07,Setúbal,15-10,15-10-07
+LOCAL-151101,Sesimbra (Castelo),15,11,01,Setúbal,15-11,15-11-01
+LOCAL-151102,Sesimbra (Santiago),15,11,02,Setúbal,15-11,15-11-02
+LOCAL-151103,Quinta do Conde,15,11,03,Setúbal,15-11,15-11-03
+LOCAL-151205,Setúbal (São Sebastião),15,12,05,Setúbal,15-12,15-12-05
+LOCAL-151207,Gâmbia-Pontes-Alto da Guerra,15,12,07,Setúbal,15-12,15-12-07
+LOCAL-151208,Sado,15,12,08,Setúbal,15-12,15-12-08
+LOCAL-151209,Azeitão (São Lourenço e São Simão),15,12,09,Setúbal,15-12,15-12-09
+LOCAL-151210,"S.Julião, N.S. da Anunciada e S.Maria da Graça",15,12,10,Setúbal,15-12,15-12-10
+LOCAL-151301,Sines,15,13,01,Setúbal,15-13,15-13-01
+LOCAL-151302,Porto Covo,15,13,02,Setúbal,15-13,15-13-02
+LOCAL-160101,Aboim das Choças,16,01,01,Viana do Castelo,16-01,16-01-01
+LOCAL-160102,Aguiã,16,01,02,Viana do Castelo,16-01,16-01-02
+LOCAL-160104,Ázere,16,01,04,Viana do Castelo,16-01,16-01-04
+LOCAL-160105,Cabana Maior,16,01,05,Viana do Castelo,16-01,16-01-05
+LOCAL-160106,Cabreiro,16,01,06,Viana do Castelo,16-01,16-01-06
+LOCAL-160108,Cendufe,16,01,08,Viana do Castelo,16-01,16-01-08
+LOCAL-160109,Couto,16,01,09,Viana do Castelo,16-01,16-01-09
+LOCAL-160113,Gavieira,16,01,13,Viana do Castelo,16-01,16-01-13
+LOCAL-160115,Gondoriz,16,01,15,Viana do Castelo,16-01,16-01-15
+LOCAL-160121,Miranda,16,01,21,Viana do Castelo,16-01,16-01-21
+LOCAL-160122,Monte Redondo,16,01,22,Viana do Castelo,16-01,16-01-22
+LOCAL-160123,Oliveira,16,01,23,Viana do Castelo,16-01,16-01-23
+LOCAL-160124,Paçô,16,01,24,Viana do Castelo,16-01,16-01-24
+LOCAL-160125,Padroso,16,01,25,Viana do Castelo,16-01,16-01-25
+LOCAL-160128,Prozelo,16,01,28,Viana do Castelo,16-01,16-01-28
+LOCAL-160130,Rio Frio,16,01,30,Viana do Castelo,16-01,16-01-30
+LOCAL-160131,Rio de Moinhos,16,01,31,Viana do Castelo,16-01,16-01-31
+LOCAL-160133,Sabadim,16,01,33,Viana do Castelo,16-01,16-01-33
+LOCAL-160142,Jolda (São Paio),16,01,42,Viana do Castelo,16-01,16-01-42
+LOCAL-160144,Senharei,16,01,44,Viana do Castelo,16-01,16-01-44
+LOCAL-160145,Sistelo,16,01,45,Viana do Castelo,16-01,16-01-45
+LOCAL-160146,Soajo,16,01,46,Viana do Castelo,16-01,16-01-46
+LOCAL-160149,Vale,16,01,49,Viana do Castelo,16-01,16-01-49
+LOCAL-160152,Alvora e Loureda,16,01,52,Viana do Castelo,16-01,16-01-52
+LOCAL-160153,Arcos de Valdevez (São Paio) e Giela,16,01,53,Viana do Castelo,16-01,16-01-53
+LOCAL-160154,"Arcos de Valdevez (Salvador), Vila Fonche e Parada",16,01,54,Viana do Castelo,16-01,16-01-54
+LOCAL-160155,Eiras e Mei,16,01,55,Viana do Castelo,16-01,16-01-55
+LOCAL-160156,Grade e Carralcova,16,01,56,Viana do Castelo,16-01,16-01-56
+LOCAL-160157,Guilhadeses e Santar,16,01,57,Viana do Castelo,16-01,16-01-57
+LOCAL-160158,Jolda (Madalena) e Rio Cabrão,16,01,58,Viana do Castelo,16-01,16-01-58
+LOCAL-160159,Padreiro (Salvador e Santa Cristina),16,01,59,Viana do Castelo,16-01,16-01-59
+LOCAL-160160,Portela e Extremo,16,01,60,Viana do Castelo,16-01,16-01-60
+LOCAL-160161,São Jorge e Ermelo,16,01,61,Viana do Castelo,16-01,16-01-61
+LOCAL-160162,Souto e Tabaçô,16,01,62,Viana do Castelo,16-01,16-01-62
+LOCAL-160163,Távora (Santa Maria e São Vicente),16,01,63,Viana do Castelo,16-01,16-01-63
+LOCAL-160164,"Vilela, São Cosme e São Damião e Sá",16,01,64,Viana do Castelo,16-01,16-01-64
+LOCAL-160201,Âncora,16,02,01,Viana do Castelo,16-02,16-02-01
+LOCAL-160205,Argela,16,02,05,Viana do Castelo,16-02,16-02-05
+LOCAL-160209,Dem,16,02,09,Viana do Castelo,16-02,16-02-09
+LOCAL-160211,Lanhelas,16,02,11,Viana do Castelo,16-02,16-02-11
+LOCAL-160214,Riba de Âncora,16,02,14,Viana do Castelo,16-02,16-02-14
+LOCAL-160215,Seixas,16,02,15,Viana do Castelo,16-02,16-02-15
+LOCAL-160217,Vila Praia de Âncora,16,02,17,Viana do Castelo,16-02,16-02-17
+LOCAL-160218,Vilar de Mouros,16,02,18,Viana do Castelo,16-02,16-02-18
+LOCAL-160220,Vile,16,02,20,Viana do Castelo,16-02,16-02-20
+LOCAL-160221,"Arga (Baixo, Cima e São João)",16,02,21,Viana do Castelo,16-02,16-02-21
+LOCAL-160222,Caminha (Matriz) e Vilarelho,16,02,22,Viana do Castelo,16-02,16-02-22
+LOCAL-160223,Gondar e Orbacém,16,02,23,Viana do Castelo,16-02,16-02-23
+LOCAL-160224,Moledo e Cristelo,16,02,24,Viana do Castelo,16-02,16-02-24
+LOCAL-160225,Venade e Azevedo,16,02,25,Viana do Castelo,16-02,16-02-25
+LOCAL-160301,Alvaredo,16,03,01,Viana do Castelo,16-03,16-03-01
+LOCAL-160304,Cousso,16,03,04,Viana do Castelo,16-03,16-03-04
+LOCAL-160305,Cristoval,16,03,05,Viana do Castelo,16-03,16-03-05
+LOCAL-160307,Fiães,16,03,07,Viana do Castelo,16-03,16-03-07
+LOCAL-160308,Gave,16,03,08,Viana do Castelo,16-03,16-03-08
+LOCAL-160311,Paderne,16,03,11,Viana do Castelo,16-03,16-03-11
+LOCAL-160313,Penso,16,03,13,Viana do Castelo,16-03,16-03-13
+LOCAL-160317,São Paio,16,03,17,Viana do Castelo,16-03,16-03-17
+LOCAL-160319,Castro Laboreiro e Lamas de Mouro,16,03,19,Viana do Castelo,16-03,16-03-19
+LOCAL-160320,Chaviães e Paços,16,03,20,Viana do Castelo,16-03,16-03-20
+LOCAL-160321,Parada do Monte e Cubalhão,16,03,21,Viana do Castelo,16-03,16-03-21
+LOCAL-160322,Prado e Remoães,16,03,22,Viana do Castelo,16-03,16-03-22
+LOCAL-160323,Vila e Roussas,16,03,23,Viana do Castelo,16-03,16-03-23
+LOCAL-160401,Abedim,16,04,01,Viana do Castelo,16-04,16-04-01
+LOCAL-160404,Barbeita,16,04,04,Viana do Castelo,16-04,16-04-04
+LOCAL-160405,Barroças e Taias,16,04,05,Viana do Castelo,16-04,16-04-05
+LOCAL-160406,Bela,16,04,06,Viana do Castelo,16-04,16-04-06
+LOCAL-160407,Cambeses,16,04,07,Viana do Castelo,16-04,16-04-07
+LOCAL-160410,Lara,16,04,10,Viana do Castelo,16-04,16-04-10
+LOCAL-160411,Longos Vales,16,04,11,Viana do Castelo,16-04,16-04-11
+LOCAL-160415,Merufe,16,04,15,Viana do Castelo,16-04,16-04-15
+LOCAL-160418,Moreira,16,04,18,Viana do Castelo,16-04,16-04-18
+LOCAL-160420,Pias,16,04,20,Viana do Castelo,16-04,16-04-20
+LOCAL-160421,Pinheiros,16,04,21,Viana do Castelo,16-04,16-04-21
+LOCAL-160422,Podame,16,04,22,Viana do Castelo,16-04,16-04-22
+LOCAL-160423,Portela,16,04,23,Viana do Castelo,16-04,16-04-23
+LOCAL-160424,Riba de Mouro,16,04,24,Viana do Castelo,16-04,16-04-24
+LOCAL-160427,Segude,16,04,27,Viana do Castelo,16-04,16-04-27
+LOCAL-160428,Tangil,16,04,28,Viana do Castelo,16-04,16-04-28
+LOCAL-160431,Trute,16,04,31,Viana do Castelo,16-04,16-04-31
+LOCAL-160434,Anhões e Luzio,16,04,34,Viana do Castelo,16-04,16-04-34
+LOCAL-160435,Ceivães e Badim,16,04,35,Viana do Castelo,16-04,16-04-35
+LOCAL-160436,Mazedo e Cortes,16,04,36,Viana do Castelo,16-04,16-04-36
+LOCAL-160437,"Messegães, Valadares e Sá",16,04,37,Viana do Castelo,16-04,16-04-37
+LOCAL-160438,Monção e Troviscoso,16,04,38,Viana do Castelo,16-04,16-04-38
+LOCAL-160439,"Sago, Lordelo e Parada",16,04,39,Viana do Castelo,16-04,16-04-39
+LOCAL-160440,Troporiz e Lapela,16,04,40,Viana do Castelo,16-04,16-04-40
+LOCAL-160501,Agualonga,16,05,01,Viana do Castelo,16-05,16-05-01
+LOCAL-160503,Castanheira,16,05,03,Viana do Castelo,16-05,16-05-03
+LOCAL-160505,Coura,16,05,05,Viana do Castelo,16-05,16-05-05
+LOCAL-160507,Cunha,16,05,07,Viana do Castelo,16-05,16-05-07
+LOCAL-160510,Infesta,16,05,10,Viana do Castelo,16-05,16-05-10
+LOCAL-160513,Mozelos,16,05,13,Viana do Castelo,16-05,16-05-13
+LOCAL-160514,Padornelo,16,05,14,Viana do Castelo,16-05,16-05-14
+LOCAL-160515,Parada,16,05,15,Viana do Castelo,16-05,16-05-15
+LOCAL-160519,Romarigães,16,05,19,Viana do Castelo,16-05,16-05-19
+LOCAL-160520,Rubiães,16,05,20,Viana do Castelo,16-05,16-05-20
+LOCAL-160521,Vascões,16,05,21,Viana do Castelo,16-05,16-05-21
+LOCAL-160522,Bico e Cristelo,16,05,22,Viana do Castelo,16-05,16-05-22
+LOCAL-160523,Cossourado e Linhares,16,05,23,Viana do Castelo,16-05,16-05-23
+LOCAL-160524,Formariz e Ferreira,16,05,24,Viana do Castelo,16-05,16-05-24
+LOCAL-160525,Insalde e Porreiras,16,05,25,Viana do Castelo,16-05,16-05-25
+LOCAL-160526,Paredes de Coura e Resende,16,05,26,Viana do Castelo,16-05,16-05-26
+LOCAL-160601,Azias,16,06,01,Viana do Castelo,16-06,16-06-01
+LOCAL-160602,Boivães,16,06,02,Viana do Castelo,16-06,16-06-02
+LOCAL-160603,Bravães,16,06,03,Viana do Castelo,16-06,16-06-03
+LOCAL-160604,Britelo,16,06,04,Viana do Castelo,16-06,16-06-04
+LOCAL-160606,Cuide de Vila Verde,16,06,06,Viana do Castelo,16-06,16-06-06
+LOCAL-160611,Lavradas,16,06,11,Viana do Castelo,16-06,16-06-11
+LOCAL-160612,Lindoso,16,06,12,Viana do Castelo,16-06,16-06-12
+LOCAL-160613,Nogueira,16,06,13,Viana do Castelo,16-06,16-06-13
+LOCAL-160614,Oleiros,16,06,14,Viana do Castelo,16-06,16-06-14
+LOCAL-160619,Sampriz,16,06,19,Viana do Castelo,16-06,16-06-19
+LOCAL-160623,Vade (São Pedro),16,06,23,Viana do Castelo,16-06,16-06-23
+LOCAL-160624,Vade (São Tomé),16,06,24,Viana do Castelo,16-06,16-06-24
+LOCAL-160626,"Crasto, Ruivos e Grovelas",16,06,26,Viana do Castelo,16-06,16-06-26
+LOCAL-160627,"Entre Ambos-os-Rios, Ermida e Germil",16,06,27,Viana do Castelo,16-06,16-06-27
+LOCAL-160628,"Ponte da Barca, V.N. Muía, Paço Vedro Magalhães",16,06,28,Viana do Castelo,16-06,16-06-28
+LOCAL-160629,Touvedo (São Lourenço e Salvador),16,06,29,Viana do Castelo,16-06,16-06-29
+LOCAL-160630,Vila Chã (São João Baptista e Santiago),16,06,30,Viana do Castelo,16-06,16-06-30
+LOCAL-160701,Anais,16,07,01,Viana do Castelo,16-07,16-07-01
+LOCAL-160703,São Pedro d'Arcos,16,07,03,Viana do Castelo,16-07,16-07-03
+LOCAL-160704,Arcozelo,16,07,04,Viana do Castelo,16-07,16-07-04
+LOCAL-160707,Beiral do Lima,16,07,07,Viana do Castelo,16-07,16-07-07
+LOCAL-160708,Bertiandos,16,07,08,Viana do Castelo,16-07,16-07-08
+LOCAL-160709,Boalhosa,16,07,09,Viana do Castelo,16-07,16-07-09
+LOCAL-160710,Brandara,16,07,10,Viana do Castelo,16-07,16-07-10
+LOCAL-160713,Calheiros,16,07,13,Viana do Castelo,16-07,16-07-13
+LOCAL-160714,Calvelo,16,07,14,Viana do Castelo,16-07,16-07-14
+LOCAL-160716,Correlhã,16,07,16,Viana do Castelo,16-07,16-07-16
+LOCAL-160717,Estorãos,16,07,17,Viana do Castelo,16-07,16-07-17
+LOCAL-160718,Facha,16,07,18,Viana do Castelo,16-07,16-07-18
+LOCAL-160719,Feitosa,16,07,19,Viana do Castelo,16-07,16-07-19
+LOCAL-160721,Fontão,16,07,21,Viana do Castelo,16-07,16-07-21
+LOCAL-160724,Friastelas,16,07,24,Viana do Castelo,16-07,16-07-24
+LOCAL-160726,Gandra,16,07,26,Viana do Castelo,16-07,16-07-26
+LOCAL-160727,Gemieira,16,07,27,Viana do Castelo,16-07,16-07-27
+LOCAL-160728,Gondufe,16,07,28,Viana do Castelo,16-07,16-07-28
+LOCAL-160729,Labruja,16,07,29,Viana do Castelo,16-07,16-07-29
+LOCAL-160734,Poiares,16,07,34,Viana do Castelo,16-07,16-07-34
+LOCAL-160737,Refóios do Lima,16,07,37,Viana do Castelo,16-07,16-07-37
+LOCAL-160739,Ribeira,16,07,39,Viana do Castelo,16-07,16-07-39
+LOCAL-160740,Sá,16,07,40,Viana do Castelo,16-07,16-07-40
+LOCAL-160742,Santa Comba,16,07,42,Viana do Castelo,16-07,16-07-42
+LOCAL-160743,Santa Cruz do Lima,16,07,43,Viana do Castelo,16-07,16-07-43
+LOCAL-160744,Rebordões (Santa Maria),16,07,44,Viana do Castelo,16-07,16-07-44
+LOCAL-160745,Seara,16,07,45,Viana do Castelo,16-07,16-07-45
+LOCAL-160746,Serdedelo,16,07,46,Viana do Castelo,16-07,16-07-46
+LOCAL-160747,Rebordões (Souto),16,07,47,Viana do Castelo,16-07,16-07-47
+LOCAL-160750,Vitorino das Donas,16,07,50,Viana do Castelo,16-07,16-07-50
+LOCAL-160752,Arca e Ponte de Lima,16,07,52,Viana do Castelo,16-07,16-07-52
+LOCAL-160753,"Ardegão, Freixo e Mato",16,07,53,Viana do Castelo,16-07,16-07-53
+LOCAL-160754,Associação de freguesias do Vale do Neiva,16,07,54,Viana do Castelo,16-07,16-07-54
+LOCAL-160755,Bárrio e Cepões,16,07,55,Viana do Castelo,16-07,16-07-55
+LOCAL-160756,Cabaços e Fojo Lobal,16,07,56,Viana do Castelo,16-07,16-07-56
+LOCAL-160757,Cabração e Moreira do Lima,16,07,57,Viana do Castelo,16-07,16-07-57
+LOCAL-160758,Fornelos e Queijada,16,07,58,Viana do Castelo,16-07,16-07-58
+LOCAL-160759,"Labrujó, Rendufe e Vilar do Monte",16,07,59,Viana do Castelo,16-07,16-07-59
+LOCAL-160760,Navió e Vitorino dos Piães,16,07,60,Viana do Castelo,16-07,16-07-60
+LOCAL-160802,Boivão,16,08,02,Viana do Castelo,16-08,16-08-02
+LOCAL-160803,Cerdal,16,08,03,Viana do Castelo,16-08,16-08-03
+LOCAL-160805,Fontoura,16,08,05,Viana do Castelo,16-08,16-08-05
+LOCAL-160806,Friestas,16,08,06,Viana do Castelo,16-08,16-08-06
+LOCAL-160808,Ganfei,16,08,08,Viana do Castelo,16-08,16-08-08
+LOCAL-160812,São Pedro da Torre,16,08,12,Viana do Castelo,16-08,16-08-12
+LOCAL-160816,Verdoejo,16,08,16,Viana do Castelo,16-08,16-08-16
+LOCAL-160817,Gandra e Taião,16,08,17,Viana do Castelo,16-08,16-08-17
+LOCAL-160818,Gondomil e Sanfins,16,08,18,Viana do Castelo,16-08,16-08-18
+LOCAL-160819,São Julião e Silva,16,08,19,Viana do Castelo,16-08,16-08-19
+LOCAL-160820,"Valença, Cristelo Covo e Arão",16,08,20,Viana do Castelo,16-08,16-08-20
+LOCAL-160901,Afife,16,09,01,Viana do Castelo,16-09,16-09-01
+LOCAL-160902,Alvarães,16,09,02,Viana do Castelo,16-09,16-09-02
+LOCAL-160903,Amonde,16,09,03,Viana do Castelo,16-09,16-09-03
+LOCAL-160904,Anha,16,09,04,Viana do Castelo,16-09,16-09-04
+LOCAL-160905,Areosa,16,09,05,Viana do Castelo,16-09,16-09-05
+LOCAL-160908,Carreço,16,09,08,Viana do Castelo,16-09,16-09-08
+LOCAL-160910,Castelo do Neiva,16,09,10,Viana do Castelo,16-09,16-09-10
+LOCAL-160911,Darque,16,09,11,Viana do Castelo,16-09,16-09-11
+LOCAL-160914,Freixieiro de Soutelo,16,09,14,Viana do Castelo,16-09,16-09-14
+LOCAL-160915,Lanheses,16,09,15,Viana do Castelo,16-09,16-09-15
+LOCAL-160920,Montaria,16,09,20,Viana do Castelo,16-09,16-09-20
+LOCAL-160922,Mujães,16,09,22,Viana do Castelo,16-09,16-09-22
+LOCAL-160923,São Romão de Neiva,16,09,23,Viana do Castelo,16-09,16-09-23
+LOCAL-160925,Outeiro,16,09,25,Viana do Castelo,16-09,16-09-25
+LOCAL-160926,Perre,16,09,26,Viana do Castelo,16-09,16-09-26
+LOCAL-160928,Santa Marta de Portuzelo,16,09,28,Viana do Castelo,16-09,16-09-28
+LOCAL-160935,Vila Franca,16,09,35,Viana do Castelo,16-09,16-09-35
+LOCAL-160938,Vila de Punhe,16,09,38,Viana do Castelo,16-09,16-09-38
+LOCAL-160940,Chafé,16,09,40,Viana do Castelo,16-09,16-09-40
+LOCAL-160941,Barroselas e Carvoeiro,16,09,41,Viana do Castelo,16-09,16-09-41
+LOCAL-160942,Cardielos e Serreleis,16,09,42,Viana do Castelo,16-09,16-09-42
+LOCAL-160943,Geraz do Lima e Deão,16,09,43,Viana do Castelo,16-09,16-09-43
+LOCAL-160944,Mazarefes e Vila Fria,16,09,44,Viana do Castelo,16-09,16-09-44
+LOCAL-160945,"Nogueira, Meixedo e Vilar de Murteda",16,09,45,Viana do Castelo,16-09,16-09-45
+LOCAL-160946,"Subportela, Deocriste e Portela Susã",16,09,46,Viana do Castelo,16-09,16-09-46
+LOCAL-160947,Torre e Vila Mou,16,09,47,Viana do Castelo,16-09,16-09-47
+LOCAL-160948,Santa Maria Maior e Monserrate e Meadela,16,09,48,Viana do Castelo,16-09,16-09-48
+LOCAL-161003,Cornes,16,10,03,Viana do Castelo,16-10,16-10-03
+LOCAL-161004,Covas,16,10,04,Viana do Castelo,16-10,16-10-04
+LOCAL-161006,Gondarém,16,10,06,Viana do Castelo,16-10,16-10-06
+LOCAL-161007,Loivo,16,10,07,Viana do Castelo,16-10,16-10-07
+LOCAL-161009,Mentrestido,16,10,09,Viana do Castelo,16-10,16-10-09
+LOCAL-161012,Sapardos,16,10,12,Viana do Castelo,16-10,16-10-12
+LOCAL-161013,Sopo,16,10,13,Viana do Castelo,16-10,16-10-13
+LOCAL-161016,Campos e Vila Meã,16,10,16,Viana do Castelo,16-10,16-10-16
+LOCAL-161017,Candemil e Gondar,16,10,17,Viana do Castelo,16-10,16-10-17
+LOCAL-161018,Reboreda e Nogueira,16,10,18,Viana do Castelo,16-10,16-10-18
+LOCAL-161019,Vila Nova de Cerveira e Lovelhe,16,10,19,Viana do Castelo,16-10,16-10-19
+LOCAL-170101,Alijó,17,01,01,Vila Real,17-01,17-01-01
+LOCAL-170107,Favaios,17,01,07,Vila Real,17-01,17-01-07
+LOCAL-170108,Pegarinhos,17,01,08,Vila Real,17-01,17-01-08
+LOCAL-170109,Pinhão,17,01,09,Vila Real,17-01,17-01-09
+LOCAL-170112,Sanfins do Douro,17,01,12,Vila Real,17-01,17-01-12
+LOCAL-170113,Santa Eugénia,17,01,13,Vila Real,17-01,17-01-13
+LOCAL-170114,São Mamede de Ribatua,17,01,14,Vila Real,17-01,17-01-14
+LOCAL-170116,Vila Chã,17,01,16,Vila Real,17-01,17-01-16
+LOCAL-170117,Vila Verde,17,01,17,Vila Real,17-01,17-01-17
+LOCAL-170118,Vilar de Maçada,17,01,18,Vila Real,17-01,17-01-18
+LOCAL-170120,Carlão e Amieiro,17,01,20,Vila Real,17-01,17-01-20
+LOCAL-170121,Castedo e Cotas,17,01,21,Vila Real,17-01,17-01-21
+LOCAL-170122,Pópulo e Ribalonga,17,01,22,Vila Real,17-01,17-01-22
+LOCAL-170123,"Vale de Mendiz, Casal de Loivos e Vilarinho",17,01,23,Vila Real,17-01,17-01-23
+LOCAL-170203,Beça,17,02,03,Vila Real,17-02,17-02-03
+LOCAL-170208,Covas do Barroso,17,02,08,Vila Real,17-02,17-02-08
+LOCAL-170210,Dornelas,17,02,10,Vila Real,17-02,17-02-10
+LOCAL-170213,Pinho,17,02,13,Vila Real,17-02,17-02-13
+LOCAL-170215,Sapiãos,17,02,15,Vila Real,17-02,17-02-15
+LOCAL-170217,Alturas do Barroso e Cerdedo,17,02,17,Vila Real,17-02,17-02-17
+LOCAL-170218,Ardãos e Bobadela,17,02,18,Vila Real,17-02,17-02-18
+LOCAL-170219,Boticas e Granja,17,02,19,Vila Real,17-02,17-02-19
+LOCAL-170220,"Codessoso, Curros e Fiães do Tâmega",17,02,20,Vila Real,17-02,17-02-20
+LOCAL-170221,Vilar e Viveiro,17,02,21,Vila Real,17-02,17-02-21
+LOCAL-170301,Águas Frias,17,03,01,Vila Real,17-03,17-03-01
+LOCAL-170302,Anelhe,17,03,02,Vila Real,17-03,17-03-02
+LOCAL-170305,Bustelo,17,03,05,Vila Real,17-03,17-03-05
+LOCAL-170309,Cimo de Vila da Castanheira,17,03,09,Vila Real,17-03,17-03-09
+LOCAL-170310,Curalha,17,03,10,Vila Real,17-03,17-03-10
+LOCAL-170312,Ervededo,17,03,12,Vila Real,17-03,17-03-12
+LOCAL-170313,Faiões,17,03,13,Vila Real,17-03,17-03-13
+LOCAL-170314,Lama de Arcos,17,03,14,Vila Real,17-03,17-03-14
+LOCAL-170316,Mairos,17,03,16,Vila Real,17-03,17-03-16
+LOCAL-170317,Moreiras,17,03,17,Vila Real,17-03,17-03-17
+LOCAL-170318,Nogueira da Montanha,17,03,18,Vila Real,17-03,17-03-18
+LOCAL-170320,Oura,17,03,20,Vila Real,17-03,17-03-20
+LOCAL-170321,Outeiro Seco,17,03,21,Vila Real,17-03,17-03-21
+LOCAL-170322,Paradela,17,03,22,Vila Real,17-03,17-03-22
+LOCAL-170324,Redondelo,17,03,24,Vila Real,17-03,17-03-24
+LOCAL-170327,Sanfins,17,03,27,Vila Real,17-03,17-03-27
+LOCAL-170329,Santa Leocádia,17,03,29,Vila Real,17-03,17-03-29
+LOCAL-170330,Santo António de Monforte,17,03,30,Vila Real,17-03,17-03-30
+LOCAL-170331,Santo Estêvão,17,03,31,Vila Real,17-03,17-03-31
+LOCAL-170333,São Pedro de Agostém,17,03,33,Vila Real,17-03,17-03-33
+LOCAL-170334,São Vicente,17,03,34,Vila Real,17-03,17-03-34
+LOCAL-170340,Tronco,17,03,40,Vila Real,17-03,17-03-40
+LOCAL-170341,Vale de Anta,17,03,41,Vila Real,17-03,17-03-41
+LOCAL-170343,Vila Verde da Raia,17,03,43,Vila Real,17-03,17-03-43
+LOCAL-170344,Vilar de Nantes,17,03,44,Vila Real,17-03,17-03-44
+LOCAL-170345,Vilarelho da Raia,17,03,45,Vila Real,17-03,17-03-45
+LOCAL-170347,Vilas Boas,17,03,47,Vila Real,17-03,17-03-47
+LOCAL-170348,Vilela Seca,17,03,48,Vila Real,17-03,17-03-48
+LOCAL-170349,Vilela do Tâmega,17,03,49,Vila Real,17-03,17-03-49
+LOCAL-170350,Santa Maria Maior,17,03,50,Vila Real,17-03,17-03-50
+LOCAL-170353,Planalto de Monforte (Oucidres e Bobadela),17,03,53,Vila Real,17-03,17-03-53
+LOCAL-170354,Madalena e Samaiões,17,03,54,Vila Real,17-03,17-03-54
+LOCAL-170355,"Eiras, São Julião de Montenegro e Cela",17,03,55,Vila Real,17-03,17-03-55
+LOCAL-170356,Calvão e Soutelinho da Raia,17,03,56,Vila Real,17-03,17-03-56
+LOCAL-170357,Loivos e Póvoa de Agrações,17,03,57,Vila Real,17-03,17-03-57
+LOCAL-170358,Santa Cruz/Trindade e Sanjurge,17,03,58,Vila Real,17-03,17-03-58
+LOCAL-170359,Soutelo e Seara Velha,17,03,59,Vila Real,17-03,17-03-59
+LOCAL-170360,Travancas e Roriz,17,03,60,Vila Real,17-03,17-03-60
+LOCAL-170361,"Vidago, Arcossó, Selhariz, Vilarinho Paranheiras",17,03,61,Vila Real,17-03,17-03-61
+LOCAL-170401,Barqueiros,17,04,01,Vila Real,17-04,17-04-01
+LOCAL-170402,Cidadelhe,17,04,02,Vila Real,17-04,17-04-02
+LOCAL-170403,Oliveira,17,04,03,Vila Real,17-04,17-04-03
+LOCAL-170407,Vila Marim,17,04,07,Vila Real,17-04,17-04-07
+LOCAL-170408,Mesão Frio (Santo André),17,04,08,Vila Real,17-04,17-04-08
+LOCAL-170501,Atei,17,05,01,Vila Real,17-05,17-05-01
+LOCAL-170502,Bilhó,17,05,02,Vila Real,17-05,17-05-02
+LOCAL-170505,São Cristóvão de Mondim de Basto,17,05,05,Vila Real,17-05,17-05-05
+LOCAL-170508,Vilar de Ferreiros,17,05,08,Vila Real,17-05,17-05-08
+LOCAL-170509,Campanhó e Paradança,17,05,09,Vila Real,17-05,17-05-09
+LOCAL-170510,Ermelo e Pardelhas,17,05,10,Vila Real,17-05,17-05-10
+LOCAL-170601,Cabril,17,06,01,Vila Real,17-06,17-06-01
+LOCAL-170603,Cervos,17,06,03,Vila Real,17-06,17-06-03
+LOCAL-170604,Chã,17,06,04,Vila Real,17-06,17-06-04
+LOCAL-170607,Covelo do Gerês,17,06,07,Vila Real,17-06,17-06-07
+LOCAL-170609,Ferral,17,06,09,Vila Real,17-06,17-06-09
+LOCAL-170612,Gralhas,17,06,12,Vila Real,17-06,17-06-12
+LOCAL-170616,Morgade,17,06,16,Vila Real,17-06,17-06-16
+LOCAL-170618,Negrões,17,06,18,Vila Real,17-06,17-06-18
+LOCAL-170619,Outeiro,17,06,19,Vila Real,17-06,17-06-19
+LOCAL-170623,Pitões das Junias,17,06,23,Vila Real,17-06,17-06-23
+LOCAL-170625,Reigoso,17,06,25,Vila Real,17-06,17-06-25
+LOCAL-170626,Salto,17,06,26,Vila Real,17-06,17-06-26
+LOCAL-170627,Santo André,17,06,27,Vila Real,17-06,17-06-27
+LOCAL-170629,Sarraquinhos,17,06,29,Vila Real,17-06,17-06-29
+LOCAL-170631,Solveira,17,06,31,Vila Real,17-06,17-06-31
+LOCAL-170632,Tourém,17,06,32,Vila Real,17-06,17-06-32
+LOCAL-170635,Vila da Ponte,17,06,35,Vila Real,17-06,17-06-35
+LOCAL-170636,"Cambeses do Rio, Donões e Mourilhe",17,06,36,Vila Real,17-06,17-06-36
+LOCAL-170637,Meixedo e Padornelos,17,06,37,Vila Real,17-06,17-06-37
+LOCAL-170638,Montalegre e Padroso,17,06,38,Vila Real,17-06,17-06-38
+LOCAL-170639,"Paradela, Contim e Fiães",17,06,39,Vila Real,17-06,17-06-39
+LOCAL-170640,Sezelhe e Covelães,17,06,40,Vila Real,17-06,17-06-40
+LOCAL-170641,Venda Nova e Pondras,17,06,41,Vila Real,17-06,17-06-41
+LOCAL-170642,Viade de Baixo e Fervidelas,17,06,42,Vila Real,17-06,17-06-42
+LOCAL-170643,Vilar de Perdizes e Meixide,17,06,43,Vila Real,17-06,17-06-43
+LOCAL-170701,Candedo,17,07,01,Vila Real,17-07,17-07-01
+LOCAL-170703,Fiolhoso,17,07,03,Vila Real,17-07,17-07-03
+LOCAL-170704,Jou,17,07,04,Vila Real,17-07,17-07-04
+LOCAL-170705,Murça,17,07,05,Vila Real,17-07,17-07-05
+LOCAL-170708,Valongo de Milhais,17,07,08,Vila Real,17-07,17-07-08
+LOCAL-170710,Carva e Vilares,17,07,10,Vila Real,17-07,17-07-10
+LOCAL-170711,Noura e Palheiros,17,07,11,Vila Real,17-07,17-07-11
+LOCAL-170802,Fontelas,17,08,02,Vila Real,17-08,17-08-02
+LOCAL-170805,Loureiro,17,08,05,Vila Real,17-08,17-08-05
+LOCAL-170809,Sedielos,17,08,09,Vila Real,17-08,17-08-09
+LOCAL-170810,Vilarinho dos Freires,17,08,10,Vila Real,17-08,17-08-10
+LOCAL-170813,Galafura e Covelinhas,17,08,13,Vila Real,17-08,17-08-13
+LOCAL-170814,Moura Morta e Vinhós,17,08,14,Vila Real,17-08,17-08-14
+LOCAL-170815,Peso da Régua e Godim,17,08,15,Vila Real,17-08,17-08-15
+LOCAL-170816,Poiares e Canelas,17,08,16,Vila Real,17-08,17-08-16
+LOCAL-170901,Alvadia,17,09,01,Vila Real,17-09,17-09-01
+LOCAL-170902,Canedo,17,09,02,Vila Real,17-09,17-09-02
+LOCAL-170906,Santa Marinha,17,09,06,Vila Real,17-09,17-09-06
+LOCAL-170908,Cerva e Limões,17,09,08,Vila Real,17-09,17-09-08
+LOCAL-170909,Salvador e Santo Aleixo de Além-Tâmega,17,09,09,Vila Real,17-09,17-09-09
+LOCAL-171001,Celeirós,17,10,01,Vila Real,17-10,17-10-01
+LOCAL-171002,Covas do Douro,17,10,02,Vila Real,17-10,17-10-02
+LOCAL-171004,Gouvinhas,17,10,04,Vila Real,17-10,17-10-04
+LOCAL-171005,Parada de Pinhão,17,10,05,Vila Real,17-10,17-10-05
+LOCAL-171007,Paços,17,10,07,Vila Real,17-10,17-10-07
+LOCAL-171009,Sabrosa,17,10,09,Vila Real,17-10,17-10-09
+LOCAL-171011,São Lourenço de Ribapinhão,17,10,11,Vila Real,17-10,17-10-11
+LOCAL-171013,Souto Maior,17,10,13,Vila Real,17-10,17-10-13
+LOCAL-171014,Torre do Pinhão,17,10,14,Vila Real,17-10,17-10-14
+LOCAL-171015,Vilarinho de São Romão,17,10,15,Vila Real,17-10,17-10-15
+LOCAL-171016,"Provesende, Gouvães e S.Cristóvão do Douro",17,10,16,Vila Real,17-10,17-10-16
+LOCAL-171017,São Martinho de Antas e Paradela de Guiães,17,10,17,Vila Real,17-10,17-10-17
+LOCAL-171101,Alvações do Corgo,17,11,01,Vila Real,17-11,17-11-01
+LOCAL-171102,Cumieira,17,11,02,Vila Real,17-11,17-11-02
+LOCAL-171103,Fontes,17,11,03,Vila Real,17-11,17-11-03
+LOCAL-171106,Medrões,17,11,06,Vila Real,17-11,17-11-06
+LOCAL-171110,Sever,17,11,10,Vila Real,17-11,17-11-10
+LOCAL-171111,Lobrigos (S.Miguel e S.João Baptista) e Sanhoane,17,11,11,Vila Real,17-11,17-11-11
+LOCAL-171112,Louredo e Fornelos,17,11,12,Vila Real,17-11,17-11-12
+LOCAL-171201,Água Revés e Crasto,17,12,01,Vila Real,17-12,17-12-01
+LOCAL-171203,Algeriz,17,12,03,Vila Real,17-12,17-12-03
+LOCAL-171205,Bouçoães,17,12,05,Vila Real,17-12,17-12-05
+LOCAL-171206,Canaveses,17,12,06,Vila Real,17-12,17-12-06
+LOCAL-171209,Ervões,17,12,09,Vila Real,17-12,17-12-09
+LOCAL-171211,Fornos do Pinhal,17,12,11,Vila Real,17-12,17-12-11
+LOCAL-171212,Friões,17,12,12,Vila Real,17-12,17-12-12
+LOCAL-171215,Padrela e Tazem,17,12,15,Vila Real,17-12,17-12-15
+LOCAL-171216,Possacos,17,12,16,Vila Real,17-12,17-12-16
+LOCAL-171217,Rio Torto,17,12,17,Vila Real,17-12,17-12-17
+LOCAL-171219,Santa Maria de Emeres,17,12,19,Vila Real,17-12,17-12-19
+LOCAL-171220,Santa Valha,17,12,20,Vila Real,17-12,17-12-20
+LOCAL-171221,Santiago da Ribeira de Alhariz,17,12,21,Vila Real,17-12,17-12-21
+LOCAL-171222,São João da Corveira,17,12,22,Vila Real,17-12,17-12-22
+LOCAL-171223,São Pedro de Veiga de Lila,17,12,23,Vila Real,17-12,17-12-23
+LOCAL-171224,Serapicos,17,12,24,Vila Real,17-12,17-12-24
+LOCAL-171227,Vales,17,12,27,Vila Real,17-12,17-12-27
+LOCAL-171229,Vassal,17,12,29,Vila Real,17-12,17-12-29
+LOCAL-171230,Veiga de Lila,17,12,30,Vila Real,17-12,17-12-30
+LOCAL-171231,Vilarandelo,17,12,31,Vila Real,17-12,17-12-31
+LOCAL-171232,Carrazedo de Montenegro e Curros,17,12,32,Vila Real,17-12,17-12-32
+LOCAL-171233,"Lebução, Fiães e Nozelos",17,12,33,Vila Real,17-12,17-12-33
+LOCAL-171234,Sonim e Barreiros,17,12,34,Vila Real,17-12,17-12-34
+LOCAL-171235,Tinhela e Alvarelhos,17,12,35,Vila Real,17-12,17-12-35
+LOCAL-171236,Valpaços e Sanfins,17,12,36,Vila Real,17-12,17-12-36
+LOCAL-171302,Alfarela de Jales,17,13,02,Vila Real,17-13,17-13-02
+LOCAL-171303,Bornes de Aguiar,17,13,03,Vila Real,17-13,17-13-03
+LOCAL-171304,Bragado,17,13,04,Vila Real,17-13,17-13-04
+LOCAL-171305,Capeludos,17,13,05,Vila Real,17-13,17-13-05
+LOCAL-171310,Soutelo de Aguiar,17,13,10,Vila Real,17-13,17-13-10
+LOCAL-171311,Telões,17,13,11,Vila Real,17-13,17-13-11
+LOCAL-171312,Tresminas,17,13,12,Vila Real,17-13,17-13-12
+LOCAL-171313,Valoura,17,13,13,Vila Real,17-13,17-13-13
+LOCAL-171314,Vila Pouca de Aguiar,17,13,14,Vila Real,17-13,17-13-14
+LOCAL-171315,Vreia de Bornes,17,13,15,Vila Real,17-13,17-13-15
+LOCAL-171316,Vreia de Jales,17,13,16,Vila Real,17-13,17-13-16
+LOCAL-171317,Sabroso de Aguiar,17,13,17,Vila Real,17-13,17-13-17
+LOCAL-171319,Alvão,17,13,19,Vila Real,17-13,17-13-19
+LOCAL-171320,Pensalvos e Parada de Monteiros,17,13,20,Vila Real,17-13,17-13-20
+LOCAL-171401,Abaças,17,14,01,Vila Real,17-14,17-14-01
+LOCAL-171403,Andrães,17,14,03,Vila Real,17-14,17-14-03
+LOCAL-171404,Arroios,17,14,04,Vila Real,17-14,17-14-04
+LOCAL-171406,Campeã,17,14,06,Vila Real,17-14,17-14-06
+LOCAL-171409,Folhadela,17,14,09,Vila Real,17-14,17-14-09
+LOCAL-171410,Guiães,17,14,10,Vila Real,17-14,17-14-10
+LOCAL-171414,Lordelo,17,14,14,Vila Real,17-14,17-14-14
+LOCAL-171415,Mateus,17,14,15,Vila Real,17-14,17-14-15
+LOCAL-171416,Mondrões,17,14,16,Vila Real,17-14,17-14-16
+LOCAL-171420,Parada de Cunhos,17,14,20,Vila Real,17-14,17-14-20
+LOCAL-171426,Torgueda,17,14,26,Vila Real,17-14,17-14-26
+LOCAL-171429,Vila Marim,17,14,29,Vila Real,17-14,17-14-29
+LOCAL-171431,Adoufe e Vilarinho de Samardã,17,14,31,Vila Real,17-14,17-14-31
+LOCAL-171432,Borbela e Lamas de Olo,17,14,32,Vila Real,17-14,17-14-32
+LOCAL-171433,Constantim e Vale de Nogueiras,17,14,33,Vila Real,17-14,17-14-33
+LOCAL-171434,Mouçós e Lamares,17,14,34,Vila Real,17-14,17-14-34
+LOCAL-171435,Nogueira e Ermida,17,14,35,Vila Real,17-14,17-14-35
+LOCAL-171436,"Pena, Quintã e Vila Cova",17,14,36,Vila Real,17-14,17-14-36
+LOCAL-171437,São Tomé do Castelo e Justes,17,14,37,Vila Real,17-14,17-14-37
+LOCAL-171438,Vila Real,17,14,38,Vila Real,17-14,17-14-38
+LOCAL-180101,Aldeias,18,01,01,Viseu,18-01,18-01-01
+LOCAL-180104,Cimbres,18,01,04,Viseu,18-01,18-01-04
+LOCAL-180106,Folgosa,18,01,06,Viseu,18-01,18-01-06
+LOCAL-180107,Fontelo,18,01,07,Viseu,18-01,18-01-07
+LOCAL-180109,Queimada,18,01,09,Viseu,18-01,18-01-09
+LOCAL-180110,Queimadela,18,01,10,Viseu,18-01,18-01-10
+LOCAL-180111,Santa Cruz,18,01,11,Viseu,18-01,18-01-11
+LOCAL-180114,São Cosmado,18,01,14,Viseu,18-01,18-01-14
+LOCAL-180115,São Martinho das Chãs,18,01,15,Viseu,18-01,18-01-15
+LOCAL-180118,Vacalar,18,01,18,Viseu,18-01,18-01-18
+LOCAL-180120,Armamar,18,01,20,Viseu,18-01,18-01-20
+LOCAL-180121,Aricera e Goujoim,18,01,21,Viseu,18-01,18-01-21
+LOCAL-180122,São Romão e Santiago,18,01,22,Viseu,18-01,18-01-22
+LOCAL-180123,Vila Seca e Santo Adrião,18,01,23,Viseu,18-01,18-01-23
+LOCAL-180201,Beijós,18,02,01,Viseu,18-02,18-02-01
+LOCAL-180202,Cabanas de Viriato,18,02,02,Viseu,18-02,18-02-02
+LOCAL-180204,Oliveira do Conde,18,02,04,Viseu,18-02,18-02-04
+LOCAL-180206,Parada,18,02,06,Viseu,18-02,18-02-06
+LOCAL-180208,Carregal do Sal,18,02,08,Viseu,18-02,18-02-08
+LOCAL-180301,Almofala,18,03,01,Viseu,18-03,18-03-01
+LOCAL-180303,Cabril,18,03,03,Viseu,18-03,18-03-03
+LOCAL-180304,Castro Daire,18,03,04,Viseu,18-03,18-03-04
+LOCAL-180305,Cujó,18,03,05,Viseu,18-03,18-03-05
+LOCAL-180309,Gosende,18,03,09,Viseu,18-03,18-03-09
+LOCAL-180312,Mões,18,03,12,Viseu,18-03,18-03-12
+LOCAL-180313,Moledo,18,03,13,Viseu,18-03,18-03-13
+LOCAL-180314,Monteiras,18,03,14,Viseu,18-03,18-03-14
+LOCAL-180317,Pepim,18,03,17,Viseu,18-03,18-03-17
+LOCAL-180319,Pinheiro,18,03,19,Viseu,18-03,18-03-19
+LOCAL-180322,São Joaninho,18,03,22,Viseu,18-03,18-03-22
+LOCAL-180323,"Mamouros, Alva e Ribolhos",18,03,23,Viseu,18-03,18-03-23
+LOCAL-180324,Mezio e Moura Morta,18,03,24,Viseu,18-03,18-03-24
+LOCAL-180325,Parada de Ester e Ester,18,03,25,Viseu,18-03,18-03-25
+LOCAL-180326,Picão e Ermida,18,03,26,Viseu,18-03,18-03-26
+LOCAL-180327,Reriz e Gafanhão,18,03,27,Viseu,18-03,18-03-27
+LOCAL-180403,Cinfães,18,04,03,Viseu,18-04,18-04-03
+LOCAL-180404,Espadanedo,18,04,04,Viseu,18-04,18-04-04
+LOCAL-180405,Ferreiros de Tendais,18,04,05,Viseu,18-04,18-04-05
+LOCAL-180406,Fornelos,18,04,06,Viseu,18-04,18-04-06
+LOCAL-180408,Moimenta,18,04,08,Viseu,18-04,18-04-08
+LOCAL-180409,Nespereira,18,04,09,Viseu,18-04,18-04-09
+LOCAL-180410,Oliveira do Douro,18,04,10,Viseu,18-04,18-04-10
+LOCAL-180412,Santiago de Piães,18,04,12,Viseu,18-04,18-04-12
+LOCAL-180413,São Cristóvão de Nogueira,18,04,13,Viseu,18-04,18-04-13
+LOCAL-180414,Souselo,18,04,14,Viseu,18-04,18-04-14
+LOCAL-180415,Tarouquela,18,04,15,Viseu,18-04,18-04-15
+LOCAL-180416,Tendais,18,04,16,Viseu,18-04,18-04-16
+LOCAL-180417,Travanca,18,04,17,Viseu,18-04,18-04-17
+LOCAL-180418,"Alhões, Bustelo, Gralheira e Ramires",18,04,18,Viseu,18-04,18-04-18
+LOCAL-180502,Avões,18,05,02,Viseu,18-05,18-05-02
+LOCAL-180504,Britiande,18,05,04,Viseu,18-05,18-05-04
+LOCAL-180505,Cambres,18,05,05,Viseu,18-05,18-05-05
+LOCAL-180507,Ferreirim,18,05,07,Viseu,18-05,18-05-07
+LOCAL-180508,Ferreiros de Avões,18,05,08,Viseu,18-05,18-05-08
+LOCAL-180509,Figueira,18,05,09,Viseu,18-05,18-05-09
+LOCAL-180510,Lalim,18,05,10,Viseu,18-05,18-05-10
+LOCAL-180511,Lazarim,18,05,11,Viseu,18-05,18-05-11
+LOCAL-180516,Penajóia,18,05,16,Viseu,18-05,18-05-16
+LOCAL-180517,Penude,18,05,17,Viseu,18-05,18-05-17
+LOCAL-180519,Samodães,18,05,19,Viseu,18-05,18-05-19
+LOCAL-180520,Sande,18,05,20,Viseu,18-05,18-05-20
+LOCAL-180523,Várzea de Abrunhais,18,05,23,Viseu,18-05,18-05-23
+LOCAL-180524,Vila Nova de Souto d'El-Rei,18,05,24,Viseu,18-05,18-05-24
+LOCAL-180525,Lamego (Almacave e Sé),18,05,25,Viseu,18-05,18-05-25
+LOCAL-180526,"Bigorne, Magueija e Pretarouca",18,05,26,Viseu,18-05,18-05-26
+LOCAL-180527,"Cepões, Meijinhos e Melcões",18,05,27,Viseu,18-05,18-05-27
+LOCAL-180528,Parada do Bispo e Valdigem,18,05,28,Viseu,18-05,18-05-28
+LOCAL-180601,Abrunhosa-a-Velha,18,06,01,Viseu,18-06,18-06-01
+LOCAL-180602,Alcafache,18,06,02,Viseu,18-06,18-06-02
+LOCAL-180605,Cunha Baixa,18,06,05,Viseu,18-06,18-06-05
+LOCAL-180606,Espinho,18,06,06,Viseu,18-06,18-06-06
+LOCAL-180607,Fornos de Maceira Dão,18,06,07,Viseu,18-06,18-06-07
+LOCAL-180608,Freixiosa,18,06,08,Viseu,18-06,18-06-08
+LOCAL-180614,Quintela de Azurara,18,06,14,Viseu,18-06,18-06-14
+LOCAL-180616,São João da Fresta,18,06,16,Viseu,18-06,18-06-16
+LOCAL-180619,"Mangualde, Mesquitela e Cunha Alta",18,06,19,Viseu,18-06,18-06-19
+LOCAL-180620,Moimenta de Maceira Dão e Lobelhe do Mato,18,06,20,Viseu,18-06,18-06-20
+LOCAL-180621,Santiago de Cassurrães e Póvoa de Cervães,18,06,21,Viseu,18-06,18-06-21
+LOCAL-180622,"Tavares (Chãs, Várzea e Travanca)",18,06,22,Viseu,18-06,18-06-22
+LOCAL-180702,Alvite,18,07,02,Viseu,18-07,18-07-02
+LOCAL-180703,Arcozelos,18,07,03,Viseu,18-07,18-07-03
+LOCAL-180705,Baldos,18,07,05,Viseu,18-07,18-07-05
+LOCAL-180706,Cabaços,18,07,06,Viseu,18-07,18-07-06
+LOCAL-180707,Caria,18,07,07,Viseu,18-07,18-07-07
+LOCAL-180708,Castelo,18,07,08,Viseu,18-07,18-07-08
+LOCAL-180709,Leomil,18,07,09,Viseu,18-07,18-07-09
+LOCAL-180710,Moimenta da Beira,18,07,10,Viseu,18-07,18-07-10
+LOCAL-180713,Passô,18,07,13,Viseu,18-07,18-07-13
+LOCAL-180716,Vila da Rua,18,07,16,Viseu,18-07,18-07-16
+LOCAL-180717,Sarzedo,18,07,17,Viseu,18-07,18-07-17
+LOCAL-180719,Sever,18,07,19,Viseu,18-07,18-07-19
+LOCAL-180720,Vilar,18,07,20,Viseu,18-07,18-07-20
+LOCAL-180721,Paradinha e Nagosa,18,07,21,Viseu,18-07,18-07-21
+LOCAL-180722,"Pêra Velha, Aldeia de Nacomba e Ariz",18,07,22,Viseu,18-07,18-07-22
+LOCAL-180723,Peva e Segões,18,07,23,Viseu,18-07,18-07-23
+LOCAL-180802,Cercosa,18,08,02,Viseu,18-08,18-08-02
+LOCAL-180804,Espinho,18,08,04,Viseu,18-08,18-08-04
+LOCAL-180805,Marmeleira,18,08,05,Viseu,18-08,18-08-05
+LOCAL-180807,Pala,18,08,07,Viseu,18-08,18-08-07
+LOCAL-180808,Sobral,18,08,08,Viseu,18-08,18-08-08
+LOCAL-180809,Trezói,18,08,09,Viseu,18-08,18-08-09
+LOCAL-180811,"Mortágua, Vale de Remígio, Cortegaça e Almaça",18,08,11,Viseu,18-08,18-08-11
+LOCAL-180901,Canas de Senhorim,18,09,01,Viseu,18-09,18-09-01
+LOCAL-180903,Nelas,18,09,03,Viseu,18-09,18-09-03
+LOCAL-180905,Senhorim,18,09,05,Viseu,18-09,18-09-05
+LOCAL-180906,Vilar Seco,18,09,06,Viseu,18-09,18-09-06
+LOCAL-180908,Lapa do Lobo,18,09,08,Viseu,18-09,18-09-08
+LOCAL-180910,Carvalhal Redondo e Aguieira,18,09,10,Viseu,18-09,18-09-10
+LOCAL-180911,Santar e Moreira,18,09,11,Viseu,18-09,18-09-11
+LOCAL-181002,Arcozelo das Maias,18,10,02,Viseu,18-10,18-10-02
+LOCAL-181005,Pinheiro,18,10,05,Viseu,18-10,18-10-05
+LOCAL-181007,Ribeiradio,18,10,07,Viseu,18-10,18-10-07
+LOCAL-181008,São João da Serra,18,10,08,Viseu,18-10,18-10-08
+LOCAL-181009,São Vicente de Lafões,18,10,09,Viseu,18-10,18-10-09
+LOCAL-181013,Arca e Varzielas,18,10,13,Viseu,18-10,18-10-13
+LOCAL-181014,Destriz e Reigoso,18,10,14,Viseu,18-10,18-10-14
+LOCAL-181015,"Oliveira de Frades, Souto de Lafões e Sejães",18,10,15,Viseu,18-10,18-10-15
+LOCAL-181102,Castelo de Penalva,18,11,02,Viseu,18-11,18-11-02
+LOCAL-181103,Esmolfe,18,11,03,Viseu,18-11,18-11-03
+LOCAL-181104,Germil,18,11,04,Viseu,18-11,18-11-04
+LOCAL-181105,Ínsua,18,11,05,Viseu,18-11,18-11-05
+LOCAL-181106,Lusinde,18,11,06,Viseu,18-11,18-11-06
+LOCAL-181109,Pindo,18,11,09,Viseu,18-11,18-11-09
+LOCAL-181110,Real,18,11,10,Viseu,18-11,18-11-10
+LOCAL-181111,Sezures,18,11,11,Viseu,18-11,18-11-11
+LOCAL-181112,Trancozelos,18,11,12,Viseu,18-11,18-11-12
+LOCAL-181114,Antas e Matela,18,11,14,Viseu,18-11,18-11-14
+LOCAL-181115,Vila Cova do Covelo/Mareco,18,11,15,Viseu,18-11,18-11-15
+LOCAL-181202,Beselga,18,12,02,Viseu,18-12,18-12-02
+LOCAL-181203,Castainço,18,12,03,Viseu,18-12,18-12-03
+LOCAL-181207,Penela da Beira,18,12,07,Viseu,18-12,18-12-07
+LOCAL-181208,Póvoa de Penela,18,12,08,Viseu,18-12,18-12-08
+LOCAL-181209,Souto,18,12,09,Viseu,18-12,18-12-09
+LOCAL-181210,Antas e Ourozinho,18,12,10,Viseu,18-12,18-12-10
+LOCAL-181211,Penedono e Granja,18,12,11,Viseu,18-12,18-12-11
+LOCAL-181302,Barrô,18,13,02,Viseu,18-13,18-13-02
+LOCAL-181303,Cárquere,18,13,03,Viseu,18-13,18-13-03
+LOCAL-181310,Paus,18,13,10,Viseu,18-13,18-13-10
+LOCAL-181311,Resende,18,13,11,Viseu,18-13,18-13-11
+LOCAL-181312,São Cipriano,18,13,12,Viseu,18-13,18-13-12
+LOCAL-181313,São João de Fontoura,18,13,13,Viseu,18-13,18-13-13
+LOCAL-181314,São Martinho de Mouros,18,13,14,Viseu,18-13,18-13-14
+LOCAL-181316,Anreade e São Romão de Aregos,18,13,16,Viseu,18-13,18-13-16
+LOCAL-181317,Felgueiras e Feirão,18,13,17,Viseu,18-13,18-13-17
+LOCAL-181318,Freigil e Miomães,18,13,18,Viseu,18-13,18-13-18
+LOCAL-181319,Ovadas e Panchorra,18,13,19,Viseu,18-13,18-13-19
+LOCAL-181403,Pinheiro de Ázere,18,14,03,Viseu,18-14,18-14-03
+LOCAL-181405,São Joaninho,18,14,05,Viseu,18-14,18-14-05
+LOCAL-181406,São João de Areias,18,14,06,Viseu,18-14,18-14-06
+LOCAL-181410,Ovoa e Vimieiro,18,14,10,Viseu,18-14,18-14-10
+LOCAL-181411,Santa Comba Dão e Couto do Mosteiro,18,14,11,Viseu,18-14,18-14-11
+LOCAL-181412,Treixedo e Nagozela,18,14,12,Viseu,18-14,18-14-12
+LOCAL-181501,Castanheiro do Sul,18,15,01,Viseu,18-15,18-15-01
+LOCAL-181502,Ervedosa do Douro,18,15,02,Viseu,18-15,18-15-02
+LOCAL-181504,Nagozelo do Douro,18,15,04,Viseu,18-15,18-15-04
+LOCAL-181505,Paredes da Beira,18,15,05,Viseu,18-15,18-15-05
+LOCAL-181507,Riodades,18,15,07,Viseu,18-15,18-15-07
+LOCAL-181509,Soutelo do Douro,18,15,09,Viseu,18-15,18-15-09
+LOCAL-181511,Vale de Figueira,18,15,11,Viseu,18-15,18-15-11
+LOCAL-181512,Valongo dos Azeites,18,15,12,Viseu,18-15,18-15-12
+LOCAL-181515,São João da Pesqueira e Várzea de Trevões,18,15,15,Viseu,18-15,18-15-15
+LOCAL-181516,Trevões e Espinhosa,18,15,16,Viseu,18-15,18-15-16
+LOCAL-181517,Vilarouco e Pereiros,18,15,17,Viseu,18-15,18-15-17
+LOCAL-181602,Bordonhos,18,16,02,Viseu,18-16,18-16-02
+LOCAL-181606,Figueiredo de Alva,18,16,06,Viseu,18-16,18-16-06
+LOCAL-181607,Manhouce,18,16,07,Viseu,18-16,18-16-07
+LOCAL-181608,Pindelo dos Milagres,18,16,08,Viseu,18-16,18-16-08
+LOCAL-181609,Pinho,18,16,09,Viseu,18-16,18-16-09
+LOCAL-181612,São Félix,18,16,12,Viseu,18-16,18-16-12
+LOCAL-181615,Serrazes,18,16,15,Viseu,18-16,18-16-15
+LOCAL-181616,Sul,18,16,16,Viseu,18-16,18-16-16
+LOCAL-181617,Valadares,18,16,17,Viseu,18-16,18-16-17
+LOCAL-181619,Vila Maior,18,16,19,Viseu,18-16,18-16-19
+LOCAL-181620,Carvalhais e Candal,18,16,20,Viseu,18-16,18-16-20
+LOCAL-181621,Santa Cruz da Trapa e São Cristóvão de Lafões,18,16,21,Viseu,18-16,18-16-21
+LOCAL-181622,São Martinho das Moitas e Covas do Rio,18,16,22,Viseu,18-16,18-16-22
+LOCAL-181623,"São Pedro do Sul, Várzea e Baiões",18,16,23,Viseu,18-16,18-16-23
+LOCAL-181702,Avelal,18,17,02,Viseu,18-17,18-17-02
+LOCAL-181704,Ferreira de Aves,18,17,04,Viseu,18-17,18-17-04
+LOCAL-181706,Mioma,18,17,06,Viseu,18-17,18-17-06
+LOCAL-181707,Rio de Moinhos,18,17,07,Viseu,18-17,18-17-07
+LOCAL-181709,São Miguel de Vila Boa,18,17,09,Viseu,18-17,18-17-09
+LOCAL-181710,Sátão,18,17,10,Viseu,18-17,18-17-10
+LOCAL-181711,Silvã de Cima,18,17,11,Viseu,18-17,18-17-11
+LOCAL-181713,Águas Boas e Forles,18,17,13,Viseu,18-17,18-17-13
+LOCAL-181714,"Romãs, Decermilo e Vila Longa",18,17,14,Viseu,18-17,18-17-14
+LOCAL-181801,Arnas,18,18,01,Viseu,18-18,18-18-01
+LOCAL-181802,Carregal,18,18,02,Viseu,18-18,18-18-02
+LOCAL-181803,Chosendo,18,18,03,Viseu,18-18,18-18-03
+LOCAL-181804,Cunha,18,18,04,Viseu,18-18,18-18-04
+LOCAL-181806,Faia,18,18,06,Viseu,18-18,18-18-06
+LOCAL-181810,Granjal,18,18,10,Viseu,18-18,18-18-10
+LOCAL-181811,Lamosa,18,18,11,Viseu,18-18,18-18-11
+LOCAL-181814,Quintela,18,18,14,Viseu,18-18,18-18-14
+LOCAL-181817,Vila da Ponte,18,18,17,Viseu,18-18,18-18-17
+LOCAL-181818,Ferreirim e Macieira,18,18,18,Viseu,18-18,18-18-18
+LOCAL-181819,Fonte Arcada e Escurquela,18,18,19,Viseu,18-18,18-18-19
+LOCAL-181820,Penso e Freixinho,18,18,20,Viseu,18-18,18-18-20
+LOCAL-181821,Sernancelhe e Sarzeda,18,18,21,Viseu,18-18,18-18-21
+LOCAL-181901,Adorigo,18,19,01,Viseu,18-19,18-19-01
+LOCAL-181902,Arcos,18,19,02,Viseu,18-19,18-19-02
+LOCAL-181904,Chavães,18,19,04,Viseu,18-19,18-19-04
+LOCAL-181905,Desejosa,18,19,05,Viseu,18-19,18-19-05
+LOCAL-181906,Granja do Tedo,18,19,06,Viseu,18-19,18-19-06
+LOCAL-181908,Longa,18,19,08,Viseu,18-19,18-19-08
+LOCAL-181913,Sendim,18,19,13,Viseu,18-19,18-19-13
+LOCAL-181914,Tabuaço,18,19,14,Viseu,18-19,18-19-14
+LOCAL-181917,Valença do Douro,18,19,17,Viseu,18-19,18-19-17
+LOCAL-181918,Barcos e Santa Leocádia,18,19,18,Viseu,18-19,18-19-18
+LOCAL-181919,Paradela e Granjinha,18,19,19,Viseu,18-19,18-19-19
+LOCAL-181920,Pinheiros e Vale de Figueira,18,19,20,Viseu,18-19,18-19-20
+LOCAL-181921,Távora e Pereiro,18,19,21,Viseu,18-19,18-19-21
+LOCAL-182004,Mondim da Beira,18,20,04,Viseu,18-20,18-20-04
+LOCAL-182005,Salzedas,18,20,05,Viseu,18-20,18-20-05
+LOCAL-182006,São João de Tarouca,18,20,06,Viseu,18-20,18-20-06
+LOCAL-182009,Várzea da Serra,18,20,09,Viseu,18-20,18-20-09
+LOCAL-182011,Gouviães e Ucanha,18,20,11,Viseu,18-20,18-20-11
+LOCAL-182012,Granja Nova e Vila Chã da Beira,18,20,12,Viseu,18-20,18-20-12
+LOCAL-182013,Tarouca e Dálvares,18,20,13,Viseu,18-20,18-20-13
+LOCAL-182102,Campo de Besteiros,18,21,02,Viseu,18-21,18-21-02
+LOCAL-182103,Canas de Santa Maria,18,21,03,Viseu,18-21,18-21-03
+LOCAL-182105,Castelões,18,21,05,Viseu,18-21,18-21-05
+LOCAL-182106,Dardavaz,18,21,06,Viseu,18-21,18-21-06
+LOCAL-182107,Ferreirós do Dão,18,21,07,Viseu,18-21,18-21-07
+LOCAL-182108,Guardão,18,21,08,Viseu,18-21,18-21-08
+LOCAL-182109,Lajeosa do Dão,18,21,09,Viseu,18-21,18-21-09
+LOCAL-182110,Lobão da Beira,18,21,10,Viseu,18-21,18-21-10
+LOCAL-182111,Molelos,18,21,11,Viseu,18-21,18-21-11
+LOCAL-182116,Parada de Gonta,18,21,16,Viseu,18-21,18-21-16
+LOCAL-182118,Santiago de Besteiros,18,21,18,Viseu,18-21,18-21-18
+LOCAL-182122,Tonda,18,21,22,Viseu,18-21,18-21-22
+LOCAL-182127,Barreiro de Besteiros e Tourigo,18,21,27,Viseu,18-21,18-21-27
+LOCAL-182128,Caparrosa e Silvares,18,21,28,Viseu,18-21,18-21-28
+LOCAL-182129,Mouraz e Vila Nova da Rainha,18,21,29,Viseu,18-21,18-21-29
+LOCAL-182130,São João do Monte e Mosteirinho,18,21,30,Viseu,18-21,18-21-30
+LOCAL-182131,São Miguel do Outeiro e Sabugosa,18,21,31,Viseu,18-21,18-21-31
+LOCAL-182132,Tondela e Nandufe,18,21,32,Viseu,18-21,18-21-32
+LOCAL-182133,Vilar de Besteiros e Mosteiro de Fráguas,18,21,33,Viseu,18-21,18-21-33
+LOCAL-182203,Pendilhe,18,22,03,Viseu,18-22,18-22-03
+LOCAL-182204,Queiriga,18,22,04,Viseu,18-22,18-22-04
+LOCAL-182205,Touro,18,22,05,Viseu,18-22,18-22-05
+LOCAL-182206,Vila Cova à Coelheira,18,22,06,Viseu,18-22,18-22-06
+LOCAL-182208,"Vila Nova de Paiva, Alhais e Fráguas",18,22,08,Viseu,18-22,18-22-08
+LOCAL-182301,Abraveses,18,23,01,Viseu,18-23,18-23-01
+LOCAL-182304,Bodiosa,18,23,04,Viseu,18-23,18-23-04
+LOCAL-182305,Calde,18,23,05,Viseu,18-23,18-23-05
+LOCAL-182306,Campo,18,23,06,Viseu,18-23,18-23-06
+LOCAL-182307,Cavernães,18,23,07,Viseu,18-23,18-23-07
+LOCAL-182310,Cota,18,23,10,Viseu,18-23,18-23-10
+LOCAL-182315,Fragosela,18,23,15,Viseu,18-23,18-23-15
+LOCAL-182316,Lordosa,18,23,16,Viseu,18-23,18-23-16
+LOCAL-182317,Silgueiros,18,23,17,Viseu,18-23,18-23-17
+LOCAL-182318,Mundão,18,23,18,Viseu,18-23,18-23-18
+LOCAL-182319,Orgens,18,23,19,Viseu,18-23,18-23-19
+LOCAL-182320,Povolide,18,23,20,Viseu,18-23,18-23-20
+LOCAL-182321,Ranhados,18,23,21,Viseu,18-23,18-23-21
+LOCAL-182322,Ribafeita,18,23,22,Viseu,18-23,18-23-22
+LOCAL-182323,Rio de Loba,18,23,23,Viseu,18-23,18-23-23
+LOCAL-182325,Santos Evos,18,23,25,Viseu,18-23,18-23-25
+LOCAL-182327,São João de Lourosa,18,23,27,Viseu,18-23,18-23-27
+LOCAL-182329,São Pedro de France,18,23,29,Viseu,18-23,18-23-29
+LOCAL-182335,Barreiros e Cepões,18,23,35,Viseu,18-23,18-23-35
+LOCAL-182336,"Boa Aldeia, Farminhão e Torredeita",18,23,36,Viseu,18-23,18-23-36
+LOCAL-182337,Coutos de Viseu,18,23,37,Viseu,18-23,18-23-37
+LOCAL-182338,Fail e Vila Chã de Sá,18,23,38,Viseu,18-23,18-23-38
+LOCAL-182339,Repeses e São Salvador,18,23,39,Viseu,18-23,18-23-39
+LOCAL-182340,São Cipriano e Vil de Souto,18,23,40,Viseu,18-23,18-23-40
+LOCAL-182341,Viseu,18,23,41,Viseu,18-23,18-23-41
+LOCAL-182401,Alcofra,18,24,01,Viseu,18-24,18-24-01
+LOCAL-182403,Campia,18,24,03,Viseu,18-24,18-24-03
+LOCAL-182407,Fornelo do Monte,18,24,07,Viseu,18-24,18-24-07
+LOCAL-182409,Queirã,18,24,09,Viseu,18-24,18-24-09
+LOCAL-182410,São Miguel do Mato,18,24,10,Viseu,18-24,18-24-10
+LOCAL-182411,Ventosa,18,24,11,Viseu,18-24,18-24-11
+LOCAL-182413,Cambra e Carvalhal de Vermilhas,18,24,13,Viseu,18-24,18-24-13
+LOCAL-182414,Fataunços e Figueiredo das Donas,18,24,14,Viseu,18-24,18-24-14
+LOCAL-182415,Vouzela e Paços de Vilharigues,18,24,15,Viseu,18-24,18-24-15
+LOCAL-310101,Arco da Calheta,31,01,01,Madeira,31-01,31-01-01
+LOCAL-310102,Calheta,31,01,02,Madeira,31-01,31-01-02
+LOCAL-310103,Estreito da Calheta,31,01,03,Madeira,31-01,31-01-03
+LOCAL-310104,Fajã da Ovelha,31,01,04,Madeira,31-01,31-01-04
+LOCAL-310105,Jardim do Mar,31,01,05,Madeira,31-01,31-01-05
+LOCAL-310106,Paul do Mar,31,01,06,Madeira,31-01,31-01-06
+LOCAL-310107,Ponta do Pargo,31,01,07,Madeira,31-01,31-01-07
+LOCAL-310108,Prazeres,31,01,08,Madeira,31-01,31-01-08
+LOCAL-310201,Câmara de Lobos,31,02,01,Madeira,31-02,31-02-01
+LOCAL-310202,Curral das Freiras,31,02,02,Madeira,31-02,31-02-02
+LOCAL-310203,Estreito de Câmara de Lobos,31,02,03,Madeira,31-02,31-02-03
+LOCAL-310204,Quinta Grande,31,02,04,Madeira,31-02,31-02-04
+LOCAL-310205,Jardim da Serra,31,02,05,Madeira,31-02,31-02-05
+LOCAL-310301,Imaculado Coração de Maria,31,03,01,Madeira,31-03,31-03-01
+LOCAL-310302,Monte,31,03,02,Madeira,31-03,31-03-02
+LOCAL-310303,Funchal (Santa Luzia),31,03,03,Madeira,31-03,31-03-03
+LOCAL-310304,Funchal (Santa Maria Maior),31,03,04,Madeira,31-03,31-03-04
+LOCAL-310305,Santo António,31,03,05,Madeira,31-03,31-03-05
+LOCAL-310306,São Gonçalo,31,03,06,Madeira,31-03,31-03-06
+LOCAL-310307,São Martinho,31,03,07,Madeira,31-03,31-03-07
+LOCAL-310308,Funchal (São Pedro),31,03,08,Madeira,31-03,31-03-08
+LOCAL-310309,São Roque,31,03,09,Madeira,31-03,31-03-09
+LOCAL-310310,Funchal (Sé),31,03,10,Madeira,31-03,31-03-10
+LOCAL-310401,Água de Pena,31,04,01,Madeira,31-04,31-04-01
+LOCAL-310402,Caniçal,31,04,02,Madeira,31-04,31-04-02
+LOCAL-310403,Machico,31,04,03,Madeira,31-04,31-04-03
+LOCAL-310404,Porto da Cruz,31,04,04,Madeira,31-04,31-04-04
+LOCAL-310405,Santo António da Serra,31,04,05,Madeira,31-04,31-04-05
+LOCAL-310501,Canhas,31,05,01,Madeira,31-05,31-05-01
+LOCAL-310502,Madalena do Mar,31,05,02,Madeira,31-05,31-05-02
+LOCAL-310503,Ponta do Sol,31,05,03,Madeira,31-05,31-05-03
+LOCAL-310601,Achadas da Cruz,31,06,01,Madeira,31-06,31-06-01
+LOCAL-310602,Porto Moniz,31,06,02,Madeira,31-06,31-06-02
+LOCAL-310603,Ribeira da Janela,31,06,03,Madeira,31-06,31-06-03
+LOCAL-310604,Seixal,31,06,04,Madeira,31-06,31-06-04
+LOCAL-310701,Campanário,31,07,01,Madeira,31-07,31-07-01
+LOCAL-310702,Ribeira Brava,31,07,02,Madeira,31-07,31-07-02
+LOCAL-310703,Serra de Água,31,07,03,Madeira,31-07,31-07-03
+LOCAL-310704,Tabua,31,07,04,Madeira,31-07,31-07-04
+LOCAL-310802,Camacha,31,08,02,Madeira,31-08,31-08-02
+LOCAL-310803,Caniço,31,08,03,Madeira,31-08,31-08-03
+LOCAL-310804,Gaula,31,08,04,Madeira,31-08,31-08-04
+LOCAL-310805,Santa Cruz,31,08,05,Madeira,31-08,31-08-05
+LOCAL-310806,Santo António da Serra,31,08,06,Madeira,31-08,31-08-06
+LOCAL-310901,Arco de São Jorge,31,09,01,Madeira,31-09,31-09-01
+LOCAL-310902,Faial,31,09,02,Madeira,31-09,31-09-02
+LOCAL-310903,Santana,31,09,03,Madeira,31-09,31-09-03
+LOCAL-310904,São Jorge,31,09,04,Madeira,31-09,31-09-04
+LOCAL-310905,São Roque do Faial,31,09,05,Madeira,31-09,31-09-05
+LOCAL-310906,Ilha,31,09,06,Madeira,31-09,31-09-06
+LOCAL-311001,Boa Ventura,31,10,01,Madeira,31-10,31-10-01
+LOCAL-311002,Ponta Delgada,31,10,02,Madeira,31-10,31-10-02
+LOCAL-311003,São Vicente,31,10,03,Madeira,31-10,31-10-03
+LOCAL-320101,Porto Santo,32,01,01,Madeira,32-01,32-01-01
+LOCAL-410101,Almagreira,41,01,01,Açores,41-01,41-01-01
+LOCAL-410102,Santa Bárbara,41,01,02,Açores,41-01,41-01-02
+LOCAL-410103,Santo Espírito,41,01,03,Açores,41-01,41-01-03
+LOCAL-410104,São Pedro,41,01,04,Açores,41-01,41-01-04
+LOCAL-410105,Vila do Porto,41,01,05,Açores,41-01,41-01-05
+LOCAL-420101,Água de Pau,42,01,01,Açores,42-01,42-01-01
+LOCAL-420102,Cabouco,42,01,02,Açores,42-01,42-01-02
+LOCAL-420103,Lagoa (Nossa Senhora do Rosário),42,01,03,Açores,42-01,42-01-03
+LOCAL-420104,Lagoa (Santa Cruz),42,01,04,Açores,42-01,42-01-04
+LOCAL-420105,Ribeira Chã,42,01,05,Açores,42-01,42-01-05
+LOCAL-420201,Achada,42,02,01,Açores,42-02,42-02-01
+LOCAL-420202,Achadinha,42,02,02,Açores,42-02,42-02-02
+LOCAL-420203,Lomba da Fazenda,42,02,03,Açores,42-02,42-02-03
+LOCAL-420204,Nordeste,42,02,04,Açores,42-02,42-02-04
+LOCAL-420206,Salga,42,02,06,Açores,42-02,42-02-06
+LOCAL-420207,Santana,42,02,07,Açores,42-02,42-02-07
+LOCAL-420208,Algarvia,42,02,08,Açores,42-02,42-02-08
+LOCAL-420209,Santo António de Nordestinho,42,02,09,Açores,42-02,42-02-09
+LOCAL-420210,São Pedro de Nordestinho,42,02,10,Açores,42-02,42-02-10
+LOCAL-420301,Arrifes,42,03,01,Açores,42-03,42-03-01
+LOCAL-420303,Candelária,42,03,03,Açores,42-03,42-03-03
+LOCAL-420304,Capelas,42,03,04,Açores,42-03,42-03-04
+LOCAL-420305,Covoada,42,03,05,Açores,42-03,42-03-05
+LOCAL-420306,Fajã de Baixo,42,03,06,Açores,42-03,42-03-06
+LOCAL-420307,Fajã de Cima,42,03,07,Açores,42-03,42-03-07
+LOCAL-420308,Fenais da Luz,42,03,08,Açores,42-03,42-03-08
+LOCAL-420309,Feteiras,42,03,09,Açores,42-03,42-03-09
+LOCAL-420310,Ginetes,42,03,10,Açores,42-03,42-03-10
+LOCAL-420311,Mosteiros,42,03,11,Açores,42-03,42-03-11
+LOCAL-420312,Ponta Delgada (São Sebastião),42,03,12,Açores,42-03,42-03-12
+LOCAL-420313,Ponta Delgada (São José),42,03,13,Açores,42-03,42-03-13
+LOCAL-420314,Ponta Delgada (São Pedro),42,03,14,Açores,42-03,42-03-14
+LOCAL-420315,Relva,42,03,15,Açores,42-03,42-03-15
+LOCAL-420316,Remédios,42,03,16,Açores,42-03,42-03-16
+LOCAL-420317,Rosto do Cão (Livramento),42,03,17,Açores,42-03,42-03-17
+LOCAL-420318,Rosto do Cão (São Roque),42,03,18,Açores,42-03,42-03-18
+LOCAL-420319,Santa Bárbara,42,03,19,Açores,42-03,42-03-19
+LOCAL-420320,Santo António,42,03,20,Açores,42-03,42-03-20
+LOCAL-420321,São Vicente Ferreira,42,03,21,Açores,42-03,42-03-21
+LOCAL-420322,Sete Cidades,42,03,22,Açores,42-03,42-03-22
+LOCAL-420323,Ajuda da Bretanha,42,03,23,Açores,42-03,42-03-23
+LOCAL-420324,Pilar da Bretanha,42,03,24,Açores,42-03,42-03-24
+LOCAL-420325,Santa Clara,42,03,25,Açores,42-03,42-03-25
+LOCAL-420401,Água Retorta,42,04,01,Açores,42-04,42-04-01
+LOCAL-420402,Faial da Terra,42,04,02,Açores,42-04,42-04-02
+LOCAL-420403,Furnas,42,04,03,Açores,42-04,42-04-03
+LOCAL-420404,Nossa Senhora dos Remédios,42,04,04,Açores,42-04,42-04-04
+LOCAL-420405,Povoação,42,04,05,Açores,42-04,42-04-05
+LOCAL-420406,Ribeira Quente,42,04,06,Açores,42-04,42-04-06
+LOCAL-420501,Calhetas,42,05,01,Açores,42-05,42-05-01
+LOCAL-420502,Fenais da Ajuda,42,05,02,Açores,42-05,42-05-02
+LOCAL-420503,Lomba da Maia,42,05,03,Açores,42-05,42-05-03
+LOCAL-420504,Lomba de São Pedro,42,05,04,Açores,42-05,42-05-04
+LOCAL-420505,Maia,42,05,05,Açores,42-05,42-05-05
+LOCAL-420506,Pico da Pedra,42,05,06,Açores,42-05,42-05-06
+LOCAL-420507,Porto Formoso,42,05,07,Açores,42-05,42-05-07
+LOCAL-420508,Rabo de Peixe,42,05,08,Açores,42-05,42-05-08
+LOCAL-420509,Ribeira Grande (Conceição),42,05,09,Açores,42-05,42-05-09
+LOCAL-420510,Ribeira Grande (Matriz),42,05,10,Açores,42-05,42-05-10
+LOCAL-420511,Ribeira Seca,42,05,11,Açores,42-05,42-05-11
+LOCAL-420512,Ribeirinha,42,05,12,Açores,42-05,42-05-12
+LOCAL-420513,Santa Bárbara,42,05,13,Açores,42-05,42-05-13
+LOCAL-420514,São Brás,42,05,14,Açores,42-05,42-05-14
+LOCAL-420601,Água de Alto,42,06,01,Açores,42-06,42-06-01
+LOCAL-420602,Ponta Garça,42,06,02,Açores,42-06,42-06-02
+LOCAL-420603,Ribeira das Tainhas,42,06,03,Açores,42-06,42-06-03
+LOCAL-420604,Vila Franca do Campo (São Miguel),42,06,04,Açores,42-06,42-06-04
+LOCAL-420605,Vila Franca do Campo (São Pedro),42,06,05,Açores,42-06,42-06-05
+LOCAL-420606,Ribeira Seca,42,06,06,Açores,42-06,42-06-06
+LOCAL-430101,Altares,43,01,01,Açores,43-01,43-01-01
+LOCAL-430102,Angra (Nossa Senhora da Conceição),43,01,02,Açores,43-01,43-01-02
+LOCAL-430103,Angra (Santa Luzia),43,01,03,Açores,43-01,43-01-03
+LOCAL-430104,Angra (São Pedro),43,01,04,Açores,43-01,43-01-04
+LOCAL-430105,Angra (Sé),43,01,05,Açores,43-01,43-01-05
+LOCAL-430106,Cinco Ribeiras,43,01,06,Açores,43-01,43-01-06
+LOCAL-430107,Doze Ribeiras,43,01,07,Açores,43-01,43-01-07
+LOCAL-430108,Feteira,43,01,08,Açores,43-01,43-01-08
+LOCAL-430109,Porto Judeu,43,01,09,Açores,43-01,43-01-09
+LOCAL-430110,Posto Santo,43,01,10,Açores,43-01,43-01-10
+LOCAL-430111,Raminho,43,01,11,Açores,43-01,43-01-11
+LOCAL-430112,Ribeirinha,43,01,12,Açores,43-01,43-01-12
+LOCAL-430113,Santa Bárbara,43,01,13,Açores,43-01,43-01-13
+LOCAL-430114,São Bartolomeu de Regatos,43,01,14,Açores,43-01,43-01-14
+LOCAL-430115,São Bento,43,01,15,Açores,43-01,43-01-15
+LOCAL-430116,São Mateus da Calheta,43,01,16,Açores,43-01,43-01-16
+LOCAL-430117,Serreta,43,01,17,Açores,43-01,43-01-17
+LOCAL-430118,Terra Chã,43,01,18,Açores,43-01,43-01-18
+LOCAL-430119,Vila de São Sebastião,43,01,19,Açores,43-01,43-01-19
+LOCAL-430201,Agualva,43,02,01,Açores,43-02,43-02-01
+LOCAL-430202,Biscoitos,43,02,02,Açores,43-02,43-02-02
+LOCAL-430203,Cabo da Praia,43,02,03,Açores,43-02,43-02-03
+LOCAL-430204,Fonte do Bastardo,43,02,04,Açores,43-02,43-02-04
+LOCAL-430205,Fontinhas,43,02,05,Açores,43-02,43-02-05
+LOCAL-430206,Lajes,43,02,06,Açores,43-02,43-02-06
+LOCAL-430207,Praia da Vitória (Santa Cruz),43,02,07,Açores,43-02,43-02-07
+LOCAL-430208,Quatro Ribeiras,43,02,08,Açores,43-02,43-02-08
+LOCAL-430209,São Brás,43,02,09,Açores,43-02,43-02-09
+LOCAL-430210,Vila Nova,43,02,10,Açores,43-02,43-02-10
+LOCAL-430211,Porto Martins,43,02,11,Açores,43-02,43-02-11
+LOCAL-440101,Guadalupe,44,01,01,Açores,44-01,44-01-01
+LOCAL-440102,Luz,44,01,02,Açores,44-01,44-01-02
+LOCAL-440103,São Mateus,44,01,03,Açores,44-01,44-01-03
+LOCAL-440104,Santa Cruz da Graciosa,44,01,04,Açores,44-01,44-01-04
+LOCAL-450101,Calheta,45,01,01,Açores,45-01,45-01-01
+LOCAL-450102,Norte Pequeno,45,01,02,Açores,45-01,45-01-02
+LOCAL-450103,Ribeira Seca,45,01,03,Açores,45-01,45-01-03
+LOCAL-450104,Santo Antão,45,01,04,Açores,45-01,45-01-04
+LOCAL-450105,Topo (Nossa Senhora do Rosário),45,01,05,Açores,45-01,45-01-05
+LOCAL-450201,Manadas (Santa Bárbara),45,02,01,Açores,45-02,45-02-01
+LOCAL-450202,Norte Grande (Neves),45,02,02,Açores,45-02,45-02-02
+LOCAL-450203,Rosais,45,02,03,Açores,45-02,45-02-03
+LOCAL-450204,Santo Amaro,45,02,04,Açores,45-02,45-02-04
+LOCAL-450205,Urzelina (São Mateus),45,02,05,Açores,45-02,45-02-05
+LOCAL-450206,Velas (São Jorge),45,02,06,Açores,45-02,45-02-06
+LOCAL-460101,Calheta de Nesquim,46,01,01,Açores,46-01,46-01-01
+LOCAL-460102,Lajes do Pico,46,01,02,Açores,46-01,46-01-02
+LOCAL-460103,Piedade,46,01,03,Açores,46-01,46-01-03
+LOCAL-460104,Ribeiras,46,01,04,Açores,46-01,46-01-04
+LOCAL-460105,Ribeirinha,46,01,05,Açores,46-01,46-01-05
+LOCAL-460106,São João,46,01,06,Açores,46-01,46-01-06
+LOCAL-460201,Bandeiras,46,02,01,Açores,46-02,46-02-01
+LOCAL-460202,Candelária,46,02,02,Açores,46-02,46-02-02
+LOCAL-460203,Criação Velha,46,02,03,Açores,46-02,46-02-03
+LOCAL-460204,Madalena,46,02,04,Açores,46-02,46-02-04
+LOCAL-460205,São Caetano,46,02,05,Açores,46-02,46-02-05
+LOCAL-460206,São Mateus,46,02,06,Açores,46-02,46-02-06
+LOCAL-460301,Prainha,46,03,01,Açores,46-03,46-03-01
+LOCAL-460302,Santa Luzia,46,03,02,Açores,46-03,46-03-02
+LOCAL-460303,Santo Amaro,46,03,03,Açores,46-03,46-03-03
+LOCAL-460304,Santo António,46,03,04,Açores,46-03,46-03-04
+LOCAL-460305,São Roque do Pico,46,03,05,Açores,46-03,46-03-05
+LOCAL-470101,Capelo,47,01,01,Açores,47-01,47-01-01
+LOCAL-470102,Castelo Branco,47,01,02,Açores,47-01,47-01-02
+LOCAL-470103,Cedros,47,01,03,Açores,47-01,47-01-03
+LOCAL-470104,Feteira,47,01,04,Açores,47-01,47-01-04
+LOCAL-470105,Flamengos,47,01,05,Açores,47-01,47-01-05
+LOCAL-470106,Horta (Angústias),47,01,06,Açores,47-01,47-01-06
+LOCAL-470107,Horta (Conceição),47,01,07,Açores,47-01,47-01-07
+LOCAL-470108,Horta (Matriz),47,01,08,Açores,47-01,47-01-08
+LOCAL-470109,Pedro Miguel,47,01,09,Açores,47-01,47-01-09
+LOCAL-470110,Praia do Almoxarife,47,01,10,Açores,47-01,47-01-10
+LOCAL-470111,Praia do Norte,47,01,11,Açores,47-01,47-01-11
+LOCAL-470112,Ribeirinha,47,01,12,Açores,47-01,47-01-12
+LOCAL-470113,Salão,47,01,13,Açores,47-01,47-01-13
+LOCAL-480101,Fajã Grande,48,01,01,Açores,48-01,48-01-01
+LOCAL-480102,Fajãzinha,48,01,02,Açores,48-01,48-01-02
+LOCAL-480103,Fazenda,48,01,03,Açores,48-01,48-01-03
+LOCAL-480104,Lajedo,48,01,04,Açores,48-01,48-01-04
+LOCAL-480105,Lajes das Flores,48,01,05,Açores,48-01,48-01-05
+LOCAL-480106,Lomba,48,01,06,Açores,48-01,48-01-06
+LOCAL-480107,Mosteiro,48,01,07,Açores,48-01,48-01-07
+LOCAL-480201,Caveira,48,02,01,Açores,48-02,48-02-01
+LOCAL-480202,Cedros,48,02,02,Açores,48-02,48-02-02
+LOCAL-480203,Ponta Delgada,48,02,03,Açores,48-02,48-02-03
+LOCAL-480204,Santa Cruz das Flores,48,02,04,Açores,48-02,48-02-04
+LOCAL-490101,Corvo,49,01,01,Açores,49-01,49-01-01
