@@ -7,3 +7,8 @@ notebooks/.ipynb_checkpoints/elections_model-checkpoint.ipynb
 *.zarr/
 *.png
 outputs/
+
+# Test coverage files
+.coverage
+htmlcov/
+.pytest_cache/
