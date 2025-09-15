@@ -112,8 +112,15 @@ class TestDataIntegrityValidation:
         # Find any unexpected party columns (excluding non-party columns)
         non_party_cols = {'date', 'pollster', 'sample_size', 'election_date', 'countdown', 'gdp'}
         
+        # Additional columns from multi-level geographic system
+        additional_result_cols = {
+            'Circulo', 'geographic_id', 'number_voters', 'subscribed_voters', 
+            'null_votes', 'blank_votes', 'district_name', 'full_municipality_id', 
+            'full_parish_id', 'territory_code', 'district_code', 'municipality_code', 'parish_code'
+        }
+        
         unexpected_poll_parties = poll_cols - expected_party_cols - non_party_cols
-        unexpected_result_parties = result_cols - expected_party_cols - non_party_cols - {'Circulo'}
+        unexpected_result_parties = result_cols - expected_party_cols - non_party_cols - additional_result_cols
         
         assert len(unexpected_poll_parties) == 0, f"Unexpected parties in poll data: {unexpected_poll_parties}"
         assert len(unexpected_result_parties) == 0, f"Unexpected parties in result data: {unexpected_result_parties}"
