@@ -29,6 +29,63 @@ from datetime import datetime
 from src.config import DATA_DIR
 
 
+@dataclass
+class DisaggregationRule:
+    """Defines how to disaggregate a national coalition into municipal components."""
+    
+    national_coalition: str  # e.g., 'AD'
+    component_parties: Dict[str, float]  # e.g., {'PSD': 0.85, 'CDS': 0.15}
+    
+    def disaggregate(self, national_prediction: float) -> Dict[str, float]:
+        """Split national coalition prediction into component party predictions."""
+        return {
+            party: national_prediction * share 
+            for party, share in self.component_parties.items()
+        }
+
+
+@dataclass
+class MunicipalCoalitionStructure:
+    """Defines how disaggregated national components aggregate into municipal coalitions."""
+    
+    municipality_id: str
+    local_coalitions: Dict[str, List[str]]  # e.g., {'PSD_IL': ['PSD', 'IL']}
+    disaggregation_rules: List[DisaggregationRule] = field(default_factory=list)
+    
+    def propagate_national_predictions(self, national_predictions: Dict[str, float]) -> Dict[str, float]:
+        """Convert national predictions to municipal coalition space."""
+        municipal_components = {}
+        
+        # Step 1: Disaggregate bundled national coalitions
+        for rule in self.disaggregation_rules:
+            if rule.national_coalition in national_predictions:
+                disaggregated = rule.disaggregate(national_predictions[rule.national_coalition])
+                municipal_components.update(disaggregated)
+        
+        # Step 2: Add parties that don't need disaggregation
+        for party, prediction in national_predictions.items():
+            if not any(rule.national_coalition == party for rule in self.disaggregation_rules):
+                municipal_components[party] = prediction
+        
+        # Step 3: Aggregate into local coalitions
+        municipal_predictions = {}
+        used_components = set()
+        
+        for coalition_name, component_parties in self.local_coalitions.items():
+            coalition_support = sum(
+                municipal_components.get(party, 0) for party in component_parties
+            )
+            municipal_predictions[coalition_name] = coalition_support
+            used_components.update(component_parties)
+        
+        # Step 4: Add unused components as standalone parties
+        for party, prediction in municipal_components.items():
+            if party not in used_components:
+                municipal_predictions[party] = prediction
+        
+        return municipal_predictions
+
+
 # Legacy compatibility alias for tests
 @dataclass
 class CoalitionDefinition:
@@ -103,16 +160,25 @@ class CoalitionManager:
     - Projects coalitions backwards through all historical data
     - Creates stable party coordinates for Bayesian models
     - Prioritizes modeling consistency over historical accuracy
+    
+    Enhanced for municipal elections:
+    - Handles national-to-municipal prediction propagation
+    - Disaggregates bundled national coalitions (AD -> PSD + CDS)
+    - Supports municipal-specific coalition structures
     """
     
     def __init__(self, target_structure: Optional[TargetElectionStructure] = None):
         """Initialize coalition manager with target election structure."""
         self.target_structure = target_structure or self._get_default_structure()
         self.geographic_overrides: List[GeographicCoalitionOverride] = []
+        self.municipal_structures: Dict[str, MunicipalCoalitionStructure] = {}
         self.party_aliases: Dict[str, List[str]] = {}
         
         # Load standard party aliases for flexible matching
         self._load_party_aliases()
+        
+        # Load default municipal coalition patterns
+        self._load_default_municipal_patterns()
     
     def _get_default_structure(self) -> TargetElectionStructure:
         """Get default Portuguese parliamentary structure for 2024+ elections."""
@@ -144,6 +210,62 @@ class CoalitionManager:
             'PAN': ['PAN', 'PESSOAS-ANIMAIS-NATUREZA'],
             'L': ['L', 'LIVRE', 'L/TDA']
         }
+    
+    def _load_default_municipal_patterns(self):
+        """Load default Portuguese municipal coalition patterns."""
+        # Default AD disaggregation rule (based on historical analysis)
+        ad_disaggregation = DisaggregationRule(
+            national_coalition='AD',
+            component_parties={'PSD': 0.85, 'CDS': 0.15}  # PSD ~85%, CDS ~15% of AD
+        )
+        
+        # Set up some known municipal structures based on 2025 data
+        self._add_municipal_structure('01-01', 'Aveiro', {
+            # Aveiro: PSD vs CDS competing separately
+            'PSD': ['PSD'],
+            'CDS': ['CDS'],
+            'PS': ['PS'],
+            'IL': ['IL']
+        }, [ad_disaggregation])
+        
+        self._add_municipal_structure('11-01', 'Lisboa', {
+            # Lisboa: PSD+IL coalition typical
+            'PSD_IL': ['PSD', 'IL'],
+            'PS': ['PS'],
+            'CDS': ['CDS']  # CDS often separate in urban areas
+        }, [ad_disaggregation])
+        
+        # Default rural pattern: traditional AD coalition
+        self.default_rural_structure = MunicipalCoalitionStructure(
+            municipality_id='default',
+            local_coalitions={
+                'AD': ['PSD', 'CDS'],  # Recombine PSD+CDS 
+                'PS': ['PS'],
+                'IL': ['IL']
+            },
+            disaggregation_rules=[ad_disaggregation]
+        )
+    
+    def _add_municipal_structure(self, municipality_id: str, name: str, 
+                               coalitions: Dict[str, List[str]], 
+                               disaggregation_rules: List[DisaggregationRule]):
+        """Add a municipal coalition structure."""
+        structure = MunicipalCoalitionStructure(
+            municipality_id=municipality_id,
+            local_coalitions=coalitions,
+            disaggregation_rules=disaggregation_rules
+        )
+        self.municipal_structures[municipality_id] = structure
+    
+    def get_municipal_structure(self, municipality_id: str) -> MunicipalCoalitionStructure:
+        """Get municipal coalition structure, falling back to default rural pattern."""
+        return self.municipal_structures.get(municipality_id, self.default_rural_structure)
+    
+    def propagate_national_to_municipal(self, national_predictions: Dict[str, float], 
+                                      municipality_id: str) -> Dict[str, float]:
+        """Propagate national predictions to municipal coalition structure."""
+        municipal_structure = self.get_municipal_structure(municipality_id)
+        return municipal_structure.propagate_national_predictions(national_predictions)
     
     def add_geographic_override(self, override: GeographicCoalitionOverride):
         """Add a geographic-specific coalition override."""
@@ -407,8 +529,48 @@ if __name__ == "__main__":
     print(f"National target parties: {national_parties}")
     print(f"Lisboa target parties: {lisboa_parties}")
     
-    print("\n=== Bayesian Modeling Principle Demonstrated ===")
-    print("Key insight: AD voters in 2026 are the same political family as:")
-    print("  - PPD/PSD.CDS-PP voters in 2022")
-    print("  - Combined PSD+CDS voters in 2011")
-    print("  - This creates stable coordinates for time series modeling")
+    print("\n=== Municipal Disaggregation Demonstration ===")
+    
+    # Simulate national polling predictions (what we get from polls)
+    national_polls = {
+        'PS': 0.35,
+        'AD': 0.30,  # PSD+CDS bundled together in national polls
+        'IL': 0.08,
+        'CH': 0.12,
+        'BE': 0.05,
+        'CDU': 0.04,
+        'Others': 0.06
+    }
+    
+    print(f"National poll predictions: {national_polls}")
+    
+    # Test different municipal scenarios
+    municipalities = ['01-01', '11-01', 'rural-example']
+    
+    for muni_id in municipalities:
+        print(f"\n--- {muni_id} Municipal Propagation ---")
+        
+        if muni_id == 'rural-example':
+            # Use default rural structure
+            municipal_structure = manager.default_rural_structure
+            muni_name = "Rural municipality (default)"
+        else:
+            municipal_structure = manager.get_municipal_structure(muni_id)
+            muni_name = "Aveiro" if muni_id == '01-01' else "Lisboa"
+        
+        print(f"Municipality: {muni_name}")
+        print(f"Local coalitions: {municipal_structure.local_coalitions}")
+        
+        # Propagate national predictions
+        municipal_predictions = manager.propagate_national_to_municipal(national_polls, muni_id)
+        
+        print("Municipal predictions:")
+        for party, support in municipal_predictions.items():
+            print(f"  {party}: {support:.1%}")
+    
+    print("\n=== Key Innovation Demonstrated ===")
+    print("✅ National AD (30%) disaggregated into PSD (25.5%) + CDS (4.5%)")
+    print("✅ Aveiro: PSD vs CDS competing separately")
+    print("✅ Lisboa: PSD+IL coalition (33.5% combined)")
+    print("✅ Rural: Traditional AD coalition (30% recombined)")
+    print("✅ Handles real Portuguese municipal coalition complexity!")

@@ -8,7 +8,10 @@ for both parliamentary and municipal elections with different coalition patterns
 import pytest
 import pandas as pd
 import numpy as np
-from src.data.coalition_manager import CoalitionManager, CoalitionDefinition, TargetElectionStructure, GeographicCoalitionOverride
+from src.data.coalition_manager import (
+    CoalitionManager, CoalitionDefinition, TargetElectionStructure, 
+    GeographicCoalitionOverride, DisaggregationRule, MunicipalCoalitionStructure
+)
 
 
 class TestCoalitionDefinition:
@@ -256,6 +259,175 @@ class TestCoalitionIntegration:
         lisboa_parties = manager.get_target_parties('11-01')
         assert 'AD' in lisboa_parties  # Still has national parties
         assert 'LISBOA_ALLIANCE' in lisboa_parties  # Plus local override
+
+
+class TestMunicipalDisaggregation:
+    """Test municipal coalition disaggregation functionality."""
+    
+    def test_disaggregation_rule(self):
+        """Test basic disaggregation of national coalitions."""
+        rule = DisaggregationRule(
+            national_coalition='AD',
+            component_parties={'PSD': 0.85, 'CDS': 0.15}
+        )
+        
+        # Test disaggregation
+        result = rule.disaggregate(0.30)  # 30% AD support
+        
+        assert result['PSD'] == pytest.approx(0.255)  # 25.5%
+        assert result['CDS'] == pytest.approx(0.045)  # 4.5%
+    
+    def test_municipal_coalition_structure_basic(self):
+        """Test basic municipal coalition structure functionality."""
+        ad_rule = DisaggregationRule('AD', {'PSD': 0.85, 'CDS': 0.15})
+        
+        # Aveiro structure (PSD vs CDS competing)
+        aveiro = MunicipalCoalitionStructure(
+            municipality_id='01-01',
+            local_coalitions={
+                'PSD': ['PSD'],
+                'CDS': ['CDS'],
+                'PS': ['PS'],
+                'IL': ['IL']
+            },
+            disaggregation_rules=[ad_rule]
+        )
+        
+        national_predictions = {'PS': 0.35, 'AD': 0.30, 'IL': 0.08}
+        municipal_predictions = aveiro.propagate_national_predictions(national_predictions)
+        
+        # Check disaggregation worked
+        assert 'AD' not in municipal_predictions  # AD should be disaggregated
+        assert municipal_predictions['PSD'] == pytest.approx(0.255)
+        assert municipal_predictions['CDS'] == pytest.approx(0.045)
+        assert municipal_predictions['PS'] == pytest.approx(0.35)
+        assert municipal_predictions['IL'] == pytest.approx(0.08)
+    
+    def test_municipal_coalition_structure_aggregation(self):
+        """Test municipal coalition aggregation (combining parties)."""
+        ad_rule = DisaggregationRule('AD', {'PSD': 0.85, 'CDS': 0.15})
+        
+        # Lisboa structure (PSD+IL coalition)
+        lisboa = MunicipalCoalitionStructure(
+            municipality_id='11-01',
+            local_coalitions={
+                'PSD_IL': ['PSD', 'IL'],  # Combine PSD and IL
+                'PS': ['PS'],
+                'CDS': ['CDS']
+            },
+            disaggregation_rules=[ad_rule]
+        )
+        
+        national_predictions = {'PS': 0.35, 'AD': 0.30, 'IL': 0.08}
+        municipal_predictions = lisboa.propagate_national_predictions(national_predictions)
+        
+        # Check aggregation worked
+        assert municipal_predictions['PSD_IL'] == pytest.approx(0.335)  # 0.255 + 0.08
+        assert municipal_predictions['PS'] == pytest.approx(0.35)
+        assert municipal_predictions['CDS'] == pytest.approx(0.045)
+        assert 'PSD' not in municipal_predictions  # Should be absorbed into coalition
+        assert 'IL' not in municipal_predictions   # Should be absorbed into coalition
+    
+    def test_municipal_coalition_structure_recombination(self):
+        """Test recombining disaggregated parties (rural AD pattern)."""
+        ad_rule = DisaggregationRule('AD', {'PSD': 0.85, 'CDS': 0.15})
+        
+        # Rural structure (traditional AD coalition)
+        rural = MunicipalCoalitionStructure(
+            municipality_id='rural',
+            local_coalitions={
+                'AD': ['PSD', 'CDS'],  # Recombine after disaggregation
+                'PS': ['PS'],
+                'IL': ['IL']
+            },
+            disaggregation_rules=[ad_rule]
+        )
+        
+        national_predictions = {'PS': 0.35, 'AD': 0.30, 'IL': 0.08}
+        municipal_predictions = rural.propagate_national_predictions(national_predictions)
+        
+        # Check recombination worked
+        assert municipal_predictions['AD'] == pytest.approx(0.30)  # Back to original
+        assert municipal_predictions['PS'] == pytest.approx(0.35)
+        assert municipal_predictions['IL'] == pytest.approx(0.08)
+        assert 'PSD' not in municipal_predictions  # Should be absorbed back into AD
+        assert 'CDS' not in municipal_predictions  # Should be absorbed back into AD
+
+
+class TestCoalitionManagerMunicipal:
+    """Test municipal functionality of CoalitionManager."""
+    
+    def setup_method(self):
+        """Set up test coalition manager."""
+        self.manager = CoalitionManager()
+    
+    def test_municipal_structure_loading(self):
+        """Test that municipal structures are loaded correctly."""
+        # Test Aveiro structure
+        aveiro_structure = self.manager.get_municipal_structure('01-01')
+        assert aveiro_structure.municipality_id == '01-01'
+        assert 'PSD' in aveiro_structure.local_coalitions
+        assert 'CDS' in aveiro_structure.local_coalitions
+        
+        # Test Lisboa structure
+        lisboa_structure = self.manager.get_municipal_structure('11-01')
+        assert 'PSD_IL' in lisboa_structure.local_coalitions
+        
+        # Test fallback to default
+        unknown_structure = self.manager.get_municipal_structure('99-99')
+        assert unknown_structure.municipality_id == 'default'
+        assert 'AD' in unknown_structure.local_coalitions
+    
+    def test_end_to_end_propagation(self):
+        """Test full national-to-municipal prediction propagation."""
+        national_polls = {
+            'PS': 0.35,
+            'AD': 0.30,
+            'IL': 0.08,
+            'CH': 0.12
+        }
+        
+        # Test Aveiro (competing PSD vs CDS)
+        aveiro_predictions = self.manager.propagate_national_to_municipal(national_polls, '01-01')
+        assert aveiro_predictions['PSD'] == pytest.approx(0.255)
+        assert aveiro_predictions['CDS'] == pytest.approx(0.045)
+        assert aveiro_predictions['IL'] == pytest.approx(0.08)
+        assert 'AD' not in aveiro_predictions
+        
+        # Test Lisboa (PSD+IL coalition)
+        lisboa_predictions = self.manager.propagate_national_to_municipal(national_polls, '11-01')
+        assert lisboa_predictions['PSD_IL'] == pytest.approx(0.335)
+        assert 'PSD' not in lisboa_predictions
+        assert 'IL' not in lisboa_predictions
+        
+        # Test rural (traditional AD)
+        rural_predictions = self.manager.propagate_national_to_municipal(national_polls, 'rural-99')
+        assert rural_predictions['AD'] == pytest.approx(0.30)
+        assert 'PSD' not in rural_predictions
+        assert 'CDS' not in rural_predictions
+    
+    def test_municipal_vs_national_coordinate_spaces(self):
+        """Test that municipal and national coordinate spaces are properly separated."""
+        national_polls = {'PS': 0.35, 'AD': 0.30, 'IL': 0.08}
+        
+        # National space should have AD
+        national_parties = self.manager.get_target_parties()
+        assert 'AD' in national_parties
+        
+        # Municipal spaces should transform AD appropriately
+        aveiro_predictions = self.manager.propagate_national_to_municipal(national_polls, '01-01')
+        lisboa_predictions = self.manager.propagate_national_to_municipal(national_polls, '11-01')
+        
+        # Different municipal coordinate spaces
+        assert set(aveiro_predictions.keys()) != set(lisboa_predictions.keys())
+        
+        # But vote shares should be conserved (approximately)
+        aveiro_total = sum(aveiro_predictions.values())
+        lisboa_total = sum(lisboa_predictions.values())
+        national_total = sum(national_polls.values())
+        
+        assert aveiro_total == pytest.approx(national_total, abs=0.01)
+        assert lisboa_total == pytest.approx(national_total, abs=0.01)
 
 
 if __name__ == "__main__":
