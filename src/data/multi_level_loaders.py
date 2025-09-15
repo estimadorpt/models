@@ -15,12 +15,15 @@ from src.data.geographic_mapping import (
     create_geographic_mapping_table,
     validate_aggregation_consistency
 )
+from src.data.coalition_manager import get_default_coalition_manager
 
 
 def load_parish_level_results(
     election_dates: List[str], 
     political_families: List[str],
-    data_dir: str = None
+    data_dir: str = None,
+    election_type: str = 'parliamentary',
+    coalition_manager = None
 ) -> pd.DataFrame:
     """
     Load raw parish-level election results for multiple elections.
@@ -29,12 +32,18 @@ def load_parish_level_results(
         election_dates: List of election dates (YYYY-MM-DD format)
         political_families: List of party names to include
         data_dir: Directory containing election parquet files
+        election_type: Type of election ('parliamentary', 'municipal', etc.)
+        coalition_manager: Coalition manager instance for intelligent party mapping
         
     Returns:
         DataFrame with parish-level results across all elections
     """
     if data_dir is None:
         data_dir = DATA_DIR
+    
+    # Initialize coalition manager if not provided
+    if coalition_manager is None:
+        coalition_manager = get_default_coalition_manager()
     
     all_results = []
     
@@ -78,8 +87,13 @@ def load_parish_level_results(
             how='left'
         )
         
-        # Map party columns to standard political families
-        parish_df = map_party_columns(parish_df, political_families, year)
+        # Map party columns to standard political families using coalition manager
+        parish_df = coalition_manager.map_election_data_columns(
+            parish_df, 
+            political_families, 
+            election_type=election_type,
+            election_date=election_date
+        )
         
         all_results.append(parish_df)
     
@@ -93,60 +107,8 @@ def load_parish_level_results(
     return combined_results
 
 
-def map_party_columns(df: pd.DataFrame, political_families: List[str], year: str) -> pd.DataFrame:
-    """
-    Map raw election data column names to standard political family names.
-    
-    Different elections may have different coalition representations
-    (e.g., "PPD/PSD.CDS-PP" in 2024 vs separate parties in earlier years).
-    """
-    df = df.copy()
-    
-    print(f"  Mapping party columns for {year}. Available columns: {[col for col in df.columns if any(party in col for party in ['PS', 'PSD', 'CH', 'IL', 'BE', 'PCP', 'PAN', 'L'])]}")
-    
-    # Create mapping based on election year and known coalition patterns
-    if year >= '2024':
-        # AD coalition represented as "PPD/PSD.CDS-PP" or variants
-        coalition_columns = [col for col in df.columns if 'PPD/PSD' in col and 'CDS' in col]
-        if coalition_columns:
-            # Use the first match as AD
-            df['AD'] = df[coalition_columns[0]].fillna(0)
-            print(f"    Mapped {coalition_columns[0]} -> AD")
-    
-    # Map other parties with flexible matching
-    party_mappings = {
-        'PS': ['PS'],
-        'CH': ['CH', 'CHEGA'],
-        'IL': ['IL', 'INICIATIVA LIBERAL'],
-        'BE': ['B.E.', 'BE', 'BLOCO DE ESQUERDA'],
-        'CDU': ['PCP-PEV', 'CDU', 'PCP'],
-        'PAN': ['PAN'],
-        'L': ['L', 'LIVRE'],
-    }
-    
-    for standard_name, possible_names in party_mappings.items():
-        if standard_name not in df.columns:
-            # Find matching column
-            mapped = False
-            for possible_name in possible_names:
-                matching_cols = [col for col in df.columns if possible_name == col or possible_name in col]
-                if matching_cols:
-                    df[standard_name] = df[matching_cols[0]].fillna(0)
-                    print(f"    Mapped {matching_cols[0]} -> {standard_name}")
-                    mapped = True
-                    break
-            
-            # If still not found, fill with zeros
-            if not mapped:
-                df[standard_name] = 0.0
-                print(f"    Created {standard_name} with zeros (no match found)")
-    
-    # Ensure all political families are present
-    for party in political_families:
-        if party not in df.columns:
-            df[party] = 0.0
-    
-    return df
+# NOTE: map_party_columns function removed - replaced by CoalitionManager.map_election_data_columns
+# for more intelligent and flexible coalition handling
 
 
 def aggregate_to_level(
@@ -209,7 +171,9 @@ def load_multi_level_results(
     election_dates: List[str],
     political_families: List[str], 
     aggregate_to: Literal['parish', 'municipality', 'district', 'national'] = 'district',
-    validate_totals: bool = True
+    validate_totals: bool = True,
+    election_type: str = 'parliamentary',
+    coalition_manager = None
 ) -> pd.DataFrame:
     """
     Load election results at specified aggregation level with validation.
@@ -221,6 +185,8 @@ def load_multi_level_results(
         political_families: List of party names
         aggregate_to: Target aggregation level
         validate_totals: Whether to validate aggregation consistency
+        election_type: Type of election ('parliamentary', 'municipal', etc.)
+        coalition_manager: Coalition manager for intelligent party mapping
         
     Returns:
         DataFrame with results at requested aggregation level
@@ -228,7 +194,12 @@ def load_multi_level_results(
     print(f"Loading results aggregated to {aggregate_to} level...")
     
     # Load raw parish data
-    parish_results = load_parish_level_results(election_dates, political_families)
+    parish_results = load_parish_level_results(
+        election_dates, 
+        political_families, 
+        election_type=election_type,
+        coalition_manager=coalition_manager
+    )
     
     if parish_results.empty:
         print("No parish data loaded")

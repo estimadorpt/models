@@ -15,7 +15,9 @@ def load_election_results_flexible(
     election_dates: List[str], 
     political_families: List[str], 
     aggregate_national: bool = True,
-    aggregation_level: Optional[Literal['parish', 'municipality', 'district', 'national']] = None
+    aggregation_level: Optional[Literal['parish', 'municipality', 'district', 'national']] = None,
+    election_type: str = 'parliamentary',
+    coalition_manager = None
 ) -> pd.DataFrame:
     """
     Load election results with flexible geographic aggregation.
@@ -30,6 +32,8 @@ def load_election_results_flexible(
                           If False and no aggregation_level specified, returns district results
         aggregation_level: Explicit aggregation level ('parish', 'municipality', 'district', 'national')
                           Overrides aggregate_national parameter
+        election_type: Type of election ('parliamentary', 'municipal', etc.)
+        coalition_manager: Coalition manager for intelligent party mapping
         
     Returns:
         DataFrame with election results at specified aggregation level
@@ -45,7 +49,9 @@ def load_election_results_flexible(
         election_dates=election_dates,
         political_families=political_families,
         aggregate_to=aggregation_level,
-        validate_totals=True
+        validate_totals=True,
+        election_type=election_type,
+        coalition_manager=coalition_manager
     )
     
     if results_df.empty:
