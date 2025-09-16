@@ -179,6 +179,9 @@ class CoalitionManager:
         
         # Load default municipal coalition patterns
         self._load_default_municipal_patterns()
+
+        # Load complete municipal coalition data from data collection repository
+        self._load_complete_municipal_data()
     
     def _get_default_structure(self) -> TargetElectionStructure:
         """Get default Portuguese parliamentary structure for 2024+ elections."""
@@ -219,23 +222,7 @@ class CoalitionManager:
             component_parties={'PSD': 0.85, 'CDS': 0.15}  # PSD ~85%, CDS ~15% of AD
         )
         
-        # Set up some known municipal structures based on 2025 data
-        self._add_municipal_structure('01-01', 'Aveiro', {
-            # Aveiro: PSD vs CDS competing separately
-            'PSD': ['PSD'],
-            'CDS': ['CDS'],
-            'PS': ['PS'],
-            'IL': ['IL']
-        }, [ad_disaggregation])
-        
-        self._add_municipal_structure('11-01', 'Lisboa', {
-            # Lisboa: PSD+IL coalition typical
-            'PSD_IL': ['PSD', 'IL'],
-            'PS': ['PS'],
-            'CDS': ['CDS']  # CDS often separate in urban areas
-        }, [ad_disaggregation])
-        
-        # Default rural pattern: traditional AD coalition
+        # Default rural pattern: traditional AD coalition (fallback for unconfigured municipalities)
         self.default_rural_structure = MunicipalCoalitionStructure(
             municipality_id='default',
             local_coalitions={
@@ -245,7 +232,87 @@ class CoalitionManager:
             },
             disaggregation_rules=[ad_disaggregation]
         )
-    
+
+    def _load_complete_municipal_data(self):
+        """Load complete municipal coalition data from the new parquet format."""
+        # Use the parquet format from the data directory
+        parquet_path = "/Users/bernardocaldas/code/models/data/municipal_coalitions_2025.parquet"
+
+        if not os.path.exists(parquet_path):
+            print(f"Warning: Municipal coalition data not found at {parquet_path}")
+            print("Using default patterns only.")
+            return
+
+        try:
+            df = pd.read_parquet(parquet_path)
+
+            # Group by municipality to build local coalition structures
+            municipalities = {}
+
+            for municipality in df['municipality'].unique():
+                muni_data = df[df['municipality'] == municipality]
+                local_coalitions = {}
+
+                # Extract unique party/coalition combinations for this municipality
+                for _, row in muni_data.iterrows():
+                    party_name = row['party']
+                    coalition_parties_str = row['coalition_parties']
+
+                    # Parse coalition parties (semicolon-separated)
+                    if pd.isna(coalition_parties_str) or coalition_parties_str == '':
+                        coalition_parties = [party_name]
+                    else:
+                        coalition_parties = coalition_parties_str.split(';')
+
+                    # Store the coalition mapping
+                    local_coalitions[party_name] = coalition_parties
+
+                municipalities[municipality] = {
+                    'local_coalitions': local_coalitions,
+                    'has_psd': muni_data['municipality_has_psd'].iloc[0],
+                    'has_cds': muni_data['municipality_has_cds'].iloc[0],
+                    'has_il': muni_data['municipality_has_il'].iloc[0]
+                }
+
+            # Load all municipal structures
+            for muni_id, data in municipalities.items():
+                # Create disaggregation rules based on local coalitions
+                disaggregation_rules = []
+
+                # Always add AD disaggregation since AD is a NATIONAL coalition
+                # that doesn't exist at municipal level. Municipalities have mixed patterns:
+                # - Some have PSD+CDS (traditional)  
+                # - Some have PSD+IL (modern)
+                # - Some have PSD standalone
+                # The disaggregation allows proper recombination for all patterns.
+                disaggregation_rules.append(DisaggregationRule(
+                    national_coalition='AD',
+                    component_parties={'PSD': 0.85, 'CDS': 0.15}
+                ))
+                
+                # Always add CDU disaggregation for the same reason
+                disaggregation_rules.append(DisaggregationRule(
+                    national_coalition='CDU', 
+                    component_parties={'PCP': 0.85, 'PEV': 0.15}
+                ))
+
+                # Create municipal structure
+                structure = MunicipalCoalitionStructure(
+                    municipality_id=muni_id,
+                    local_coalitions=data['local_coalitions'],
+                    disaggregation_rules=disaggregation_rules
+                )
+
+                self.municipal_structures[muni_id] = structure
+
+            print(f"✅ Loaded {len(self.municipal_structures)} municipal coalition structures")
+
+        except Exception as e:
+            print(f"Warning: Failed to load municipal data: {e}")
+            import traceback
+            traceback.print_exc()
+            print("Using default patterns only.")
+
     def _add_municipal_structure(self, municipality_id: str, name: str, 
                                coalitions: Dict[str, List[str]], 
                                disaggregation_rules: List[DisaggregationRule]):
