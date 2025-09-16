@@ -1,0 +1,168 @@
+{
+  "metadata": {
+    "generated_at": "2025-09-15T21:30:28.720797",
+    "source": "Wikipedia 2025 municipal elections",
+    "total_municipalities": 4
+  },
+  "municipal_structures": {
+    "01-01": {
+      "municipality_id": "01-01",
+      "local_coalitions": {
+        "PSD": [
+          "PSD"
+        ],
+        "CDS": [
+          "CDS"
+        ],
+        "PS": [
+          "PS"
+        ],
+        "CH": [
+          "CH"
+        ],
+        "BE": [
+          "BE"
+        ],
+        "PCP": [
+          "PCP"
+        ],
+        "PEV": [
+          "PEV"
+        ],
+        "PAN": [
+          "PAN"
+        ],
+        "L": [
+          "L"
+        ]
+      },
+      "disaggregation_rules": [
+        {
+          "national_coalition": "AD",
+          "component_parties": {
+            "PSD": 0.85,
+            "CDS": 0.15
+          }
+        }
+      ]
+    },
+    "01-02": {
+      "municipality_id": "01-02",
+      "local_coalitions": {
+        "PSD": [
+          "PSD"
+        ],
+        "CDS": [
+          "CDS"
+        ],
+        "PS": [
+          "PS"
+        ],
+        "CH": [
+          "CH"
+        ],
+        "BE": [
+          "BE"
+        ],
+        "PCP": [
+          "PCP"
+        ],
+        "PEV": [
+          "PEV"
+        ],
+        "PAN": [
+          "PAN"
+        ],
+        "L": [
+          "L"
+        ]
+      },
+      "disaggregation_rules": [
+        {
+          "national_coalition": "AD",
+          "component_parties": {
+            "PSD": 0.85,
+            "CDS": 0.15
+          }
+        }
+      ]
+    },
+    "01-03": {
+      "municipality_id": "01-03",
+      "local_coalitions": {
+        "CDS": [
+          "CDS"
+        ],
+        "PS": [
+          "PS"
+        ],
+        "CH": [
+          "CH"
+        ],
+        "BE": [
+          "BE"
+        ],
+        "PCP": [
+          "PCP"
+        ],
+        "PEV": [
+          "PEV"
+        ],
+        "PAN": [
+          "PAN"
+        ],
+        "L": [
+          "L"
+        ]
+      },
+      "disaggregation_rules": [
+        {
+          "national_coalition": "AD",
+          "component_parties": {
+            "PSD": 0.85,
+            "CDS": 0.15
+          }
+        }
+      ]
+    },
+    "11-01": {
+      "municipality_id": "11-01",
+      "local_coalitions": {
+        "PSD_IL": [
+          "PSD",
+          "IL"
+        ],
+        "PS": [
+          "PS"
+        ],
+        "CH": [
+          "CH"
+        ],
+        "BE": [
+          "BE"
+        ],
+        "PCP": [
+          "PCP"
+        ],
+        "PEV": [
+          "PEV"
+        ],
+        "PAN": [
+          "PAN"
+        ],
+        "L": [
+          "L"
+        ]
+      },
+      "disaggregation_rules": [
+        {
+          "national_coalition": "AD",
+          "component_parties": {
+            "PSD": 0.85,
+            "CDS": 0.15
+          }
+        }
+      ]
+    }
+  }
+}

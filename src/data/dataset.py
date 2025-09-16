@@ -58,13 +58,15 @@ class ElectionDataset:
         baseline_timescales: List[int],  # Annual cycle
         election_timescales: List[int],  # Pre-campaign and official campaign periods
         test_cutoff: pd.Timedelta = None,
-        geographic_level: Optional[Literal['parish', 'municipality', 'district', 'national']] = 'district'
+        geographic_level: Optional[Literal['parish', 'municipality', 'district', 'national']] = 'district',
+        election_type: str = 'parliamentary'
     ):
         self.election_date = election_date
         self.baseline_timescales = baseline_timescales
         self.election_timescales = election_timescales
         self.test_cutoff = test_cutoff
         self.geographic_level = geographic_level or 'district'  # Default to district for backward compatibility
+        self.election_type = election_type
         
         # Create a combined list of all election cycle end dates (historical + target)
         self.all_election_dates = sorted(list(set(self.historical_election_dates + [self.election_date]))) 
@@ -300,14 +302,16 @@ class ElectionDataset:
             return load_election_results_flexible(
                 election_dates=self.election_dates,
                 political_families=self.political_families,
-                aggregate_national=True
+                aggregate_national=True,
+                election_type=self.election_type
             )
         else:
             # Use the new flexible aggregation system
             return load_election_results_flexible(
                 election_dates=self.election_dates,
                 political_families=self.political_families,
-                aggregation_level=level
+                aggregation_level=level,
+                election_type=self.election_type
             )
 
     def cast_as_multinomial(self, df: pd.DataFrame) -> pd.DataFrame:
