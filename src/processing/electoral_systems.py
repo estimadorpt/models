@@ -209,10 +209,10 @@ def calculate_dhondt_implementation(votes_dict: Dict[str, int], num_seats: int) 
 
 def calculate_dhondt(votes_dict: Dict[str, int], num_seats: int) -> Dict[str, int]:
     """
-    Backward compatibility wrapper for D'Hondt calculation.
+    Calculates seat allocation using the D'Hondt method.
 
-    This function maintains the existing API while using the new system architecture.
-    For new code, consider using create_electoral_system('dhondt').allocate_seats() instead.
+    This is the standard function for D'Hondt calculations in Portuguese parliamentary elections.
+    It maintains the existing API while using the new system architecture internally.
 
     Args:
         votes_dict (Dict[str, int]): A dictionary where keys are party names
