@@ -184,56 +184,14 @@ jobs:
         # Check if baselines exist and validate structure if present
         if [ -d "test_baselines" ]; then
           echo "� Found existing baselines, validating structure..."
-          pixi run python -c "
-import json
-from pathlib import Path
-
-# Basic baseline structure validation
-test_baselines = Path('test_baselines')
-metadata_file = test_baselines / 'golden_masters_metadata.json'
-
-if metadata_file.exists():
-    with open(metadata_file) as f:
-        metadata = json.load(f)
-    print(f'✅ Found valid metadata (created: {metadata.get(\"created_at\", \"unknown\")})')
-else:
-    print('⚠️  No metadata found - baselines may be outdated but continuing...')
-
-# Check basic directory structure
-for dir_name in ['train', 'predict', 'viz']:
-    if (test_baselines / dir_name).exists():
-        print(f'✅ {dir_name}/ directory present')
-
-print('✅ Baseline compatibility check completed')
-"
+          ls -la test_baselines/ && echo "✅ Baseline directory found" || echo "⚠️ No baselines found"
         else
           echo "📝 No baselines found - PR validation will use interface tests only"
         fi
         
         # Test that baseline-related interfaces work (without training)
-        echo "🧪 Testing baseline interface compatibility..."
-        pixi run python -c "
-import sys
-sys.path.insert(0, 'src')
-
-# Test key imports for baseline functionality
-try:
-    from main import main
-    print('✅ Main interface available')
-    
-    # Test argument parsing for baseline generation commands
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--mode', choices=['train', 'predict', 'viz'])
-    test_args = parser.parse_args(['--mode', 'train'])
-    print('✅ Command interface compatible')
-    
-except Exception as e:
-    print(f'❌ Interface validation failed: {e}')
-    exit(1)
-        
-print('✅ Baseline interfaces validated successfully')
-"
+        echo "Testing baseline interface compatibility..."
+        pixi run python -c 'import sys; sys.path.insert(0, "src"); from main import main; print("Main interface available")'
     
     - name: 🧪 Run lightweight validation tests
       run: |
