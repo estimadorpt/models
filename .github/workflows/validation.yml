@@ -1,19 +1,10 @@
 name: 🔍 Model Validation Suite
 
 on:
-  # Fast validation on PRs
+  # Full validation on PRs
   pull_request:
     branches: [ main, develop ]
     types: [ opened, synchronize, reopened, ready_for_review ]
-    paths-ignore:
-      - '*.md'
-      - 'docs/**'
-      - '.gitignore'
-      - 'LICENSE'
-
-  # Full validation on main branch  
-  push:
-    branches: [ main ]
     paths-ignore:
       - '*.md'
       - 'docs/**'
@@ -39,9 +30,9 @@ env:
   NUMBA_NUM_THREADS: 2
 
 jobs:
-  # Fast validation job for PRs
+  # Quick validation for manual runs only
   quick-validation:
-    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.event.inputs.test_level == 'quick')
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.test_level == 'quick'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     
@@ -72,9 +63,9 @@ jobs:
           echo "Testing data loading interfaces..."
           pixi run python -c 'import sys; sys.path.insert(0, "src"); from data.loaders import load_marktest_polls, load_election_results; print("✅ Data loaders available")'
 
-  # Comprehensive validation for main branch and full manual runs
+  # Comprehensive validation for PRs and full manual runs
   full-validation:
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.test_level == 'full')
+    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.event.inputs.test_level == 'full')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     
