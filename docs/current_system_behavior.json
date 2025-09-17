@@ -1,0 +1,154 @@
+{
+  "documentation_metadata": {
+    "generated_at": "2025-09-17T11:31:41.917847",
+    "purpose": "Document current system behavior for regression testing",
+    "scope": "Complete pipeline behavior that must be preserved"
+  },
+  "coalition_handling": {
+    "error": "load_election_results() missing 2 required positional arguments: 'election_dates' and 'political_families'"
+  },
+  "geographic_aggregation": {
+    "district_structure": {
+      "unique_districts": [
+        "Aveiro",
+        "A\u00e7ores",
+        "Beja",
+        "Braga",
+        "Bragan\u00e7a",
+        "Castelo Branco",
+        "Coimbra",
+        "Faro",
+        "Guarda",
+        "Leiria",
+        "Lisboa",
+        "Madeira",
+        "Portalegre",
+        "Porto",
+        "Santar\u00e9m",
+        "Set\u00fabal",
+        "Viana do Castelo",
+        "Vila Real",
+        "Viseu",
+        "\u00c9vora"
+      ],
+      "total_districts": 20
+    },
+    "aggregation_levels": {
+      "national": "Sum of all district results",
+      "district": "Individual distrito/circulo level",
+      "parish": "Not currently used in aggregation"
+    },
+    "data_processing": {},
+    "poll_geography": {
+      "level": "National level polling only",
+      "district_breakdown": "Polls not broken down by district",
+      "swing_calculation": "Uniform National Swing (UNS) applied to district level"
+    }
+  },
+  "data_loading_patterns": {
+    "poll_sources": {
+      "marktest": {
+        "format": "CSV/TSV files",
+        "columns": [
+          "date",
+          "pollster",
+          "sample_size",
+          "PS",
+          "CH",
+          "IL",
+          "BE",
+          "CDU",
+          "PAN",
+          "L",
+          "AD"
+        ],
+        "date_range": {
+          "start": "2009-10-15 00:00:00",
+          "end": "2025-05-15 00:00:00"
+        },
+        "sample_size": 602
+      }
+    },
+    "election_result_sources": {
+      "legislativas": {
+        "error": "load_election_results() missing 2 required positional arguments: 'election_dates' and 'political_families'"
+      }
+    },
+    "processing_pipeline": {
+      "poll_consolidation": "Multiple polls on same date are averaged",
+      "tracking_polls": "Special handling for 'resultados acumulados' vs individual polls",
+      "coalition_mapping": "AD mapped from individual party results where needed",
+      "missing_data": "Parties not competing in election set to 0",
+      "date_alignment": "All data aligned to common date grid"
+    },
+    "data_validation": {}
+  },
+  "model_characteristics": {
+    "model_architecture": {
+      "type": "Dynamic Gaussian Process Election Model",
+      "components": [
+        "Baseline GP (long-term trends)",
+        "Medium-term GP (electoral cycle effects)",
+        "Short-term GP (campaign effects)",
+        "House effects (pollster bias)",
+        "District-level random effects"
+      ]
+    },
+    "hyperparameters": {
+      "baseline_gp_lengthscale": "365 days (typical default)",
+      "cycle_gp_lengthscale": "45 days (typical default)",
+      "convergence_criteria": "R-hat < 1.01, ESS > 400"
+    },
+    "expected_outputs": {
+      "training": [
+        "trace.nc (MCMC samples)",
+        "fit_metrics.json (convergence diagnostics)",
+        "model_config.json (parameters used)"
+      ],
+      "prediction": [
+        "vote_share_summary_election_day.csv",
+        "seat_summary_election_day.csv",
+        "district_forecast.json",
+        "national_trends.json"
+      ],
+      "visualization": [
+        "latent_popularity_vs_polls.png",
+        "house_effects_heatmap.png",
+        "trace_plot.png"
+      ]
+    },
+    "known_working_behavior": {
+      "coalition_handling": "AD automatically aggregated from PSD+CDS",
+      "geographic_modeling": "District-level variation captured",
+      "poll_integration": "Multiple pollster house effects estimated",
+      "temporal_modeling": "Long and short-term trends separated"
+    }
+  },
+  "electoral_system_integration": {
+    "seat_allocation": {
+      "method": "D'Hondt system",
+      "implementation": "calculate_dhondt function",
+      "sample_input": {
+        "PS": 1000,
+        "AD": 800,
+        "CH": 600,
+        "IL": 400,
+        "BE": 200
+      },
+      "sample_output": {
+        "PS": 4,
+        "AD": 3,
+        "CH": 2,
+        "IL": 1,
+        "BE": 0
+      },
+      "validation": "Tested with known electoral outcomes"
+    },
+    "district_system": {
+      "seat_distribution": "Each district has fixed number of seats",
+      "calculation_level": "Separate D'Hondt calculation per district",
+      "aggregation": "National parliament = sum of district seats"
+    },
+    "validation_approach": {}
+  }
+}

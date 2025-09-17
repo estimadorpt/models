@@ -17,7 +17,7 @@ import pandas as pd # Needed for DataFrame manipulation
 try:
     from src.data.loaders import load_district_config, load_election_results
     from src.processing.forecasting import forecast_district_votes_uns
-    from src.processing.electoral_systems import calculate_dhondt
+    from src.processing.electoral_systems import calculate_dhondt, create_electoral_system
     # If DATA_DIR is needed for loaders, import it
     from src.config import DATA_DIR
     from src.data.dataset import ElectionDataset # Needed for type hinting and accessing dataset properties
@@ -31,6 +31,98 @@ except ImportError as e:
 XrDataArray = xr.DataArray # Use string forward reference if xarray isn't imported directly
 XarrayDataset = xr.Dataset # Use string forward reference for the posterior
 
+def calculate_seat_predictions_with_system(
+    national_forecast_shares: Dict[str, float],
+    last_election_date: str,
+    political_families: List[str],
+    election_dates: List[str],
+    electoral_system_type: str = 'dhondt',
+    **system_kwargs
+) -> Dict[str, int]:
+    """
+    Predicts seat allocation using a configurable electoral system.
+
+    This is the new, flexible version that supports different electoral systems.
+    For parliamentary elections, use 'dhondt'. For mayoral elections, use 'mayoral'.
+
+    Args:
+        national_forecast_shares (Dict[str, float]): The forecasted national vote shares (MUST be normalized).
+        last_election_date (str): The date of the last election (YYYY-MM-DD) to use as baseline for swing.
+        political_families (List[str]): List of relevant party names.
+        election_dates (List[str]): Full list of historical election dates required by data loaders.
+        electoral_system_type (str): Type of electoral system ('dhondt', 'mayoral').
+        **system_kwargs: Additional arguments for the electoral system.
+
+    Returns:
+        Dict[str, int]: A dictionary mapping party/candidate names to their predicted total seats/positions.
+                        Returns None if critical errors occur (e.g., data loading failure).
+    """
+    print(f"--- Calculating Seat Predictions using {electoral_system_type} system ---")
+
+    # Create the electoral system
+    try:
+        electoral_system = create_electoral_system(electoral_system_type, **system_kwargs)
+        print(f"Using electoral system: {electoral_system.get_system_name()}")
+    except ValueError as e:
+        print(f"Error: {e}")
+        return None
+
+    # 1. Load District Configuration (Seats per District)
+    district_config = load_district_config()
+    if not district_config:
+        print("Error: Failed to load district configuration. Aborting seat prediction run.")
+        return None
+
+    # 2. Forecast District Votes using UNS
+    forecasted_district_counts = forecast_district_votes_uns(
+        national_forecast_shares=national_forecast_shares,
+        last_election_date=last_election_date,
+        political_families=political_families,
+        election_dates=election_dates
+    )
+
+    if forecasted_district_counts is None or forecasted_district_counts.empty:
+        print("Error: Failed to forecast district votes.")
+        return None
+
+    # 3. Allocate Seats per District using the selected electoral system
+    total_seats_allocation = {party: 0 for party in political_families}
+
+    if 'Circulo' not in forecasted_district_counts.columns:
+        print("Error: Forecasted district counts DataFrame is missing 'Circulo' column.")
+        return None
+
+    num_districts_processed = 0
+    for _, district_row in forecasted_district_counts.iterrows():
+        try:
+            circulo_name = district_row['Circulo']
+            if circulo_name not in district_config:
+                continue
+
+            num_seats = district_config[circulo_name]
+            # For mayoral elections, num_seats should be 1
+            if electoral_system_type.lower() == 'mayoral':
+                num_seats = 1
+
+            votes_dict = district_row[political_families].astype(int).to_dict()
+
+            # Use the new electoral system
+            district_seat_allocation_dict = electoral_system.allocate_seats(votes_dict, num_seats)
+
+            for party, seats in district_seat_allocation_dict.items():
+                if party in total_seats_allocation:
+                    total_seats_allocation[party] += seats
+            num_districts_processed += 1
+
+        except Exception as e:
+            print(f"Error processing row for district '{district_row.get('Circulo', 'Unknown')}': {e}")
+            continue
+
+    print(f"Seat allocation completed for {num_districts_processed} districts using {electoral_system.get_system_name()}.")
+
+    return total_seats_allocation
+
+
 def calculate_seat_predictions(
     national_forecast_shares: Dict[str, float],
     last_election_date: str,
@@ -38,7 +130,10 @@ def calculate_seat_predictions(
     election_dates: List[str]
 ) -> Dict[str, int]:
     """
-    Predicts the national seat allocation based on a national vote forecast.
+    Legacy function for seat prediction using D'Hondt system.
+
+    This function maintains backward compatibility. For new code, consider using
+    calculate_seat_predictions_with_system() which supports different electoral systems.
 
     Uses Uniform National Swing (UNS) to estimate district votes and then
     applies the D'Hondt method per district.
