@@ -110,7 +110,11 @@ jobs:
           sys.path.insert(0, "src")
           from data.dataset import ElectionDataset
           print("Testing dataset instantiation...")
-          dataset = ElectionDataset(election_date="2024-03-10", prediction_date="2024-02-01")
+          dataset = ElectionDataset(
+              election_date="2024-03-10",
+              baseline_timescales=[365],
+              election_timescales=[30, 15]
+          )
           print("✅ Dataset created successfully")
           '
 
@@ -124,7 +128,11 @@ jobs:
           from data.dataset import ElectionDataset
           from models.dynamic_gp_election_model import DynamicGPElectionModel
           print("Testing model instantiation...")
-          dataset = ElectionDataset(election_date="2024-03-10", prediction_date="2024-02-01")
+          dataset = ElectionDataset(
+              election_date="2024-03-10",
+              baseline_timescales=[365],
+              election_timescales=[30, 15]
+          )
           model = DynamicGPElectionModel(dataset=dataset)
           print("✅ Model instantiated successfully")
           print("✅ All validations passed")
