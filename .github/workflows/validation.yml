@@ -70,7 +70,7 @@ jobs:
         timeout-minutes: 5
         run: |
           echo "Testing data loading interfaces..."
-          pixi run python -c 'import sys; sys.path.insert(0, "src"); from data.loaders import load_marktest_polls; print("✅ Data loaders available")'
+          pixi run python -c 'import sys; sys.path.insert(0, "src"); from data.loaders import load_marktest_polls, load_election_results; print("✅ Data loaders available")'
 
   # Comprehensive validation for main branch and full manual runs
   full-validation:
