@@ -1,0 +1,160 @@
+name: 🔍 Model Validation Suite
+
+on:
+  # Full validation on PRs
+  pull_request:
+    branches: [ main, develop ]
+    types: [ opened, synchronize, reopened, ready_for_review ]
+    paths-ignore:
+      - '*.md'
+      - 'docs/**'
+      - '.gitignore'
+      - 'LICENSE'
+
+  # Manual triggering
+  workflow_dispatch:
+    inputs:
+      test_level:
+        description: 'Test level to run'
+        required: true
+        default: 'full'
+        type: choice
+        options:
+          - quick
+          - full
+
+env:
+  PYTHONHASHSEED: 0
+  PYTHONUTF8: 1
+  OMP_NUM_THREADS: 2
+  NUMBA_NUM_THREADS: 2
+
+jobs:
+  # Quick validation for manual runs only
+  quick-validation:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.test_level == 'quick'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Pixi
+        uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          pixi-version: v0.54.2
+          cache: true
+
+      - name: 🔍 Environment validation
+        run: |
+          echo "Testing Python environment setup..."
+          pixi run python --version
+          pixi run python -c "import sys; print(f'Python {sys.version}')"
+
+      - name: 📦 Import validation
+        run: |
+          echo "Testing critical imports..."
+          pixi run python -c 'import sys; sys.path.insert(0, "src"); from main import main; print("✅ Main interface available")'
+
+      - name: 📊 Data loading validation
+        timeout-minutes: 5
+        run: |
+          echo "Testing data loading interfaces..."
+          pixi run python -c 'import sys; sys.path.insert(0, "src"); from data.loaders import load_marktest_polls, load_election_results; print("✅ Data loaders available")'
+
+  # Comprehensive validation for PRs and full manual runs
+  full-validation:
+    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.event.inputs.test_level == 'full')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Pixi
+        uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          pixi-version: v0.54.2
+          cache: true
+
+      - name: 🔍 Environment validation  
+        run: |
+          echo "Testing Python environment setup..."
+          pixi run python --version
+          pixi run python -c "import sys; print(f'Python {sys.version}')"
+
+      - name: 📦 Comprehensive import validation
+        run: |
+          echo "Testing all critical imports..."
+          pixi run python -c 'import sys; sys.path.insert(0, "src"); from main import main; print("✅ Main interface")'
+          pixi run python -c 'import sys; sys.path.insert(0, "src"); from data.loaders import load_marktest_polls, load_election_results; print("✅ Data loaders")'
+          pixi run python -c 'import sys; sys.path.insert(0, "src"); from models.dynamic_gp_election_model import DynamicGPElectionModel; print("✅ Model imports")'
+
+      - name: 📊 Data validation suite
+        timeout-minutes: 8
+        run: |
+          echo "Running comprehensive data validation..."
+          pixi run python -c '
+          import sys
+          sys.path.insert(0, "src")
+          from data.dataset import ElectionDataset
+          print("Testing dataset instantiation...")
+          dataset = ElectionDataset(
+              election_date="2024-03-10",
+              baseline_timescales=[365],
+              election_timescales=[30, 15]
+          )
+          print("✅ Dataset created successfully")
+          '
+
+      - name: 🏗️ Model interface validation
+        timeout-minutes: 5
+        run: |
+          echo "Testing model interfaces (no training)..."
+          pixi run python -c '
+          import sys
+          sys.path.insert(0, "src")
+          from data.dataset import ElectionDataset
+          from models.dynamic_gp_election_model import DynamicGPElectionModel
+          print("Testing model instantiation...")
+          dataset = ElectionDataset(
+              election_date="2024-03-10",
+              baseline_timescales=[365],
+              election_timescales=[30, 15]
+          )
+          model = DynamicGPElectionModel(dataset=dataset)
+          print("✅ Model instantiated successfully")
+          print("✅ All validations passed")
+          '
+
+  # Summary job to provide clear pass/fail status
+  validation-status:
+    runs-on: ubuntu-latest
+    needs: [quick-validation, full-validation]
+    if: always()
+    steps:
+      - name: 📋 Validation Summary
+        run: |
+          echo "=== VALIDATION RESULTS ==="
+          
+          if [[ "${{ needs.quick-validation.result }}" == "success" ]] || [[ "${{ needs.quick-validation.result }}" == "skipped" ]]; then
+            echo "✅ Quick validation: PASSED"
+          else
+            echo "❌ Quick validation: FAILED"
+          fi
+          
+          if [[ "${{ needs.full-validation.result }}" == "success" ]] || [[ "${{ needs.full-validation.result }}" == "skipped" ]]; then
+            echo "✅ Full validation: PASSED"  
+          else
+            echo "❌ Full validation: FAILED"
+          fi
+          
+          # Fail if any required job failed
+          if [[ "${{ needs.quick-validation.result }}" == "failure" ]] || [[ "${{ needs.full-validation.result }}" == "failure" ]]; then
+            echo "❌ VALIDATION SUITE FAILED"
+            exit 1
+          else
+            echo "🎉 ALL VALIDATIONS PASSED"
+          fi

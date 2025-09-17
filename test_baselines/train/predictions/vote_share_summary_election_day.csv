@@ -1,0 +1,9 @@
+,mean,sd,hdi_3%,hdi_97%
+latent_popularity_national[PS],0.306,0.007,0.294,0.318
+latent_popularity_national[CH],0.203,0.008,0.189,0.218
+latent_popularity_national[IL],0.046,0.003,0.041,0.051
+latent_popularity_national[BE],0.047,0.002,0.043,0.051
+latent_popularity_national[CDU],0.035,0.002,0.031,0.039
+latent_popularity_national[PAN],0.019,0.001,0.016,0.021
+latent_popularity_national[L],0.028,0.002,0.025,0.032
+latent_popularity_national[AD],0.317,0.007,0.304,0.33

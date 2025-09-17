@@ -1359,7 +1359,7 @@ def main(args=None):
     parser.add_argument(
         "--model-type",
         choices=["static", "dynamic_gp"],
-        default="static", # Default to the original static model
+        default="dynamic_gp", # Default to dynamic GP model (static is deprecated)
         help="Type of election model to use ('static' or 'dynamic_gp')",
     )
     

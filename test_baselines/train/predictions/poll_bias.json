@@ -1,0 +1,34 @@
+[
+  {
+    "party": "PS",
+    "poll_bias": 0.0215
+  },
+  {
+    "party": "CH",
+    "poll_bias": -0.129
+  },
+  {
+    "party": "IL",
+    "poll_bias": 0.0795
+  },
+  {
+    "party": "BE",
+    "poll_bias": 0.0429
+  },
+  {
+    "party": "CDU",
+    "poll_bias": 0.083
+  },
+  {
+    "party": "PAN",
+    "poll_bias": 0.0374
+  },
+  {
+    "party": "L",
+    "poll_bias": -0.1564
+  },
+  {
+    "party": "AD",
+    "poll_bias": 0.021
+  }
+]
