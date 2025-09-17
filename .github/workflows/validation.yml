@@ -70,7 +70,7 @@ jobs:
         timeout-minutes: 5
         run: |
           echo "Testing data loading interfaces..."
-          pixi run python -c 'import sys; sys.path.insert(0, "src"); from data.loaders import load_election_data; print("✅ Data loaders available")'
+          pixi run python -c 'import sys; sys.path.insert(0, "src"); from data.loaders import load_marktest_polls; print("✅ Data loaders available")'
 
   # Comprehensive validation for main branch and full manual runs
   full-validation:
@@ -98,7 +98,7 @@ jobs:
         run: |
           echo "Testing all critical imports..."
           pixi run python -c 'import sys; sys.path.insert(0, "src"); from main import main; print("✅ Main interface")'
-          pixi run python -c 'import sys; sys.path.insert(0, "src"); from data.loaders import load_election_data; print("✅ Data loaders")'
+          pixi run python -c 'import sys; sys.path.insert(0, "src"); from data.loaders import load_marktest_polls, load_election_results; print("✅ Data loaders")'
           pixi run python -c 'import sys; sys.path.insert(0, "src"); from models.dynamic_gp_election_model import DynamicGPElectionModel; print("✅ Model imports")'
 
       - name: 📊 Data validation suite
