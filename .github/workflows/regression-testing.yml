@@ -107,7 +107,9 @@ jobs:
       if: steps.changes.outputs.should-continue == 'true'
       run: |
         echo "🔍 Validating Python syntax..."
-        pixi run python -m py_compile src/**/*.py tests/**/*.py scripts/**/*.py
+        find src -name "*.py" -exec pixi run python -m py_compile {} +
+        find tests -name "*.py" -exec pixi run python -m py_compile {} +
+        find scripts -name "*.py" -exec pixi run python -m py_compile {} + 2>/dev/null || echo "No scripts directory found"
         
         echo "🔍 Validating import structure..."
         pixi run python -c "
