@@ -292,12 +292,16 @@ jobs:
             
             # Test dataset loading (minimal)
             print('📊 Testing dataset loading...')
-            dataset = ElectionDataset()
+            dataset = ElectionDataset(
+                election_date='2026-01-01',  # Future test date
+                baseline_timescales=[365],   # 1 year baseline
+                election_timescales=[30, 15] # Campaign periods
+            )
             print('✅ Dataset initialized')
             
             # Test model instantiation  
             print('🏗️ Testing model instantiation...')
-            model = DynamicGPElectionModel()
+            model = DynamicGPElectionModel(dataset=dataset)
             print(f'✅ Model instantiated: {type(model).__name__}')
             
             # Test basic configuration
