@@ -1,4 +1,4 @@
-name: 🌙 Nightly Comprehensive Testing
+name: 🌙 Nightly System Health Check
 
 on:
   # Run nightly at 2 AM UTC
