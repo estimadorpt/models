@@ -37,7 +37,7 @@ lint = "black --check src/ tests/ && isort --check-only src/ tests/"
 notebook = "jupyter lab"
 
 # Model training commands
-train = "python -m src.main --mode train --election-date 2026-01-01 --output-dir outputs --draws 1000 --tune 1000"
+train = "python -m src.main --mode train --model-type dynamic_gp --election-date 2026-01-01 --output-dir outputs --draws 1000 --tune 1000"
 viz = "python -m src.main --mode viz --load-dir outputs/latest"
 diagnose = "python -m src.main --mode diagnose --load-dir outputs/latest"
 predict = "python -m src.main --mode predict --load-dir outputs/latest"

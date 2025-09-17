@@ -1,0 +1,483 @@
+name: 🔍 Regression Testing Suite
+
+on:
+  # Run on all pull requests
+  pull_request:
+    branches: [ main, develop ]
+    paths-ignore:
+      - '*.md'
+      - 'docs/**'
+      - '.gitignore'
+      - 'LICENSE'
+
+  # Run on pushes to main branch
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - '*.md'
+      - 'docs/**'
+      - '.gitignore'
+      - 'LICENSE'
+
+  # Allow manual triggering
+  workflow_dispatch:
+    inputs:
+      test_level:
+        description: 'Test level to run'
+        required: true
+        default: 'full'
+        type: choice
+        options:
+          - quick
+          - full
+          - performance
+      update_baselines:
+        description: 'Update golden master baselines after successful run'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  # Ensure consistent behavior across runs
+  PYTHONHASHSEED: 0
+  PYTHONUTF8: 1
+  
+  # Performance settings
+  OMP_NUM_THREADS: 2
+  NUMBA_NUM_THREADS: 2
+
+jobs:
+  # Fast validation job - runs first to catch obvious issues
+  quick-validation:
+    name: 🚀 Quick Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    outputs:
+      should-continue: ${{ steps.changes.outputs.should-continue }}
+      test-level: ${{ steps.setup.outputs.test-level }}
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 2  # Need history for change detection
+    
+    - name: 🔍 Detect changes
+      id: changes
+      run: |
+        # Check if this is a documentation-only change
+        if git diff --name-only HEAD~1 HEAD | grep -E '\.(py|toml|yml|yaml|json)$'; then
+          echo "should-continue=true" >> $GITHUB_OUTPUT
+          echo "Code changes detected - proceeding with tests"
+        else
+          echo "should-continue=false" >> $GITHUB_OUTPUT  
+          echo "No code changes detected - skipping regression tests"
+        fi
+    
+    - name: ⚙️ Setup test parameters
+      id: setup
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "test-level=${{ github.event.inputs.test_level }}" >> $GITHUB_OUTPUT
+        elif [ "${{ github.event_name }}" = "pull_request" ]; then
+          echo "test-level=quick" >> $GITHUB_OUTPUT
+        else
+          echo "test-level=full" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: 🐍 Setup Python environment
+      if: steps.changes.outputs.should-continue == 'true'
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: 📦 Install pixi
+      if: steps.changes.outputs.should-continue == 'true'
+      uses: prefix-dev/setup-pixi@v0.4.1
+      with:
+        pixi-version: latest
+    
+    - name: 🔧 Install dependencies
+      if: steps.changes.outputs.should-continue == 'true'
+      run: |
+        pixi install
+    
+    - name: 🧪 Run syntax validation
+      if: steps.changes.outputs.should-continue == 'true'
+      run: |
+        echo "🔍 Validating Python syntax..."
+        pixi run python -m py_compile src/**/*.py tests/**/*.py scripts/**/*.py
+        
+        echo "🔍 Validating import structure..."
+        pixi run python -c "
+        import sys
+        sys.path.insert(0, 'src')
+        try:
+            from data.dataset import ElectionDataset
+            from models.dynamic_gp_election_model import DynamicGPElectionModel
+            print('✅ Core imports successful')
+        except ImportError as e:
+            print(f'❌ Import failed: {e}')
+            sys.exit(1)
+        "
+
+  # Main regression testing job
+  regression-testing:
+    name: 🔬 Regression Testing (${{ needs.quick-validation.outputs.test-level }})
+    runs-on: ubuntu-latest
+    needs: quick-validation
+    if: needs.quick-validation.outputs.should-continue == 'true'
+    timeout-minutes: 60
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - test-type: "integration"
+            timeout: 45
+          - test-type: "regression-detection"
+            timeout: 30
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      with:
+        lfs: true  # Ensure LFS files are downloaded
+    
+    - name: 🐍 Setup Python environment
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: 📦 Install pixi
+      uses: prefix-dev/setup-pixi@v0.4.1
+      with:
+        pixi-version: latest
+    
+    - name: 🔧 Install dependencies and setup
+      run: |
+        pixi install
+        
+        # Create necessary directories
+        mkdir -p outputs test_results
+        
+        # Set up git for potential commits (golden master updates)
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+    
+    - name: 📥 Download golden masters
+      run: |
+        echo "🔍 Checking for golden masters..."
+        if [ -d "test_baselines" ]; then
+          echo "✅ Golden masters found in repository"
+          ls -la test_baselines/
+        else
+          echo "🚧 Golden masters not found - generating fresh baselines"
+          echo "This should only happen on first run or after baseline updates"
+          
+          # Generate golden masters (this takes time but is necessary)
+          echo "⏳ Generating golden master baselines..."
+          pixi run python scripts/generate_golden_masters.py
+          
+          if [ ! -d "test_baselines" ]; then
+            echo "❌ Failed to generate golden masters"
+            exit 1
+          fi
+          
+          echo "✅ Golden masters generated successfully"
+        fi
+    
+    - name: 🧪 Run Integration Tests
+      if: matrix.test-type == 'integration'
+      timeout-minutes: ${{ matrix.timeout }}
+      run: |
+        echo "🧪 Running integration test suite..."
+        
+        # Set test level based on trigger
+        TEST_LEVEL="${{ needs.quick-validation.outputs.test-level }}"
+        
+        if [ "$TEST_LEVEL" = "quick" ]; then
+          echo "⚡ Running quick integration tests..."
+          
+          # Run lightweight integration tests
+          pixi run python -m pytest tests/integration/test_current_system_behavior.py::TestCurrentSystemBehavior::test_coalition_handling_consistency -v
+          pixi run python -m pytest tests/integration/test_current_system_behavior.py::TestCurrentSystemBehavior::test_model_training_deterministic -v
+          
+        else
+          echo "🔬 Running full integration test suite..."
+          
+          # Run complete integration tests (includes full pipeline)
+          pixi run python -m pytest tests/integration/test_current_system_behavior.py -v --tb=short
+        fi
+    
+    - name: 🔍 Run Regression Detection
+      if: matrix.test-type == 'regression-detection'
+      timeout-minutes: ${{ matrix.timeout }}
+      run: |
+        echo "🔍 Running regression detection..."
+        
+        TEST_LEVEL="${{ needs.quick-validation.outputs.test-level }}"
+        
+        # Create a minimal test run for comparison
+        echo "⚙️ Generating test output for regression comparison..."
+        
+        if [ "$TEST_LEVEL" = "quick" ]; then
+          # Quick test run with minimal parameters
+          pixi run python -m src.main \
+            --mode train \
+            --model-type dynamic_gp \
+            --election-date 2024-03-10 \
+            --output-dir test_results \
+            --draws 100 \
+            --tune 100 \
+            --seed 42
+        else
+          # Full test run matching golden masters
+          pixi run python -m src.main \
+            --mode train \
+            --model-type dynamic_gp \
+            --election-date 2024-03-10 \
+            --output-dir test_results \
+            --draws 500 \
+            --tune 500 \
+            --seed 42
+        fi
+        
+        # Find the generated output directory
+        TEST_OUTPUT_DIR=$(find test_results -name "dynamic_gp_run_*" -type d | head -1)
+        
+        if [ -z "$TEST_OUTPUT_DIR" ]; then
+          echo "❌ No test output directory found"
+          exit 1
+        fi
+        
+        echo "🔍 Comparing against golden masters..."
+        echo "Test output: $TEST_OUTPUT_DIR"
+        
+        # Run regression detection
+        if [ "$TEST_LEVEL" = "quick" ]; then
+          pixi run python scripts/regression_detection_tools.py \
+            --golden-masters test_baselines \
+            --current-output "$TEST_OUTPUT_DIR" \
+            --quick \
+            --report-file test_results/regression_report.json
+        else
+          pixi run python scripts/regression_detection_tools.py \
+            --golden-masters test_baselines \
+            --current-output "$TEST_OUTPUT_DIR" \
+            --report-file test_results/regression_report.json
+        fi
+    
+    - name: 📊 Upload test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results-${{ matrix.test-type }}-${{ github.run_number }}
+        path: |
+          test_results/
+          outputs/latest/
+        retention-days: 30
+    
+    - name: 📋 Display test summary
+      if: always()
+      run: |
+        echo "📋 Test Summary"
+        echo "=============="
+        echo "Test Type: ${{ matrix.test-type }}"
+        echo "Test Level: ${{ needs.quick-validation.outputs.test-level }}"
+        echo "Branch: ${{ github.ref_name }}"
+        echo "Commit: ${{ github.sha }}"
+        
+        if [ -f "test_results/regression_report.json" ]; then
+          echo ""
+          echo "📊 Regression Detection Results:"
+          pixi run python -c "
+          import json
+          with open('test_results/regression_report.json') as f:
+              report = json.load(f)
+          summary = report.get('summary', {})
+          print(f'Health Status: {summary.get(\"health_status\", \"Unknown\")}')
+          print(f'Success Rate: {summary.get(\"success_rate\", 0):.1%}')
+          print(f'Tests: {summary.get(\"passed_tests\", 0)}/{summary.get(\"total_tests\", 0)}')
+          print(f'Failures: {summary.get(\"total_failures\", 0)}')
+          print(f'Warnings: {summary.get(\"total_warnings\", 0)}')
+          "
+        fi
+
+  # Performance benchmarking job (runs on schedule or manual trigger)
+  performance-benchmarking:
+    name: ⚡ Performance Benchmarking
+    runs-on: ubuntu-latest
+    needs: quick-validation
+    if: |
+      needs.quick-validation.outputs.should-continue == 'true' && 
+      (github.event_name == 'schedule' || 
+       github.event.inputs.test_level == 'performance' ||
+       needs.quick-validation.outputs.test-level == 'performance')
+    timeout-minutes: 90
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      with:
+        lfs: true
+    
+    - name: 🐍 Setup Python environment
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: 📦 Install pixi
+      uses: prefix-dev/setup-pixi@v0.4.1
+      with:
+        pixi-version: latest
+    
+    - name: 🔧 Install dependencies
+      run: |
+        pixi install
+        mkdir -p performance_results
+    
+    - name: ⚡ Run performance benchmarks
+      run: |
+        echo "⚡ Running performance benchmarks..."
+        
+        # Multiple runs for statistical significance
+        for i in {1..3}; do
+          echo "🔄 Performance run $i/3..."
+          
+          START_TIME=$(date +%s)
+          
+          pixi run python -m src.main \
+            --mode train \
+            --model-type dynamic_gp \
+            --election-date 2024-03-10 \
+            --output-dir performance_results/run_$i \
+            --draws 200 \
+            --tune 200 \
+            --seed $((42 + i))
+          
+          END_TIME=$(date +%s)
+          DURATION=$((END_TIME - START_TIME))
+          echo "Run $i completed in ${DURATION}s"
+          echo "run_$i: ${DURATION}" >> performance_results/timing.txt
+        done
+        
+        # Calculate average performance
+        pixi run python -c "
+        import numpy as np
+        with open('performance_results/timing.txt') as f:
+            times = [float(line.split(': ')[1]) for line in f]
+        
+        print(f'Performance Summary:')
+        print(f'Average time: {np.mean(times):.1f}s')
+        print(f'Std deviation: {np.std(times):.1f}s')
+        print(f'Min time: {np.min(times):.1f}s')
+        print(f'Max time: {np.max(times):.1f}s')
+        "
+    
+    - name: 📊 Upload performance results
+      uses: actions/upload-artifact@v4
+      with:
+        name: performance-results-${{ github.run_number }}
+        path: performance_results/
+        retention-days: 90
+
+  # Golden master update job (only on successful main branch pushes)
+  update-golden-masters:
+    name: 🔄 Update Golden Masters
+    runs-on: ubuntu-latest
+    needs: [regression-testing]
+    if: |
+      github.ref == 'refs/heads/main' && 
+      github.event_name == 'push' &&
+      github.event.inputs.update_baselines == 'true'
+    timeout-minutes: 90
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        lfs: true
+    
+    - name: 🐍 Setup Python environment
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: 📦 Install pixi
+      uses: prefix-dev/setup-pixi@v0.4.1
+      with:
+        pixi-version: latest
+    
+    - name: 🔧 Install dependencies
+      run: pixi install
+    
+    - name: 🔄 Generate fresh golden masters
+      run: |
+        echo "🔄 Generating updated golden master baselines..."
+        
+        # Backup existing baselines
+        if [ -d "test_baselines" ]; then
+          mv test_baselines test_baselines_backup_$(date +%Y%m%d_%H%M%S)
+        fi
+        
+        # Generate new baselines
+        pixi run python scripts/generate_golden_masters.py
+        
+        # Verify new baselines
+        if [ ! -d "test_baselines" ]; then
+          echo "❌ Failed to generate new baselines"
+          exit 1
+        fi
+        
+        echo "✅ New golden masters generated successfully"
+    
+    - name: 📤 Commit updated baselines
+      run: |
+        git add test_baselines/
+        
+        if git diff --staged --quiet; then
+          echo "No changes to golden masters"
+        else
+          git commit -m "🔄 Update golden master baselines
+
+          - Generated from commit ${{ github.sha }}
+          - All regression tests passed
+          - Automated update via GitHub Actions"
+          
+          git push
+          echo "✅ Golden masters updated and committed"
+        fi
+
+  # Final status check
+  regression-status:
+    name: 📋 Regression Testing Status
+    runs-on: ubuntu-latest
+    needs: [quick-validation, regression-testing]
+    if: always()
+    
+    steps:
+    - name: 📋 Report final status
+      run: |
+        echo "📋 Final Regression Testing Status"
+        echo "================================="
+        
+        if [ "${{ needs.quick-validation.outputs.should-continue }}" = "false" ]; then
+          echo "⏭️  Skipped - No code changes detected"
+          exit 0
+        fi
+        
+        if [ "${{ needs.regression-testing.result }}" = "success" ]; then
+          echo "✅ All regression tests passed!"
+          echo "✅ System integrity maintained"
+        elif [ "${{ needs.regression-testing.result }}" = "failure" ]; then
+          echo "❌ Regression tests failed!"
+          echo "❌ Please review the test results and fix any regressions"
+          exit 1
+        else
+          echo "⚠️  Regression tests were cancelled or skipped"
+          echo "⚠️  Please check the workflow logs"
+          exit 1
+        fi

@@ -1,0 +1,161 @@
+# GitHub Actions Configuration for Election Modeling Pipeline
+# This file documents the CI/CD configuration and provides centralized settings
+
+# Workflow Configuration
+workflows:
+  regression_testing:
+    description: "Main regression testing workflow for all changes"
+    triggers:
+      - "pull_request on main/develop"
+      - "push to main"
+      - "manual dispatch"
+    timeout_minutes: 60
+    test_levels:
+      quick: "Coalition + deterministic tests (10min)"
+      full: "Complete pipeline integration (45min)"
+      performance: "Performance benchmarking (90min)"
+  
+  nightly_comprehensive:
+    description: "Comprehensive nightly validation"
+    triggers:
+      - "schedule: 2 AM UTC daily"
+      - "manual dispatch"
+    timeout_minutes: 180
+    features:
+      - "Full integration testing"
+      - "Performance benchmarking"
+      - "Data quality validation"
+      - "Automatic issue creation on failure"
+  
+  pr_validation:
+    description: "Fast PR validation for quick feedback"
+    triggers:
+      - "pull_request events"
+    timeout_minutes: 45
+    features:
+      - "Change analysis"
+      - "Targeted regression testing"
+      - "Automatic PR comments with results"
+
+# Test Configuration
+testing:
+  golden_masters:
+    location: "test_baselines/"
+    generation_command: "pixi run python scripts/generate_golden_masters.py"
+    parameters:
+      election_date: "2024-03-10"
+      model_type: "dynamic_gp"
+      draws: 500
+      tune: 500
+      seed: 42
+  
+  regression_detection:
+    tools_script: "scripts/regression_detection_tools.py"
+    comparison_types:
+      - "bit_for_bit"
+      - "statistical"
+      - "performance"
+      - "coalition_validation"
+    thresholds:
+      vote_share_diff_pct: 2.0
+      seat_diff_abs: 2.0
+      fit_metric_regression_pct: 30.0
+      performance_regression_factor: 2.0
+  
+  integration_tests:
+    location: "tests/integration/"
+    key_tests:
+      - "TestCurrentSystemBehavior::test_full_pipeline_integration"
+      - "TestCurrentSystemBehavior::test_coalition_handling_consistency"
+      - "TestCurrentSystemBehavior::test_model_training_deterministic"
+      - "TestSystemRegressionDetection"
+
+# Environment Configuration
+environment:
+  python_version: "3.11"
+  package_manager: "pixi"
+  environment_vars:
+    PYTHONHASHSEED: "0"  # Ensure deterministic behavior
+    PYTHONUTF8: "1"      # Consistent UTF-8 handling
+    OMP_NUM_THREADS: "2" # Control parallelism
+    NUMBA_NUM_THREADS: "2"
+
+# Performance Configuration
+performance:
+  benchmarking:
+    configurations:
+      - draws: 100, tune: 100  # Quick test
+      - draws: 250, tune: 250  # Medium test  
+      - draws: 500, tune: 500  # Full test
+      - draws: 1000, tune: 1000 # Comprehensive test
+    metrics:
+      - "train_time"
+      - "predict_time" 
+      - "viz_time"
+      - "total_time"
+      - "samples_per_second"
+
+# Artifact Configuration  
+artifacts:
+  retention_days:
+    test_results: 30
+    performance_results: 90
+    nightly_results: 90
+    pr_results: 14
+  
+  included_paths:
+    - "test_results/"
+    - "outputs/latest/"
+    - "nightly_results/"
+    - "pr_test_results/"
+    - "performance_results/"
+
+# Notification Configuration
+notifications:
+  failure_conditions:
+    - "Regression tests fail"
+    - "Performance regression > 2x"
+    - "Data quality issues detected"
+    - "Golden master generation fails"
+  
+  success_conditions:
+    - "All regression tests pass"
+    - "PR validation successful"
+    - "Nightly validation healthy"
+
+# Security Configuration
+security:
+  permissions:
+    contents: "read"
+    pull_requests: "write"  # For PR comments
+    issues: "write"         # For failure issue creation
+    actions: "read"         # For workflow status
+  
+  secrets_required:
+    - "GITHUB_TOKEN" # For API access
+
+# Maintenance Configuration
+maintenance:
+  golden_master_updates:
+    trigger: "manual approval on main branch"
+    validation: "all regression tests must pass"
+    backup: "previous baselines archived with timestamp"
+  
+  workflow_updates:
+    review_required: true
+    test_in_branch: true
+    gradual_rollout: true
+
+# Documentation
+documentation:
+  workflow_docs:
+    - "/.github/workflows/README.md"
+    - "/docs/ci-cd-setup.md"
+  
+  test_docs:
+    - "/tests/README.md" 
+    - "/docs/regression-testing.md"
+  
+  maintenance_docs:
+    - "/docs/golden-master-management.md"
+    - "/docs/performance-benchmarking.md"

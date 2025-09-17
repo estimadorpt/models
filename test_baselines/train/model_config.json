@@ -1,0 +1,24 @@
+{
+    "model_type": "dynamic_gp",
+    "election_date": "2024-03-10",
+    "cutoff_date": null,
+    "debug": false,
+    "draws": 500,
+    "tune": 500,
+    "chains": 4,
+    "target_accept": 0.98,
+    "seed": 42,
+    "baseline_gp_lengthscale": 365.0,
+    "baseline_gp_kernel": "Matern52",
+    "cycle_gp_lengthscale": 45.0,
+    "cycle_gp_kernel": "Matern52",
+    "cycle_gp_max_days": 180,
+    "hsgp_m": [
+        100
+    ],
+    "hsgp_c": 2.0,
+    "hsgp_m_cycle": [
+        50
+    ],
+    "hsgp_c_cycle": 1.5
+}

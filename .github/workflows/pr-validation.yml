@@ -1,0 +1,405 @@
+name: ✅ Pull Request Validation
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+    types: [ opened, synchronize, reopened, ready_for_review ]
+
+  # Allow manual triggering for testing
+  workflow_dispatch:
+
+env:
+  PYTHONHASHSEED: 0
+  PYTHONUTF8: 1
+
+jobs:
+  # Quick validation for PR feedback
+  pr-quick-check:
+    name: 🚀 Quick PR Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    # Skip draft PRs unless explicitly requested
+    if: github.event.pull_request.draft == false || github.event_name == 'workflow_dispatch'
+    
+    outputs:
+      has-code-changes: ${{ steps.changes.outputs.has-code-changes }}
+      has-test-changes: ${{ steps.changes.outputs.has-test-changes }}
+      needs-regression-testing: ${{ steps.changes.outputs.needs-regression-testing }}
+    
+    steps:
+    - name: 📥 Checkout PR
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Need full history for proper diffs
+    
+    - name: 🔍 Analyze changes
+      id: changes
+      run: |
+        echo "Analyzing changes in PR..."
+        
+        # Get list of changed files
+        CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}..HEAD)
+        echo "Changed files:"
+        echo "$CHANGED_FILES"
+        
+        # Check for code changes
+        if echo "$CHANGED_FILES" | grep -E '\.(py)$'; then
+          echo "has-code-changes=true" >> $GITHUB_OUTPUT
+          echo "✅ Python code changes detected"
+        else
+          echo "has-code-changes=false" >> $GITHUB_OUTPUT
+          echo "ℹ️  No Python code changes"
+        fi
+        
+        # Check for test changes
+        if echo "$CHANGED_FILES" | grep -E '^tests/.*\.py$'; then
+          echo "has-test-changes=true" >> $GITHUB_OUTPUT
+          echo "✅ Test changes detected"
+        else
+          echo "has-test-changes=false" >> $GITHUB_OUTPUT
+          echo "ℹ️  No test changes"
+        fi
+        
+        # Check if regression testing is needed
+        if echo "$CHANGED_FILES" | grep -E '^(src/|scripts/generate_golden_masters\.py|pixi\.toml|pyproject\.toml)'; then
+          echo "needs-regression-testing=true" >> $GITHUB_OUTPUT
+          echo "🔍 Regression testing needed"
+        else
+          echo "needs-regression-testing=false" >> $GITHUB_OUTPUT
+          echo "ℹ️  No regression testing needed"
+        fi
+        
+        # Output summary
+        echo ""
+        echo "📋 Change Analysis Summary:"
+        echo "has-code-changes: $(echo "$CHANGED_FILES" | grep -E '\.(py)$' > /dev/null && echo 'true' || echo 'false')"
+        echo "has-test-changes: $(echo "$CHANGED_FILES" | grep -E '^tests/.*\.py$' > /dev/null && echo 'true' || echo 'false')"
+        echo "needs-regression-testing: $(echo "$CHANGED_FILES" | grep -E '^(src/|scripts/generate_golden_masters\.py|pixi\.toml|pyproject\.toml)' > /dev/null && echo 'true' || echo 'false')"
+    
+    - name: 🐍 Setup Python environment
+      if: steps.changes.outputs.has-code-changes == 'true'
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: 📦 Install pixi
+      if: steps.changes.outputs.has-code-changes == 'true'
+      uses: prefix-dev/setup-pixi@v0.4.1
+      with:
+        pixi-version: latest
+    
+    - name: 🔧 Install dependencies
+      if: steps.changes.outputs.has-code-changes == 'true'
+      run: pixi install
+    
+    - name: 🔍 Syntax and import validation
+      if: steps.changes.outputs.has-code-changes == 'true'
+      run: |
+        echo "🔍 Validating Python syntax..."
+        
+        # Check syntax of changed Python files
+        git diff --name-only origin/${{ github.base_ref }}..HEAD | grep '\.py$' | while read file; do
+          if [ -f "$file" ]; then
+            echo "Checking syntax: $file"
+            pixi run python -m py_compile "$file"
+          fi
+        done
+        
+        echo "🔍 Validating core imports..."
+        pixi run python -c "
+        import sys
+        sys.path.insert(0, 'src')
+        
+        # Test core imports
+        try:
+            from data.dataset import ElectionDataset
+            print('✅ ElectionDataset import successful')
+        except ImportError as e:
+            print(f'❌ ElectionDataset import failed: {e}')
+            sys.exit(1)
+        
+        try:
+            from models.dynamic_gp_election_model import DynamicGPElectionModel
+            print('✅ DynamicGPElectionModel import successful')
+        except ImportError as e:
+            print(f'❌ DynamicGPElectionModel import failed: {e}')
+            sys.exit(1)
+        
+        # Test coalition manager if it was changed
+        try:
+            from utils.coalition_manager import CoalitionManager
+            print('✅ CoalitionManager import successful')
+        except ImportError as e:
+            print(f'⚠️  CoalitionManager import failed: {e}')
+            # Don't fail on this one as it might not exist yet
+        "
+    
+    - name: 📋 PR validation summary
+      run: |
+        echo "📋 PR Quick Validation Summary"
+        echo "============================="
+        echo "PR: ${{ github.event.pull_request.title }}"
+        echo "Branch: ${{ github.head_ref }} → ${{ github.base_ref }}"
+        echo "Author: ${{ github.event.pull_request.user.login }}"
+        echo ""
+        echo "Changes Analysis:"
+        echo "  Code changes: ${{ steps.changes.outputs.has-code-changes }}"
+        echo "  Test changes: ${{ steps.changes.outputs.has-test-changes }}"
+        echo "  Needs regression testing: ${{ steps.changes.outputs.needs-regression-testing }}"
+
+  # Regression testing for significant changes
+  pr-regression-testing:
+    name: 🔬 PR Regression Testing
+    runs-on: ubuntu-latest
+    needs: pr-quick-check
+    if: needs.pr-quick-check.outputs.needs-regression-testing == 'true'
+    timeout-minutes: 45
+    
+    steps:
+    - name: 📥 Checkout PR
+      uses: actions/checkout@v4
+      with:
+        lfs: true
+    
+    - name: 🐍 Setup Python environment
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: 📦 Install pixi
+      uses: prefix-dev/setup-pixi@v0.4.1
+      with:
+        pixi-version: latest
+    
+    - name: 🔧 Install dependencies
+      run: |
+        pixi install
+        mkdir -p pr_test_results
+    
+    - name: 📥 Ensure golden masters
+      run: |
+        if [ ! -d "test_baselines" ]; then
+          echo "🚧 Generating golden masters for PR testing..."
+          pixi run python scripts/generate_golden_masters.py
+        else
+          echo "✅ Golden masters found"
+        fi
+    
+    - name: 🧪 Run targeted regression tests
+      run: |
+        echo "🧪 Running targeted regression tests for PR..."
+        
+        # Quick integration tests
+        echo "Running coalition handling tests..."
+        pixi run python -m pytest \
+          tests/integration/test_current_system_behavior.py::TestCurrentSystemBehavior::test_coalition_handling_consistency \
+          -v --tb=short
+        
+        # Quick model training test
+        echo "Running deterministic training test..."
+        pixi run python -m pytest \
+          tests/integration/test_current_system_behavior.py::TestCurrentSystemBehavior::test_model_training_deterministic \
+          -v --tb=short
+        
+        # System regression detection tests
+        echo "Running system regression tests..."
+        pixi run python -m pytest \
+          tests/integration/test_current_system_behavior.py::TestSystemRegressionDetection \
+          -v --tb=short
+    
+    - name: 🔍 Quick regression detection
+      run: |
+        echo "🔍 Running quick regression detection..."
+        
+        # Generate minimal test output
+        pixi run python -m src.main \
+          --mode train \
+          --model-type dynamic_gp \
+          --election-date 2024-03-10 \
+          --output-dir pr_test_results \
+          --draws 100 \
+          --tune 100 \
+          --seed 42
+        
+        # Find generated output
+        TEST_OUTPUT=$(find pr_test_results -name "dynamic_gp_run_*" -type d | head -1)
+        
+        if [ -n "$TEST_OUTPUT" ]; then
+          echo "Running regression detection on: $TEST_OUTPUT"
+          
+          pixi run python scripts/regression_detection_tools.py \
+            --golden-masters test_baselines \
+            --current-output "$TEST_OUTPUT" \
+            --quick \
+            --report-file pr_test_results/pr_regression_report.json
+        else
+          echo "❌ No test output generated"
+          exit 1
+        fi
+    
+    - name: 📊 Upload PR test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: pr-test-results-${{ github.run_number }}
+        path: pr_test_results/
+        retention-days: 14
+    
+    - name: 📝 Comment regression results on PR
+      if: always()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          let comment = '## 🔬 Regression Testing Results\n\n';
+          
+          try {
+            // Read regression report
+            const reportPath = 'pr_test_results/pr_regression_report.json';
+            if (fs.existsSync(reportPath)) {
+              const report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+              const summary = report.summary || {};
+              
+              comment += `**Overall Status**: ${summary.health_status || 'Unknown'}\n`;
+              comment += `**Success Rate**: ${((summary.success_rate || 0) * 100).toFixed(1)}%\n`;
+              comment += `**Tests**: ${summary.passed_tests || 0}/${summary.total_tests || 0}\n`;
+              comment += `**Failures**: ${summary.total_failures || 0}\n`;
+              comment += `**Warnings**: ${summary.total_warnings || 0}\n\n`;
+              
+              if (summary.total_failures > 0) {
+                comment += '### ❌ Critical Failures\n';
+                const reports = report.detailed_reports || [];
+                for (const detailReport of reports) {
+                  if (detailReport.critical_failures && detailReport.critical_failures.length > 0) {
+                    comment += `**${detailReport.test_name}**:\n`;
+                    for (const failure of detailReport.critical_failures.slice(0, 3)) {
+                      comment += `- ${failure}\n`;
+                    }
+                  }
+                }
+                comment += '\n';
+              }
+              
+              if (summary.health_status && summary.health_status.includes('✅')) {
+                comment += '✅ **All regression tests passed!** This PR maintains system integrity.\n';
+              } else {
+                comment += '⚠️ **Please review the regression test results before merging.**\n';
+              }
+            } else {
+              comment += '❌ Regression report not found. Please check the workflow logs.\n';
+            }
+          } catch (error) {
+            comment += `❌ Error reading regression results: ${error.message}\n`;
+          }
+          
+          comment += '\n---\n';
+          comment += `🔗 [View full results](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})\n`;
+          comment += `📦 Test artifacts are available for download from the workflow run.`;
+          
+          // Post comment
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: comment
+          });
+
+  # Test validation for test-only changes
+  pr-test-validation:
+    name: 🧪 Test Validation
+    runs-on: ubuntu-latest
+    needs: pr-quick-check
+    if: |
+      needs.pr-quick-check.outputs.has-test-changes == 'true' &&
+      needs.pr-quick-check.outputs.needs-regression-testing == 'false'
+    timeout-minutes: 20
+    
+    steps:
+    - name: 📥 Checkout PR
+      uses: actions/checkout@v4
+    
+    - name: 🐍 Setup Python environment
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: 📦 Install pixi
+      uses: prefix-dev/setup-pixi@v0.4.1
+      with:
+        pixi-version: latest
+    
+    - name: 🔧 Install dependencies
+      run: pixi install
+    
+    - name: 🧪 Run modified tests
+      run: |
+        echo "🧪 Running modified tests..."
+        
+        # Get list of changed test files
+        CHANGED_TEST_FILES=$(git diff --name-only origin/${{ github.base_ref }}..HEAD | grep '^tests/.*\.py$')
+        
+        if [ -n "$CHANGED_TEST_FILES" ]; then
+          echo "Running changed test files:"
+          echo "$CHANGED_TEST_FILES"
+          
+          # Run the changed tests
+          for test_file in $CHANGED_TEST_FILES; do
+            if [ -f "$test_file" ]; then
+              echo "Running: $test_file"
+              pixi run python -m pytest "$test_file" -v --tb=short
+            fi
+          done
+        else
+          echo "No test files changed"
+        fi
+
+  # Final PR status check
+  pr-status:
+    name: 📋 PR Status Summary
+    runs-on: ubuntu-latest
+    needs: [pr-quick-check, pr-regression-testing, pr-test-validation]
+    if: always()
+    
+    steps:
+    - name: 📋 Determine PR status
+      run: |
+        echo "📋 PR Validation Summary"
+        echo "======================"
+        echo "PR: ${{ github.event.pull_request.title }}"
+        echo "Author: ${{ github.event.pull_request.user.login }}"
+        echo ""
+        
+        # Check results
+        QUICK_CHECK_RESULT="${{ needs.pr-quick-check.result }}"
+        REGRESSION_TEST_RESULT="${{ needs.pr-regression-testing.result }}"
+        TEST_VALIDATION_RESULT="${{ needs.pr-test-validation.result }}"
+        
+        echo "Results:"
+        echo "  Quick Check: $QUICK_CHECK_RESULT"
+        echo "  Regression Testing: $REGRESSION_TEST_RESULT"
+        echo "  Test Validation: $TEST_VALIDATION_RESULT"
+        
+        # Determine overall status
+        if [ "$QUICK_CHECK_RESULT" = "success" ]; then
+          if [ "${{ needs.pr-quick-check.outputs.needs-regression-testing }}" = "true" ]; then
+            if [ "$REGRESSION_TEST_RESULT" = "success" ]; then
+              echo "✅ PR validation passed - Ready for review!"
+            else
+              echo "❌ PR validation failed - Regression tests failed"
+              exit 1
+            fi
+          elif [ "${{ needs.pr-quick-check.outputs.has-test-changes }}" = "true" ]; then
+            if [ "$TEST_VALIDATION_RESULT" = "success" ] || [ "$TEST_VALIDATION_RESULT" = "skipped" ]; then
+              echo "✅ PR validation passed - Test changes validated!"
+            else
+              echo "❌ PR validation failed - Test validation failed"
+              exit 1
+            fi
+          else
+            echo "✅ PR validation passed - No critical changes detected!"
+          fi
+        else
+          echo "❌ PR validation failed - Quick check failed"
+          exit 1
+        fi

@@ -1,0 +1,382 @@
+name: 🌙 Nightly Comprehensive Testing
+
+on:
+  # Run nightly at 2 AM UTC
+  schedule:
+    - cron: '0 2 * * *'
+  
+  # Allow manual triggering
+  workflow_dispatch:
+    inputs:
+      full_validation:
+        description: 'Run full validation suite including performance benchmarks'
+        required: false
+        default: true
+        type: boolean
+
+env:
+  PYTHONHASHSEED: 0
+  PYTHONUTF8: 1
+  OMP_NUM_THREADS: 4
+  NUMBA_NUM_THREADS: 4
+
+jobs:
+  # Comprehensive nightly validation
+  nightly-validation:
+    name: 🌙 Full System Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 180  # 3 hours for comprehensive testing
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      with:
+        lfs: true
+    
+    - name: 🐍 Setup Python environment
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: 📦 Install pixi
+      uses: prefix-dev/setup-pixi@v0.4.1
+      with:
+        pixi-version: latest
+    
+    - name: 🔧 Install dependencies
+      run: |
+        pixi install
+        mkdir -p nightly_results comprehensive_outputs
+    
+    - name: 🧪 Run comprehensive integration tests
+      run: |
+        echo "🧪 Running comprehensive integration test suite..."
+        
+        # Run all integration tests with full coverage
+        pixi run python -m pytest tests/integration/ -v --tb=long \
+          --junit-xml=nightly_results/integration_results.xml \
+          --cov=src --cov-report=xml:nightly_results/coverage.xml
+    
+    - name: 🔍 Run full regression detection suite
+      run: |
+        echo "🔍 Running comprehensive regression detection..."
+        
+        # Generate fresh test outputs for comparison
+        pixi run python -m src.main \
+          --mode train \
+          --model-type dynamic_gp \
+          --election-date 2024-03-10 \
+          --output-dir comprehensive_outputs \
+          --draws 1000 \
+          --tune 1000 \
+          --seed 42
+        
+        # Run full prediction and visualization pipeline
+        TEST_DIR=$(find comprehensive_outputs -name "dynamic_gp_run_*" -type d | head -1)
+        
+        pixi run python -m src.main --mode predict --load-dir "$TEST_DIR"
+        pixi run python -m src.main --mode viz --load-dir "$TEST_DIR"
+        
+        # Run comprehensive regression detection
+        pixi run python scripts/regression_detection_tools.py \
+          --golden-masters test_baselines \
+          --current-output "$TEST_DIR" \
+          --report-file nightly_results/comprehensive_regression_report.json
+    
+    - name: ⚡ Run performance benchmarking suite
+      if: github.event.inputs.full_validation != 'false'
+      run: |
+        echo "⚡ Running comprehensive performance benchmarks..."
+        
+        # Multiple performance runs with different parameters
+        declare -a draw_configs=("100:100" "250:250" "500:500")
+        
+        for config in "${draw_configs[@]}"; do
+          draws=$(echo $config | cut -d: -f1)
+          tune=$(echo $config | cut -d: -f2)
+          
+          echo "🔄 Performance test: draws=$draws, tune=$tune"
+          
+          START_TIME=$(date +%s.%N)
+          
+          pixi run python -m src.main \
+            --mode train \
+            --model-type dynamic_gp \
+            --election-date 2024-03-10 \
+            --output-dir nightly_results/perf_${draws}_${tune} \
+            --draws $draws \
+            --tune $tune \
+            --seed 42
+          
+          END_TIME=$(date +%s.%N)
+          DURATION=$(echo "$END_TIME - $START_TIME" | bc)
+          
+          echo "config_${draws}_${tune}: ${DURATION}" >> nightly_results/performance_benchmark.txt
+          echo "Completed in ${DURATION}s"
+        done
+        
+        # Analyze performance trends
+        pixi run python -c "
+        import json
+        from datetime import datetime
+        
+        # Read performance data
+        perf_data = {}
+        try:
+            with open('nightly_results/performance_benchmark.txt') as f:
+                for line in f:
+                    config, time_str = line.strip().split(': ')
+                    perf_data[config] = float(time_str)
+        except FileNotFoundError:
+            perf_data = {}
+        
+        # Create performance report
+        performance_report = {
+            'timestamp': datetime.now().isoformat(),
+            'benchmarks': perf_data,
+            'analysis': {
+                'fastest_config': min(perf_data.items(), key=lambda x: x[1]) if perf_data else None,
+                'slowest_config': max(perf_data.items(), key=lambda x: x[1]) if perf_data else None,
+                'total_configs_tested': len(perf_data)
+            }
+        }
+        
+        with open('nightly_results/performance_analysis.json', 'w') as f:
+            json.dump(performance_report, f, indent=2)
+        
+        print('Performance Analysis Complete')
+        if perf_data:
+            fastest = min(perf_data.items(), key=lambda x: x[1])
+            slowest = max(perf_data.items(), key=lambda x: x[1])
+            print(f'Fastest: {fastest[0]} - {fastest[1]:.1f}s')
+            print(f'Slowest: {slowest[0]} - {slowest[1]:.1f}s')
+        "
+    
+    - name: 🔬 Run data quality validation
+      run: |
+        echo "🔬 Running data quality validation..."
+        
+        pixi run python -c "
+        import sys
+        import pandas as pd
+        from pathlib import Path
+        
+        # Add src to path
+        sys.path.insert(0, 'src')
+        from data.dataset import ElectionDataset
+        
+        print('Loading dataset for validation...')
+        dataset = ElectionDataset(
+            election_date='2024-03-10',
+            baseline_timescales=[365],
+            election_timescales=[30, 15],
+            test_cutoff=None
+        )
+        
+        # Data quality checks
+        quality_report = {
+            'poll_data_shape': dataset.polls_train.shape,
+            'result_data_shape': dataset.results_national.shape,
+            'parties': dataset.political_families,
+            'pollsters': len(dataset.unique_pollsters),
+            'elections': len(dataset.unique_elections),
+        }
+        
+        # Coalition validation
+        coalition_status = {
+            'AD_present': 'AD' in dataset.political_families,
+            'PSD_absorbed': 'PSD' not in dataset.political_families,
+            'CDS_absorbed': 'CDS' not in dataset.political_families,
+        }
+        
+        quality_report['coalition_validation'] = coalition_status
+        
+        # Check for data anomalies
+        anomalies = []
+        
+        # Check for missing data
+        missing_polls = dataset.polls_train.isnull().sum().sum()
+        if missing_polls > 0:
+            anomalies.append(f'Missing poll data: {missing_polls} values')
+        
+        # Check for zero vote shares
+        zero_votes = (dataset.polls_train[dataset.political_families] == 0).sum().sum()
+        if zero_votes > len(dataset.political_families) * 2:  # Allow some zeros
+            anomalies.append(f'Excessive zero vote shares: {zero_votes}')
+        
+        quality_report['anomalies'] = anomalies
+        quality_report['data_quality_score'] = 'PASS' if not anomalies else 'WARNING'
+        
+        # Save report
+        import json
+        with open('nightly_results/data_quality_report.json', 'w') as f:
+            json.dump(quality_report, f, indent=2)
+        
+        print(f'Data Quality: {quality_report[\"data_quality_score\"]}')
+        if anomalies:
+            for anomaly in anomalies:
+                print(f'  WARNING: {anomaly}')
+        else:
+            print('  All data quality checks passed')
+        "
+    
+    - name: 📊 Generate comprehensive report
+      run: |
+        echo "📊 Generating comprehensive nightly report..."
+        
+        pixi run python -c "
+        import json
+        import glob
+        from datetime import datetime
+        from pathlib import Path
+        
+        # Collect all report data
+        reports = {}
+        
+        # Load regression report
+        try:
+            with open('nightly_results/comprehensive_regression_report.json') as f:
+                reports['regression'] = json.load(f)
+        except FileNotFoundError:
+            reports['regression'] = {'status': 'not_available'}
+        
+        # Load performance analysis
+        try:
+            with open('nightly_results/performance_analysis.json') as f:
+                reports['performance'] = json.load(f)
+        except FileNotFoundError:
+            reports['performance'] = {'status': 'not_available'}
+        
+        # Load data quality report
+        try:
+            with open('nightly_results/data_quality_report.json') as f:
+                reports['data_quality'] = json.load(f)
+        except FileNotFoundError:
+            reports['data_quality'] = {'status': 'not_available'}
+        
+        # Create summary report
+        summary_report = {
+            'timestamp': datetime.now().isoformat(),
+            'nightly_validation_summary': {
+                'regression_status': reports.get('regression', {}).get('summary', {}).get('health_status', 'Unknown'),
+                'performance_status': 'PASS' if reports.get('performance', {}).get('analysis') else 'SKIP',
+                'data_quality_status': reports.get('data_quality', {}).get('data_quality_score', 'Unknown'),
+            },
+            'detailed_reports': reports
+        }
+        
+        # Overall health assessment
+        statuses = [
+            reports.get('regression', {}).get('summary', {}).get('health_status', '❌ UNKNOWN'),
+            reports.get('data_quality', {}).get('data_quality_score', '❌ UNKNOWN')
+        ]
+        
+        if all('✅' in status or 'PASS' in status for status in statuses):
+            overall_status = '✅ HEALTHY'
+        elif any('❌' in status or 'CRITICAL' in status for status in statuses):
+            overall_status = '❌ CRITICAL'  
+        else:
+            overall_status = '⚠️ WARNING'
+        
+        summary_report['overall_health'] = overall_status
+        
+        with open('nightly_results/nightly_summary_report.json', 'w') as f:
+            json.dump(summary_report, f, indent=2)
+        
+        # Print summary
+        print('🌙 NIGHTLY VALIDATION SUMMARY')
+        print('=' * 50)
+        print(f'Overall Health: {overall_status}')
+        print(f'Regression Status: {summary_report[\"nightly_validation_summary\"][\"regression_status\"]}')
+        print(f'Performance Status: {summary_report[\"nightly_validation_summary\"][\"performance_status\"]}')
+        print(f'Data Quality Status: {summary_report[\"nightly_validation_summary\"][\"data_quality_status\"]}')
+        print('=' * 50)
+        "
+    
+    - name: 📤 Upload comprehensive results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: nightly-validation-results-${{ github.run_number }}
+        path: |
+          nightly_results/
+          comprehensive_outputs/
+        retention-days: 90
+    
+    - name: 🚨 Create issue on failure
+      if: failure()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const title = `🚨 Nightly Validation Failed - ${new Date().toISOString().split('T')[0]}`;
+          const body = `
+          ## 🚨 Nightly Validation Failure Report
+          
+          **Run ID**: ${{ github.run_number }}
+          **Commit**: ${{ github.sha }}
+          **Timestamp**: ${new Date().toISOString()}
+          
+          ### 📋 Failure Details
+          
+          The nightly comprehensive validation failed. Please review the workflow logs and test artifacts.
+          
+          ### 🔍 Investigation Steps
+          
+          1. Check the [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) logs
+          2. Download and review test artifacts
+          3. Compare against recent successful runs
+          4. Check for data quality issues or model regressions
+          
+          ### 📊 Artifacts
+          
+          - Integration test results
+          - Regression detection reports  
+          - Performance benchmarks
+          - Data quality validation
+          
+          This issue will be automatically closed when nightly validation passes again.
+          
+          /label bug priority:high automated
+          `;
+          
+          github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: title,
+            body: body,
+            labels: ['bug', 'automated', 'nightly-validation']
+          });
+    
+    - name: ✅ Close previous failure issues
+      if: success()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          // Close any open nightly validation failure issues
+          const issues = await github.rest.issues.listForRepo({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            labels: 'nightly-validation',
+            state: 'open'
+          });
+          
+          for (const issue of issues.data) {
+            if (issue.title.includes('🚨 Nightly Validation Failed')) {
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                state: 'closed'
+              });
+              
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: `✅ Nightly validation is now passing. Auto-closing this issue.
+                
+                **Resolved in run**: ${{ github.run_number }}
+                **Timestamp**: ${new Date().toISOString()}`
+              });
+            }
+          }
