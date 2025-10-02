@@ -41,6 +41,7 @@ train = "python -m src.main --mode train --model-type dynamic_gp --election-date
 viz = "python -m src.main --mode viz --load-dir outputs/latest"
 diagnose = "python -m src.main --mode diagnose --load-dir outputs/latest"
 predict = "python -m src.main --mode predict --load-dir outputs/latest"
+municipal-train = "python -m src.main --mode municipal-train --draws 1000 --tune 1000"
 
 [environments]
 default = { solve-group = "default" }

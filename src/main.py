@@ -9,6 +9,8 @@ import traceback
 import seaborn as sns
 import numpy as np
 from datetime import datetime, timedelta
+from pathlib import Path
+from typing import List
 import pymc as pm
 import json
 import numbers
@@ -55,6 +57,7 @@ from src.config import DEFAULT_BASELINE_TIMESCALE, DEFAULT_ELECTION_TIMESCALES
 from src.data.dataset import ElectionDataset
 from src.processing.electoral_systems import calculate_dhondt
 from src.processing.seat_prediction import simulate_seat_allocation
+from src.models.municipal_coupling_model import train_coupling_model as train_municipal_coupling_model
 
 def get_model_class(model_type_str: str):
     if model_type_str == "static":
@@ -1348,11 +1351,23 @@ def compare_forecasts_mode(args):
 
 def main(args=None):
     parser = argparse.ArgumentParser(description="Election Model CLI")
+
+    def _parse_years_list(value: str) -> List[int]:
+        return [int(item.strip()) for item in value.split(",") if item.strip()]
     
     # --- Mode Selection ---
     parser.add_argument(
         "--mode",
-        choices=["train", "viz", "visualize-data", "diagnose", "cross-validate", "predict", "compare-forecasts"],
+        choices=[
+            "train",
+            "viz",
+            "visualize-data",
+            "diagnose",
+            "cross-validate",
+            "predict",
+            "compare-forecasts",
+            "municipal-train",
+        ],
         required=True,
         help="Operation mode",
     )
@@ -1499,6 +1514,27 @@ def main(args=None):
     #     "--fast", action="store_true", help="Skip plot generation during cross-validation"
     # ) # Example if needed
 
+    # --- Municipal Coupling Model Arguments ---
+    municipal_group = parser.add_argument_group('Municipal Coupling Model Parameters')
+    municipal_group.add_argument(
+        "--municipal-trace-path",
+        type=str,
+        default="outputs/latest/trace.zarr",
+        help="Path to national trace.zarr providing national_trend_pt for municipal coupling",
+    )
+    municipal_group.add_argument(
+        "--municipal-election-years",
+        type=_parse_years_list,
+        default=_parse_years_list("2009,2013,2017,2021"),
+        help="Comma-separated municipal elections to include (default: 2009,2013,2017,2021)",
+    )
+    municipal_group.add_argument(
+        "--municipal-train-years",
+        type=_parse_years_list,
+        default=None,
+        help="Subset of municipal elections to train on (defaults to all except the latest)",
+    )
+
     args = parser.parse_args(args)
     
     # --- Argument Validation ---
@@ -1513,6 +1549,22 @@ def main(args=None):
         
     if args.load_dir and not os.path.isdir(args.load_dir):
         parser.error(f"--load-dir path '{args.load_dir}' does not exist or is not a directory.")
+
+    if args.mode == "municipal-train":
+        if not args.municipal_election_years:
+            parser.error("--municipal-election-years must include at least one election year")
+        if len(args.municipal_election_years) < 2 and (args.municipal_train_years is None):
+            parser.error("Provide at least two municipal election years or explicitly set --municipal-train-years")
+
+    municipal_train_years = None
+    if args.mode == "municipal-train":
+        if args.municipal_train_years:
+            municipal_train_years = args.municipal_train_years
+        else:
+            sorted_years = sorted(args.municipal_election_years)
+            municipal_train_years = sorted_years[:-1]
+        if not municipal_train_years:
+            parser.error("Derived municipal training years list is empty; specify --municipal-train-years explicitly")
 
     # Clean up output_dir path if it ends with 'latest' but isn't the default
     if args.output_dir.endswith('/latest') and args.output_dir != "outputs/latest":
@@ -1541,6 +1593,29 @@ def main(args=None):
             diagnose_model(args)
         elif args.mode == "compare-forecasts":
             compare_forecasts_mode(args)
+        elif args.mode == "municipal-train":
+            base_output = Path(args.output_dir.rstrip('/'))
+            if args.output_dir.rstrip('/') == "outputs":
+                municipal_output_dir = base_output / "municipal_coupling"
+            else:
+                municipal_output_dir = base_output
+            print(f"Municipal coupling outputs will be stored in: {municipal_output_dir}")
+
+            _, _, evaluation = train_municipal_coupling_model(
+                trace_path=args.municipal_trace_path,
+                election_years=args.municipal_election_years,
+                train_years=municipal_train_years,
+                output_dir=municipal_output_dir,
+                draws=args.draws,
+                tune=args.tune,
+                target_accept=args.target_accept,
+                random_seed=args.seed,
+            )
+
+            print("\nMunicipal coupling holdout results:")
+            print(f"  Holdout year: {evaluation.election_year}")
+            print(f"  Winner accuracy: {evaluation.winner_accuracy:.3%}")
+            print(f"  Vote-share MAE: {evaluation.mean_vote_share_mae:.3%}")
             
         end_main_time = time.time()
         print(f"\n'{args.mode}' mode finished in {end_main_time - start_main_time:.2f} seconds.")
@@ -1548,8 +1623,9 @@ def main(args=None):
         # Send success notification if requested
         if args.notify:
             try:
+                model_descriptor = getattr(args, "model_type", "municipal_coupling")
                 requests.post("https://ntfy.sh/bc-estimador",
-                    data=f"{args.mode.capitalize()} ({args.model_type}) completed successfully".encode(encoding='utf-8'))
+                    data=f"{args.mode.capitalize()} ({model_descriptor}) completed successfully".encode(encoding='utf-8'))
             except Exception as notify_err:
                 print(f"Failed to send success notification: {notify_err}")
                 
@@ -1564,8 +1640,9 @@ def main(args=None):
         # Send error notification if requested
         if args.notify:
             try:
+                model_descriptor = getattr(args, "model_type", "municipal_coupling")
                 requests.post("https://ntfy.sh/bc-estimador",
-                    data=f"Error in {args.mode} mode ({args.model_type}): {e}".encode(encoding='utf-8'))
+                    data=f"Error in {args.mode} mode ({model_descriptor}): {e}".encode(encoding='utf-8'))
             except Exception as notify_err:
                 print(f"Failed to send error notification: {notify_err}")
                 

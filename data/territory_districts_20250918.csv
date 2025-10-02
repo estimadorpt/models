@@ -1,0 +1,21 @@
+territory_code_full,territory_code_numeric,territory_code_ine,name,level,level_code,parent_code,parent_name,region
+LOCAL-010000,010000,01,Aveiro,distrito,4,,,Centro
+LOCAL-400000,400000,40,Açores,distrito,4,,,Região Autónoma dos Açores
+LOCAL-020000,020000,02,Beja,distrito,4,,,Alentejo
+LOCAL-030000,030000,03,Braga,distrito,4,,,Norte
+LOCAL-040000,040000,04,Bragança,distrito,4,,,Norte
+LOCAL-050000,050000,05,Castelo Branco,distrito,4,,,Centro
+LOCAL-060000,060000,06,Coimbra,distrito,4,,,Centro
+LOCAL-080000,080000,08,Faro,distrito,4,,,Algarve
+LOCAL-090000,090000,09,Guarda,distrito,4,,,Centro
+LOCAL-100000,100000,10,Leiria,distrito,4,,,Centro
+LOCAL-110000,110000,11,Lisboa,distrito,4,,,Área Metropolitana de Lisboa
+LOCAL-300000,300000,30,Madeira,distrito,4,,,Região Autónoma da Madeira
+LOCAL-120000,120000,12,Portalegre,distrito,4,,,Alentejo
+LOCAL-130000,130000,13,Porto,distrito,4,,,Norte
+LOCAL-140000,140000,14,Santarém,distrito,4,,,Área Metropolitana de Lisboa
+LOCAL-150000,150000,15,Setúbal,distrito,4,,,Área Metropolitana de Lisboa
+LOCAL-160000,160000,16,Viana do Castelo,distrito,4,,,Norte
+LOCAL-170000,170000,17,Vila Real,distrito,4,,,Norte
+LOCAL-180000,180000,18,Viseu,distrito,4,,,Centro
+LOCAL-070000,070000,07,Évora,distrito,4,,,Alentejo
