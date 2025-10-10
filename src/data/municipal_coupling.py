@@ -22,6 +22,8 @@ import pandas as pd
 import unicodedata
 
 from src.config import DATA_DIR
+from src.data.municipal_polls import load_erc_municipal_polls
+from src.data.municipal_common import COALITION_SPLIT_WEIGHTS
 
 
 # Parties used throughout the coupling model
@@ -54,6 +56,7 @@ MUNICIPAL_ELECTION_DATES: Mapping[int, str] = {
     2013: "2013-09-29",
     2017: "2017-10-01",
     2021: "2021-09-26",
+    2025: "2025-10-12",
 }
 
 # Heuristic coalition weights to disaggregate AD into PSD/CDS components
@@ -187,31 +190,40 @@ def _map_votes_to_target(
             parties_seen.add("OTHER")
             continue
 
-        if set(party_tokens) == {"PSD", "CDS"}:
+        mapped_tokens = [TOKEN_TO_PARTY.get(token, token) for token in party_tokens]
+        mapped_tokens = [tok if tok in party_totals else "OTHER" for tok in mapped_tokens]
+
+        coalition_key = tuple(sorted(mapped_tokens))
+        if coalition_key in COALITION_SPLIT_WEIGHTS:
+            weights = COALITION_SPLIT_WEIGHTS[coalition_key]
+            total_weight = sum(weights.get(party, 0.0) for party in mapped_tokens)
+            if total_weight <= 0:
+                total_weight = len(mapped_tokens)
+                normalized = {party: 1 / total_weight for party in mapped_tokens}
+            else:
+                normalized = {party: weights.get(party, 0.0) / total_weight for party in mapped_tokens}
+            for party in mapped_tokens:
+                portion = float(value) * normalized.get(party, 0.0)
+                party_totals[party] += portion
+                if portion > 0:
+                    parties_seen.add(party)
+            continue
+
+        if set(mapped_tokens) == {"PSD", "CDS-PP"}:
             party_totals["PSD"] += float(value) * AD_DISAGGREGATION_WEIGHTS.get("PSD", 0.5)
             party_totals["CDS-PP"] += float(value) * AD_DISAGGREGATION_WEIGHTS.get("CDS-PP", 0.5)
             parties_seen.update({"PSD", "CDS-PP"})
             continue
 
-        if len(party_tokens) == 1:
-            token = party_tokens[0]
-            if token == "OTHER":
-                party_totals["OTHER"] += float(value)
-                parties_seen.add("OTHER")
-            else:
-                party_key = TOKEN_TO_PARTY[token]
-                party_totals[party_key] += float(value)
-                parties_seen.add(party_key)
+        if len(mapped_tokens) == 1:
+            party_key = mapped_tokens[0]
+            party_totals[party_key] += float(value)
+            parties_seen.add(party_key)
         else:
-            split_value = float(value) / len(party_tokens)
-            for token in party_tokens:
-                if token == "OTHER":
-                    party_totals["OTHER"] += split_value
-                    parties_seen.add("OTHER")
-                else:
-                    party_key = TOKEN_TO_PARTY[token]
-                    party_totals[party_key] += split_value
-                    parties_seen.add(party_key)
+            split_value = float(value) / len(mapped_tokens)
+            for party_key in mapped_tokens:
+                party_totals[party_key] += split_value
+                parties_seen.add(party_key)
 
     return party_totals, parties_seen
 
@@ -309,6 +321,71 @@ def _load_coalition_mappings(
     return component_mappings, local_flags, incumbent_mappings
 
 
+def _build_future_results_placeholder(
+    year: int,
+    parties: Sequence[str],
+    data_dir: str,
+    mapping_for_year: Mapping[str, Dict[str, List[str]]],
+    local_flags_for_year: Mapping[str, bool],
+    incumbent_for_year: Mapping[str, Sequence[str]],
+) -> Tuple[List[Dict[str, object]], Dict[str, Dict[str, object]]]:
+    """Construct synthetic rows for a future election without official results."""
+
+    coalition_path = Path(data_dir) / f"municipal_coalitions_{year}.parquet"
+    if not coalition_path.exists():
+        raise FileNotFoundError(
+            f"Missing municipal coalition data for {year}; required for forecasting ({coalition_path})."
+        )
+
+    coalition_df = pd.read_parquet(coalition_path)
+    if coalition_df.empty:
+        raise ValueError(
+            f"Municipal coalition data for {year} is empty; cannot build forecast placeholders."
+        )
+
+    placeholder_records: List[Dict[str, object]] = []
+    metadata_entries: Dict[str, Dict[str, object]] = {}
+
+    for muni_code, muni_df in coalition_df.groupby("municipality_code"):
+        muni_code = str(muni_code).strip()
+        if not muni_code:
+            continue
+
+        municipality_name = str(muni_df["municipality"].iloc[0]).strip()
+        metadata_entries.setdefault(
+            muni_code,
+            {
+                "municipality_code": muni_code,
+                "municipality_name": municipality_name,
+            },
+        )
+
+        tokens_seen: Set[str] = set()
+        for tokens in mapping_for_year.get(muni_code, {}).values():
+            tokens_seen.update(tokens)
+
+        incumbents = set(incumbent_for_year.get(muni_code, []))
+
+        row: Dict[str, object] = {
+            "election_year": year,
+            "municipality_code": muni_code,
+            "municipality_name": municipality_name,
+            "total_votes": 0.0,
+        }
+
+        for party in parties:
+            row[f"votes_{party}"] = 0.0
+            row[f"available_{party}"] = 1 if party in tokens_seen else 0
+            row[f"incumbent_{party}"] = 1 if party in incumbents else 0
+
+        row["local_list_flag"] = 1 if local_flags_for_year.get(muni_code, False) else 0
+        row["incumbent_local_flag"] = 1 if "LOCAL_INC" in incumbents else 0
+
+        placeholder_records.append(row)
+
+    return placeholder_records, metadata_entries
+
+
 def load_municipal_results(
     election_years: Sequence[int],
     parties: Sequence[str] = TARGET_PARTIES,
@@ -323,14 +400,28 @@ def load_municipal_results(
     metadata_rows: Dict[str, Dict[str, object]] = {}
 
     for year in election_years:
-        parquet_path = f"{data_dir}/autarquicas_{year}.parquet"
-        df = pd.read_parquet(parquet_path)
-
-        vote_columns = [col for col in df.columns if col not in METADATA_COLUMNS]
-
+        parquet_path = Path(data_dir) / f"autarquicas_{year}.parquet"
         mapping_for_year = coalition_mappings.get(int(year), {})
         local_flags_for_year = local_flags_map.get(int(year), {})
         incumbent_for_year = incumbent_map.get(int(year), {})
+
+        try:
+            df = pd.read_parquet(parquet_path)
+        except FileNotFoundError:
+            placeholder_records, placeholder_metadata = _build_future_results_placeholder(
+                int(year),
+                parties,
+                data_dir,
+                mapping_for_year,
+                local_flags_for_year,
+                incumbent_for_year,
+            )
+            records.extend(placeholder_records)
+            for muni_code, meta in placeholder_metadata.items():
+                metadata_rows.setdefault(muni_code, meta)
+            continue
+
+        vote_columns = [col for col in df.columns if col not in METADATA_COLUMNS]
 
         for column in vote_columns:
             if column not in COLUMN_CACHE:
@@ -720,26 +811,102 @@ def build_municipal_coupling_dataset(
     election_years: Sequence[int],
     trace_path: str,
     train_years: Sequence[int] | None = None,
+    poll_paths: Sequence[str] | None = None,
     data_dir: str | None = None,
 ) -> MunicipalCouplingDataset:
     """High-level helper that assembles all inputs required by the PyMC model."""
-    results, metadata = load_municipal_results(election_years, data_dir=data_dir)
+    coalition_aliases, _, _ = _load_coalition_mappings(election_years, data_dir or DATA_DIR)
+    results_only, metadata = load_municipal_results(election_years, data_dir=data_dir)
+    results_only = results_only.copy()
+    results_only["is_poll"] = 0
+
+    polls_df = pd.DataFrame()
+    if poll_paths:
+        polls_df = load_erc_municipal_polls(
+            poll_paths,
+            election_dates=MUNICIPAL_ELECTION_DATES,
+            coalition_aliases=coalition_aliases,
+        )
+
+    combined_results = results_only
+    if not polls_df.empty:
+        polls_df = polls_df.copy()
+        polls_df["is_poll"] = 1
+        polls_df["municipality_code"] = polls_df["municipality_code"].astype(str)
+        polls_df["municipality_name"] = polls_df["municipality_name"].fillna("")
+        if "district_name" in polls_df.columns:
+            polls_df["district_name"] = polls_df["district_name"].fillna("UNKNOWN")
+        else:
+            polls_df["district_name"] = "UNKNOWN"
+        if "region" in polls_df.columns:
+            polls_df["region"] = polls_df["region"].fillna("UNKNOWN")
+        else:
+            polls_df["region"] = "UNKNOWN"
+        polls_df["total_votes"] = pd.to_numeric(polls_df["total_votes"], errors="coerce").fillna(0.0)
+        polls_df["election_year"] = pd.to_numeric(polls_df["election_year"], errors="coerce").astype(int)
+
+        required_columns = set(results_only.columns)
+        poll_only_columns = set(polls_df.columns)
+        for column in required_columns - poll_only_columns:
+            if column.startswith("votes_") or column.startswith("available_") or column.startswith("new_"):
+                polls_df[column] = 0
+            elif column.startswith("incumbent_"):
+                polls_df[column] = 0
+            elif column in {
+                "total_votes",
+                "winner_share",
+                "prev_winner_share",
+                "incumbent_prev_share",
+            }:
+                polls_df[column] = polls_df.get(column, 0.0)
+            elif column in {"winner_party", "prev_winner_party"}:
+                polls_df[column] = None
+            else:
+                polls_df[column] = None
+
+        extra_poll_columns = poll_only_columns - required_columns
+        for column in extra_poll_columns:
+            combined_results[column] = None
+
+        combined_results = pd.concat(
+            [combined_results, polls_df[combined_results.columns]],
+            ignore_index=True,
+            sort=False,
+        )
+        combined_results = combined_results.sort_values(
+            ["municipality_code", "election_year", "is_poll"],
+            kind="mergesort",
+        ).reset_index(drop=True)
+        combined_results = _augment_with_previous_results(combined_results, TARGET_PARTIES)
+    else:
+        combined_results = results_only
 
     if train_years is None:
         train_years = [year for year in election_years if year != max(election_years)]
 
-    baseline_clr = compute_baseline_clr(results, training_years=train_years)
+    baseline_source = combined_results[combined_results["is_poll"] == 0]
+    baseline_clr = compute_baseline_clr(baseline_source, training_years=train_years)
     national_clr = load_national_signal_clr(trace_path, election_years)
     district_offsets = load_district_offsets(trace_path)
     donor_weights = _estimate_local_donor_weights(
-        results,
+        baseline_source,
         metadata,
         baseline_clr,
         TARGET_PARTIES,
     )
 
+    availability_cols = [f"available_{party}" for party in TARGET_PARTIES]
+    combined_results[availability_cols] = combined_results.groupby(
+        ["municipality_code", "election_year"]
+    )[availability_cols].transform("max")
+
+    combined_results = combined_results.sort_values(
+        ["election_year", "municipality_code", "is_poll"],
+        kind="mergesort",
+    ).reset_index(drop=True)
+
     return MunicipalCouplingDataset(
-        results=results,
+        results=combined_results,
         metadata=metadata,
         baseline_clr=baseline_clr,
         national_clr=national_clr,

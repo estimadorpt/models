@@ -1534,6 +1534,12 @@ def main(args=None):
         default=None,
         help="Subset of municipal elections to train on (defaults to all except the latest)",
     )
+    municipal_group.add_argument(
+        "--municipal-poll-files",
+        nargs="+",
+        default=None,
+        help="Paths to ERC municipal poll parquet files to integrate into the municipal model",
+    )
 
     args = parser.parse_args(args)
     
@@ -1610,6 +1616,7 @@ def main(args=None):
                 tune=args.tune,
                 target_accept=args.target_accept,
                 random_seed=args.seed,
+                poll_paths=args.municipal_poll_files,
             )
 
             print("\nMunicipal coupling holdout results:")

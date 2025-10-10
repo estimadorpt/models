@@ -44,6 +44,9 @@ class MunicipalCouplingModel:
         train_years: Sequence[int],
         test_year: Optional[int] = None,
         concentration_prior_rate: float = 1.0,
+        concentration_polls_prior: Tuple[float, float] = (2.0, 0.01),
+        concentration_results_prior: Tuple[float, float] = (100.0, 0.1),
+        use_separate_poll_concentration: bool = True,
     ) -> None:
         self.dataset = dataset
         self.train_years = list(train_years)
@@ -52,6 +55,9 @@ class MunicipalCouplingModel:
         self.party_vote_columns = [f"votes_{party}" for party in self.parties]
         self.party_clr_columns = [f"clr_{party}" for party in self.parties]
         self.concentration_prior_rate = concentration_prior_rate
+        self.concentration_polls_prior = concentration_polls_prior
+        self.concentration_results_prior = concentration_results_prior
+        self.use_separate_poll_concentration = use_separate_poll_concentration
         self.local_inc_index = self.parties.index("LOCAL_INC")
         self.other_index = self.parties.index("OTHER")
         self.available_cols = [f"available_{party}" for party in self.parties]
@@ -60,8 +66,16 @@ class MunicipalCouplingModel:
         self.municipality_to_idx: Dict[str, int] = {
             code: idx for idx, code in enumerate(self.municipality_codes)
         }
+        poll_years = (
+            dataset.results.loc[dataset.results.get("is_poll", 0) == 1, "election_year"]
+            .dropna()
+            .astype(int)
+            .unique()
+        )
+        poll_years = sorted(poll_years.tolist())
+        self.observation_years: List[int] = sorted(set(self.train_years) | set(poll_years))
         self.election_to_idx: Dict[int, int] = {
-            year: idx for idx, year in enumerate(self.train_years)
+            year: idx for idx, year in enumerate(self.observation_years)
         }
 
         metadata_indexed = dataset.metadata.set_index("municipality_code")
@@ -89,7 +103,7 @@ class MunicipalCouplingModel:
         self.baseline_matrix = (
             dataset.baseline_clr.loc[self.municipality_codes, self.party_clr_columns].to_numpy()
         )
-        self.national_matrix = self._prepare_national_matrix(self.train_years)
+        self.national_matrix = self._prepare_national_matrix(self.observation_years)
 
         exp_baseline = np.exp(self.baseline_matrix)
         self.baseline_probs = exp_baseline / exp_baseline.sum(axis=1, keepdims=True)
@@ -104,8 +118,13 @@ class MunicipalCouplingModel:
             availability=availability_obs_matrix,
         )
 
-
         self.availability_observations = availability_obs_matrix
+
+        # Store is_poll indicator for separate concentration parameters
+        if "is_poll" in self.training_data.columns:
+            self.is_poll_obs = self.training_data["is_poll"].to_numpy(dtype=float)
+        else:
+            self.is_poll_obs = np.zeros(len(self.training_data), dtype=float)
         if "new_LOCAL_INC" in self.training_data.columns:
             self.new_local_obs = self.training_data["new_LOCAL_INC"].to_numpy(dtype=float)
         else:
@@ -144,8 +163,12 @@ class MunicipalCouplingModel:
             self.incumbent_prev_share_obs = np.zeros(len(self.training_data), dtype=float)
 
         target_year = max(self.dataset.results["election_year"].unique())
+        target_selector = self.dataset.results["election_year"] == target_year
+        if "is_poll" in self.dataset.results.columns:
+            target_selector &= self.dataset.results["is_poll"] == 0
         target_frame = (
-            self.dataset.results[self.dataset.results["election_year"] == target_year]
+            self.dataset.results[target_selector]
+            .drop_duplicates(subset="municipality_code", keep="first")
             .set_index("municipality_code")
         )
         self.availability_target = (
@@ -211,16 +234,18 @@ class MunicipalCouplingModel:
             "municipalities": self.municipality_codes,
             "parties": self.parties,
             "observations": np.arange(len(self.training_data)),
-            "elections": self.train_years,
+            "elections": self.observation_years,
         }
 
         self.model: Optional[pm.Model] = None
         self.idata: Optional[az.InferenceData] = None
 
     def _prepare_training_frame(self) -> pd.DataFrame:
-        train_results = self.dataset.results[
-            self.dataset.results["election_year"].isin(self.train_years)
-        ].copy()
+        base_mask = self.dataset.results["election_year"].isin(self.train_years)
+        poll_mask = self.dataset.results.get("is_poll", 0) == 1
+        train_results = self.dataset.results[base_mask | poll_mask].copy()
+        train_results["total_votes"] = pd.to_numeric(train_results["total_votes"], errors="coerce").fillna(0.0)
+        train_results = train_results[train_results["total_votes"] > 0].copy()
         train_results["municipality_idx"] = train_results["municipality_code"].map(
             self.municipality_to_idx
         )
@@ -416,9 +441,33 @@ class MunicipalCouplingModel:
             local_incumbent_prev_weight = pm.LogNormal(
                 "local_incumbent_prev_weight", mu=np.log(5.0), sigma=0.7
             )
-            concentration = pm.Exponential(
-                "concentration", lam=self.concentration_prior_rate
-            )
+
+            # Separate concentration parameters for polls vs election results
+            if self.use_separate_poll_concentration:
+                concentration_polls = pm.Gamma(
+                    "concentration_polls",
+                    alpha=self.concentration_polls_prior[0],
+                    beta=self.concentration_polls_prior[1]
+                )
+                concentration_results = pm.Gamma(
+                    "concentration_results",
+                    alpha=self.concentration_results_prior[0],
+                    beta=self.concentration_results_prior[1]
+                )
+                is_poll_data = pm.Data(
+                    "is_poll",
+                    self.is_poll_obs,
+                    dims="observations"
+                )
+                # Blend concentrations based on is_poll indicator
+                concentration = (
+                    is_poll_data * concentration_polls
+                    + (1.0 - is_poll_data) * concentration_results
+                )
+            else:
+                concentration = pm.Exponential(
+                    "concentration", lam=self.concentration_prior_rate
+                )
 
             coupling_raw = coupling[municipality_idx_data]
             reduction = (
@@ -690,9 +739,25 @@ def train_coupling_model(
     tune: int = 1000,
     target_accept: float = 0.9,
     random_seed: Optional[int] = None,
+    poll_paths: Optional[Sequence[str]] = None,
+    concentration_polls_prior: Tuple[float, float] = (2.0, 0.01),
+    concentration_results_prior: Tuple[float, float] = (100.0, 0.1),
+    use_separate_poll_concentration: bool = True,
 ) -> Tuple[MunicipalCouplingModel, az.InferenceData, CouplingEvaluation]:
-    dataset = build_municipal_coupling_dataset(election_years, trace_path, train_years)
-    model = MunicipalCouplingModel(dataset, train_years=train_years, test_year=max(election_years))
+    dataset = build_municipal_coupling_dataset(
+        election_years,
+        trace_path,
+        train_years,
+        poll_paths=poll_paths,
+    )
+    model = MunicipalCouplingModel(
+        dataset,
+        train_years=train_years,
+        test_year=max(election_years),
+        concentration_polls_prior=concentration_polls_prior,
+        concentration_results_prior=concentration_results_prior,
+        use_separate_poll_concentration=use_separate_poll_concentration,
+    )
     idata = model.fit(draws=draws, tune=tune, target_accept=target_accept, random_seed=random_seed)
 
     holdout_year = max(election_years)
