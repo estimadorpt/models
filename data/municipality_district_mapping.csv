@@ -1,0 +1,309 @@
+municipality_code,municipality_name,district_name,region
+LOCAL-010200,Albergaria-a-Velha,Aveiro,Centro
+LOCAL-010300,Anadia,Aveiro,Centro
+LOCAL-010400,Arouca,Aveiro,Centro
+LOCAL-010500,Aveiro,Aveiro,Centro
+LOCAL-010600,Castelo de Paiva,Aveiro,Centro
+LOCAL-010700,Espinho,Aveiro,Centro
+LOCAL-010800,Estarreja,Aveiro,Centro
+LOCAL-011100,Mealhada,Aveiro,Centro
+LOCAL-011200,Murtosa,Aveiro,Centro
+LOCAL-011300,Oliveira de Azeméis,Aveiro,Centro
+LOCAL-011400,Oliveira do Bairro,Aveiro,Centro
+LOCAL-011500,Ovar,Aveiro,Centro
+LOCAL-010900,Santa Maria da Feira,Aveiro,Centro
+LOCAL-011700,Sever do Vouga,Aveiro,Centro
+LOCAL-011600,São João da Madeira,Aveiro,Centro
+LOCAL-011800,Vagos,Aveiro,Centro
+LOCAL-011900,Vale de Cambra,Aveiro,Centro
+LOCAL-010100,Águeda,Aveiro,Centro
+LOCAL-011000,Ílhavo,Aveiro,Centro
+LOCAL-430100,Angra do Heroísmo,Açores,Região Autónoma dos Açores
+LOCAL-450100,Calheta,Açores,Região Autónoma dos Açores
+LOCAL-490100,Corvo,Açores,Região Autónoma dos Açores
+LOCAL-470100,Horta,Açores,Região Autónoma dos Açores
+LOCAL-420100,Lagoa,Açores,Região Autónoma dos Açores
+LOCAL-480100,Lajes das Flores,Açores,Região Autónoma dos Açores
+LOCAL-460100,Lajes do Pico,Açores,Região Autónoma dos Açores
+LOCAL-460200,Madalena,Açores,Região Autónoma dos Açores
+LOCAL-420200,Nordeste,Açores,Região Autónoma dos Açores
+LOCAL-420300,Ponta Delgada,Açores,Região Autónoma dos Açores
+LOCAL-420400,Povoação,Açores,Região Autónoma dos Açores
+LOCAL-420500,Ribeira Grande,Açores,Região Autónoma dos Açores
+LOCAL-440100,Santa Cruz da Graciosa,Açores,Região Autónoma dos Açores
+LOCAL-480200,Santa Cruz das Flores,Açores,Região Autónoma dos Açores
+LOCAL-460300,São Roque do Pico,Açores,Região Autónoma dos Açores
+LOCAL-450200,Velas,Açores,Região Autónoma dos Açores
+LOCAL-420600,Vila Franca do Campo,Açores,Região Autónoma dos Açores
+LOCAL-430200,Vila da Praia da Vitória,Açores,Região Autónoma dos Açores
+LOCAL-410100,Vila do Porto,Açores,Região Autónoma dos Açores
+LOCAL-020100,Aljustrel,Beja,Alentejo
+LOCAL-020200,Almodôvar,Beja,Alentejo
+LOCAL-020300,Alvito,Beja,Alentejo
+LOCAL-020400,Barrancos,Beja,Alentejo
+LOCAL-020500,Beja,Beja,Alentejo
+LOCAL-020600,Castro Verde,Beja,Alentejo
+LOCAL-020700,Cuba,Beja,Alentejo
+LOCAL-020800,Ferreira do Alentejo,Beja,Alentejo
+LOCAL-021000,Moura,Beja,Alentejo
+LOCAL-020900,Mértola,Beja,Alentejo
+LOCAL-021100,Odemira,Beja,Alentejo
+LOCAL-021200,Ourique,Beja,Alentejo
+LOCAL-021300,Serpa,Beja,Alentejo
+LOCAL-021400,Vidigueira,Beja,Alentejo
+LOCAL-030100,Amares,Braga,Norte
+LOCAL-030200,Barcelos,Braga,Norte
+LOCAL-030300,Braga,Braga,Norte
+LOCAL-030400,Cabeceiras de Basto,Braga,Norte
+LOCAL-030500,Celorico de Basto,Braga,Norte
+LOCAL-030600,Esposende,Braga,Norte
+LOCAL-030700,Fafe,Braga,Norte
+LOCAL-030800,Guimarães,Braga,Norte
+LOCAL-030900,Póvoa de Lanhoso,Braga,Norte
+LOCAL-031000,Terras de Bouro,Braga,Norte
+LOCAL-031100,Vieira do Minho,Braga,Norte
+LOCAL-031200,Vila Nova de Famalicão,Braga,Norte
+LOCAL-031300,Vila Verde,Braga,Norte
+LOCAL-031400,Vizela,Braga,Norte
+LOCAL-040100,Alfândega da Fé,Bragança,Norte
+LOCAL-040200,Bragança,Bragança,Norte
+LOCAL-040300,Carrazeda de Ansiães,Bragança,Norte
+LOCAL-040400,Freixo de Espada à Cinta,Bragança,Norte
+LOCAL-040500,Macedo de Cavaleiros,Bragança,Norte
+LOCAL-040600,Miranda do Douro,Bragança,Norte
+LOCAL-040700,Mirandela,Bragança,Norte
+LOCAL-040800,Mogadouro,Bragança,Norte
+LOCAL-040900,Torre de Moncorvo,Bragança,Norte
+LOCAL-041000,Vila Flor,Bragança,Norte
+LOCAL-041100,Vimioso,Bragança,Norte
+LOCAL-041200,Vinhais,Bragança,Norte
+LOCAL-050100,Belmonte,Castelo Branco,Centro
+LOCAL-050200,Castelo Branco,Castelo Branco,Centro
+LOCAL-050300,Covilhã,Castelo Branco,Centro
+LOCAL-050400,Fundão,Castelo Branco,Centro
+LOCAL-050500,Idanha-a-Nova,Castelo Branco,Centro
+LOCAL-050600,Oleiros,Castelo Branco,Centro
+LOCAL-050700,Penamacor,Castelo Branco,Centro
+LOCAL-050800,Proença-a-Nova,Castelo Branco,Centro
+LOCAL-050900,Sertã,Castelo Branco,Centro
+LOCAL-051100,Vila Velha de Ródão,Castelo Branco,Centro
+LOCAL-051000,Vila de Rei,Castelo Branco,Centro
+LOCAL-060100,Arganil,Coimbra,Centro
+LOCAL-060200,Cantanhede,Coimbra,Centro
+LOCAL-060300,Coimbra,Coimbra,Centro
+LOCAL-060400,Condeixa-a-Nova,Coimbra,Centro
+LOCAL-060500,Figueira da Foz,Coimbra,Centro
+LOCAL-060600,Góis,Coimbra,Centro
+LOCAL-060700,Lousã,Coimbra,Centro
+LOCAL-060800,Mira,Coimbra,Centro
+LOCAL-060900,Miranda do Corvo,Coimbra,Centro
+LOCAL-061000,Montemor-o-Velho,Coimbra,Centro
+LOCAL-061100,Oliveira do Hospital,Coimbra,Centro
+LOCAL-061200,Pampilhosa da Serra,Coimbra,Centro
+LOCAL-061300,Penacova,Coimbra,Centro
+LOCAL-061400,Penela,Coimbra,Centro
+LOCAL-061500,Soure,Coimbra,Centro
+LOCAL-061600,Tábua,Coimbra,Centro
+LOCAL-061700,Vila Nova de Poiares,Coimbra,Centro
+LOCAL-080100,Albufeira,Faro,Algarve
+LOCAL-080200,Alcoutim,Faro,Algarve
+LOCAL-080300,Aljezur,Faro,Algarve
+LOCAL-080400,Castro Marim,Faro,Algarve
+LOCAL-080500,Faro,Faro,Algarve
+LOCAL-080600,Lagoa,Faro,Algarve
+LOCAL-080700,Lagos,Faro,Algarve
+LOCAL-080800,Loulé,Faro,Algarve
+LOCAL-080900,Monchique,Faro,Algarve
+LOCAL-081000,Olhão,Faro,Algarve
+LOCAL-081100,Portimão,Faro,Algarve
+LOCAL-081300,Silves,Faro,Algarve
+LOCAL-081200,São Brás de Alportel,Faro,Algarve
+LOCAL-081400,Tavira,Faro,Algarve
+LOCAL-081600,Vila Real de Santo António,Faro,Algarve
+LOCAL-081500,Vila do Bispo,Faro,Algarve
+LOCAL-090100,Aguiar da Beira,Guarda,Centro
+LOCAL-090200,Almeida,Guarda,Centro
+LOCAL-090300,Celorico da Beira,Guarda,Centro
+LOCAL-090400,Figueira de Castelo Rodrigo,Guarda,Centro
+LOCAL-090500,Fornos de Algodres,Guarda,Centro
+LOCAL-090600,Gouveia,Guarda,Centro
+LOCAL-090700,Guarda,Guarda,Centro
+LOCAL-090800,Manteigas,Guarda,Centro
+LOCAL-090900,Mêda,Guarda,Centro
+LOCAL-091000,Pinhel,Guarda,Centro
+LOCAL-091100,Sabugal,Guarda,Centro
+LOCAL-091200,Seia,Guarda,Centro
+LOCAL-091300,Trancoso,Guarda,Centro
+LOCAL-091400,Vila Nova de Foz Côa,Guarda,Centro
+LOCAL-100100,Alcobaça,Leiria,Centro
+LOCAL-100200,Alvaiázere,Leiria,Centro
+LOCAL-100300,Ansião,Leiria,Centro
+LOCAL-100400,Batalha,Leiria,Centro
+LOCAL-100500,Bombarral,Leiria,Centro
+LOCAL-100600,Caldas da Rainha,Leiria,Centro
+LOCAL-100700,Castanheira de Pêra,Leiria,Centro
+LOCAL-100800,Figueiró dos Vinhos,Leiria,Centro
+LOCAL-100900,Leiria,Leiria,Centro
+LOCAL-101000,Marinha Grande,Leiria,Centro
+LOCAL-101100,Nazaré,Leiria,Centro
+LOCAL-101300,Pedrógão Grande,Leiria,Centro
+LOCAL-101400,Peniche,Leiria,Centro
+LOCAL-101500,Pombal,Leiria,Centro
+LOCAL-101600,Porto de Mós,Leiria,Centro
+LOCAL-101200,Óbidos,Leiria,Centro
+LOCAL-110100,Alenquer,Lisboa,Área Metropolitana de Lisboa
+LOCAL-111500,Amadora,Lisboa,Área Metropolitana de Lisboa
+LOCAL-110200,Arruda dos Vinhos,Lisboa,Área Metropolitana de Lisboa
+LOCAL-110300,Azambuja,Lisboa,Área Metropolitana de Lisboa
+LOCAL-110400,Cadaval,Lisboa,Área Metropolitana de Lisboa
+LOCAL-110500,Cascais,Lisboa,Área Metropolitana de Lisboa
+LOCAL-110600,Lisboa,Lisboa,Área Metropolitana de Lisboa
+LOCAL-110700,Loures,Lisboa,Área Metropolitana de Lisboa
+LOCAL-110800,Lourinhã,Lisboa,Área Metropolitana de Lisboa
+LOCAL-110900,Mafra,Lisboa,Área Metropolitana de Lisboa
+LOCAL-111600,Odivelas,Lisboa,Área Metropolitana de Lisboa
+LOCAL-111000,Oeiras,Lisboa,Área Metropolitana de Lisboa
+LOCAL-111100,Sintra,Lisboa,Área Metropolitana de Lisboa
+LOCAL-111200,Sobral de Monte Agraço,Lisboa,Área Metropolitana de Lisboa
+LOCAL-111300,Torres Vedras,Lisboa,Área Metropolitana de Lisboa
+LOCAL-111400,Vila Franca de Xira,Lisboa,Área Metropolitana de Lisboa
+LOCAL-310100,Calheta,Madeira,Região Autónoma da Madeira
+LOCAL-310200,Câmara de Lobos,Madeira,Região Autónoma da Madeira
+LOCAL-310300,Funchal,Madeira,Região Autónoma da Madeira
+LOCAL-310400,Machico,Madeira,Região Autónoma da Madeira
+LOCAL-310500,Ponta do Sol,Madeira,Região Autónoma da Madeira
+LOCAL-310600,Porto Moniz,Madeira,Região Autónoma da Madeira
+LOCAL-320100,Porto Santo,Madeira,Região Autónoma da Madeira
+LOCAL-310700,Ribeira Brava,Madeira,Região Autónoma da Madeira
+LOCAL-310800,Santa Cruz,Madeira,Região Autónoma da Madeira
+LOCAL-310900,Santana,Madeira,Região Autónoma da Madeira
+LOCAL-311000,São Vicente,Madeira,Região Autónoma da Madeira
+LOCAL-120100,Alter do Chão,Portalegre,Alentejo
+LOCAL-120200,Arronches,Portalegre,Alentejo
+LOCAL-120300,Avis,Portalegre,Alentejo
+LOCAL-120400,Campo Maior,Portalegre,Alentejo
+LOCAL-120500,Castelo de Vide,Portalegre,Alentejo
+LOCAL-120600,Crato,Portalegre,Alentejo
+LOCAL-120700,Elvas,Portalegre,Alentejo
+LOCAL-120800,Fronteira,Portalegre,Alentejo
+LOCAL-120900,Gavião,Portalegre,Alentejo
+LOCAL-121000,Marvão,Portalegre,Alentejo
+LOCAL-121100,Monforte,Portalegre,Alentejo
+LOCAL-121200,Nisa,Portalegre,Alentejo
+LOCAL-121300,Ponte de Sor,Portalegre,Alentejo
+LOCAL-121400,Portalegre,Portalegre,Alentejo
+LOCAL-121500,Sousel,Portalegre,Alentejo
+LOCAL-130100,Amarante,Porto,Norte
+LOCAL-130200,Baião,Porto,Norte
+LOCAL-130300,Felgueiras,Porto,Norte
+LOCAL-130400,Gondomar,Porto,Norte
+LOCAL-130500,Lousada,Porto,Norte
+LOCAL-130600,Maia,Porto,Norte
+LOCAL-130700,Marco de Canaveses,Porto,Norte
+LOCAL-130800,Matosinhos,Porto,Norte
+LOCAL-131000,Paredes,Porto,Norte
+LOCAL-130900,Paços de Ferreira,Porto,Norte
+LOCAL-131100,Penafiel,Porto,Norte
+LOCAL-131200,Porto,Porto,Norte
+LOCAL-131300,Póvoa de Varzim,Porto,Norte
+LOCAL-131400,Santo Tirso,Porto,Norte
+LOCAL-131800,Trofa,Porto,Norte
+LOCAL-131500,Valongo,Porto,Norte
+LOCAL-131700,Vila Nova de Gaia,Porto,Norte
+LOCAL-131600,Vila do Conde,Porto,Norte
+LOCAL-140100,Abrantes,Santarém,Área Metropolitana de Lisboa
+LOCAL-140200,Alcanena,Santarém,Área Metropolitana de Lisboa
+LOCAL-140300,Almeirim,Santarém,Área Metropolitana de Lisboa
+LOCAL-140400,Alpiarça,Santarém,Área Metropolitana de Lisboa
+LOCAL-140500,Benavente,Santarém,Área Metropolitana de Lisboa
+LOCAL-140600,Cartaxo,Santarém,Área Metropolitana de Lisboa
+LOCAL-140700,Chamusca,Santarém,Área Metropolitana de Lisboa
+LOCAL-140800,Constância,Santarém,Área Metropolitana de Lisboa
+LOCAL-140900,Coruche,Santarém,Área Metropolitana de Lisboa
+LOCAL-141000,Entroncamento,Santarém,Área Metropolitana de Lisboa
+LOCAL-141100,Ferreira do Zêzere,Santarém,Área Metropolitana de Lisboa
+LOCAL-141200,Golegã,Santarém,Área Metropolitana de Lisboa
+LOCAL-141300,Mação,Santarém,Área Metropolitana de Lisboa
+LOCAL-142100,Ourém,Santarém,Área Metropolitana de Lisboa
+LOCAL-141400,Rio Maior,Santarém,Área Metropolitana de Lisboa
+LOCAL-141500,Salvaterra de Magos,Santarém,Área Metropolitana de Lisboa
+LOCAL-141600,Santarém,Santarém,Área Metropolitana de Lisboa
+LOCAL-141700,Sardoal,Santarém,Área Metropolitana de Lisboa
+LOCAL-141800,Tomar,Santarém,Área Metropolitana de Lisboa
+LOCAL-141900,Torres Novas,Santarém,Área Metropolitana de Lisboa
+LOCAL-142000,Vila Nova da Barquinha,Santarém,Área Metropolitana de Lisboa
+LOCAL-150200,Alcochete,Setúbal,Área Metropolitana de Lisboa
+LOCAL-150100,Alcácer do Sal,Setúbal,Área Metropolitana de Lisboa
+LOCAL-150300,Almada,Setúbal,Área Metropolitana de Lisboa
+LOCAL-150400,Barreiro,Setúbal,Área Metropolitana de Lisboa
+LOCAL-150500,Grândola,Setúbal,Área Metropolitana de Lisboa
+LOCAL-150600,Moita,Setúbal,Área Metropolitana de Lisboa
+LOCAL-150700,Montijo,Setúbal,Área Metropolitana de Lisboa
+LOCAL-150800,Palmela,Setúbal,Área Metropolitana de Lisboa
+LOCAL-150900,Santiago do Cacém,Setúbal,Área Metropolitana de Lisboa
+LOCAL-151000,Seixal,Setúbal,Área Metropolitana de Lisboa
+LOCAL-151100,Sesimbra,Setúbal,Área Metropolitana de Lisboa
+LOCAL-151200,Setúbal,Setúbal,Área Metropolitana de Lisboa
+LOCAL-151300,Sines,Setúbal,Área Metropolitana de Lisboa
+LOCAL-160100,Arcos de Valdevez,Viana do Castelo,Norte
+LOCAL-160200,Caminha,Viana do Castelo,Norte
+LOCAL-160300,Melgaço,Viana do Castelo,Norte
+LOCAL-160400,Monção,Viana do Castelo,Norte
+LOCAL-160500,Paredes de Coura,Viana do Castelo,Norte
+LOCAL-160600,Ponte da Barca,Viana do Castelo,Norte
+LOCAL-160700,Ponte de Lima,Viana do Castelo,Norte
+LOCAL-160800,Valença,Viana do Castelo,Norte
+LOCAL-160900,Viana do Castelo,Viana do Castelo,Norte
+LOCAL-161000,Vila Nova de Cerveira,Viana do Castelo,Norte
+LOCAL-170100,Alijó,Vila Real,Norte
+LOCAL-170200,Boticas,Vila Real,Norte
+LOCAL-170300,Chaves,Vila Real,Norte
+LOCAL-170400,Mesão Frio,Vila Real,Norte
+LOCAL-170500,Mondim de Basto,Vila Real,Norte
+LOCAL-170600,Montalegre,Vila Real,Norte
+LOCAL-170700,Murça,Vila Real,Norte
+LOCAL-170800,Peso da Régua,Vila Real,Norte
+LOCAL-170900,Ribeira de Pena,Vila Real,Norte
+LOCAL-171000,Sabrosa,Vila Real,Norte
+LOCAL-171100,Santa Marta de Penaguião,Vila Real,Norte
+LOCAL-171200,Valpaços,Vila Real,Norte
+LOCAL-171300,Vila Pouca de Aguiar,Vila Real,Norte
+LOCAL-171400,Vila Real,Vila Real,Norte
+LOCAL-180100,Armamar,Viseu,Centro
+LOCAL-180200,Carregal do Sal,Viseu,Centro
+LOCAL-180300,Castro Daire,Viseu,Centro
+LOCAL-180400,Cinfães,Viseu,Centro
+LOCAL-180500,Lamego,Viseu,Centro
+LOCAL-180600,Mangualde,Viseu,Centro
+LOCAL-180700,Moimenta da Beira,Viseu,Centro
+LOCAL-180800,Mortágua,Viseu,Centro
+LOCAL-180900,Nelas,Viseu,Centro
+LOCAL-181000,Oliveira de Frades,Viseu,Centro
+LOCAL-181100,Penalva do Castelo,Viseu,Centro
+LOCAL-181200,Penedono,Viseu,Centro
+LOCAL-181300,Resende,Viseu,Centro
+LOCAL-181400,Santa Comba Dão,Viseu,Centro
+LOCAL-181800,Sernancelhe,Viseu,Centro
+LOCAL-181700,Sátão,Viseu,Centro
+LOCAL-181500,São João da Pesqueira,Viseu,Centro
+LOCAL-181600,São Pedro do Sul,Viseu,Centro
+LOCAL-181900,Tabuaço,Viseu,Centro
+LOCAL-182000,Tarouca,Viseu,Centro
+LOCAL-182100,Tondela,Viseu,Centro
+LOCAL-182200,Vila Nova de Paiva,Viseu,Centro
+LOCAL-182300,Viseu,Viseu,Centro
+LOCAL-182400,Vouzela,Viseu,Centro
+LOCAL-070100,Alandroal,Évora,Alentejo
+LOCAL-070200,Arraiolos,Évora,Alentejo
+LOCAL-070300,Borba,Évora,Alentejo
+LOCAL-070400,Estremoz,Évora,Alentejo
+LOCAL-070600,Montemor-o-Novo,Évora,Alentejo
+LOCAL-070700,Mora,Évora,Alentejo
+LOCAL-070800,Mourão,Évora,Alentejo
+LOCAL-070900,Portel,Évora,Alentejo
+LOCAL-071000,Redondo,Évora,Alentejo
+LOCAL-071100,Reguengos de Monsaraz,Évora,Alentejo
+LOCAL-071200,Vendas Novas,Évora,Alentejo
+LOCAL-071300,Viana do Alentejo,Évora,Alentejo
+LOCAL-071400,Vila Viçosa,Évora,Alentejo
+LOCAL-070500,Évora,Évora,Alentejo
