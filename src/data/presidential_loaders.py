@@ -64,9 +64,23 @@ def load_presidential_polls(
 
     df = pd.read_parquet(file_path)
 
+    # Check if data is in long format (one row per candidate per poll)
+    # Long format has: candidate_name, vote_intention_pct (or similar)
+    # Wide format has: separate columns for each candidate
+    if 'candidate_name' in df.columns or any('candidate' in col.lower() for col in df.columns):
+        print("Detected long format data - pivoting to wide format...")
+        df = _pivot_long_to_wide(df, candidates)
+
     # Standardize column names (case-insensitive matching)
     column_mapping = _create_column_mapping(df.columns, candidates)
     df = df.rename(columns=column_mapping)
+
+    # If 'date' column is missing but we have fieldwork dates, use fieldwork_end as date
+    if 'date' not in df.columns:
+        if 'fieldwork_end' in df.columns:
+            df['date'] = df['fieldwork_end']
+        elif 'fieldwork_start' in df.columns:
+            df['date'] = df['fieldwork_start']
 
     # Ensure required columns exist
     required_cols = ['date', 'pollster', 'sample_size']
@@ -122,6 +136,140 @@ def load_presidential_polls(
     print(f"Candidates found: {present_candidates}")
 
     return df
+
+
+def _pivot_long_to_wide(df: pd.DataFrame, candidates: List[str]) -> pd.DataFrame:
+    """
+    Convert long format polling data to wide format.
+
+    Long format: one row per candidate per poll
+        Columns: poll_id, pollster, fieldwork_start, fieldwork_end, candidate_name, vote_intention_pct, ...
+
+    Wide format: one row per poll
+        Columns: poll_id, pollster, fieldwork_start, fieldwork_end, [candidate1], [candidate2], ...
+
+    Args:
+        df: DataFrame in long format
+        candidates: List of expected candidate names
+
+    Returns:
+        DataFrame in wide format
+    """
+    # Identify the candidate name column
+    candidate_col = None
+    for col in df.columns:
+        if col in ['candidate_name', 'candidate', 'nome_candidato']:
+            candidate_col = col
+            break
+
+    if candidate_col is None:
+        raise ValueError("Could not identify candidate name column in long format data")
+
+    # Identify the vote percentage column
+    vote_col = None
+    for col in df.columns:
+        if col in ['vote_intention_pct', 'vote_pct', 'percentage', 'percent', 'intencao_voto']:
+            vote_col = col
+            break
+
+    if vote_col is None:
+        raise ValueError("Could not identify vote percentage column in long format data")
+
+    # Create a mapping from full candidate names to short names
+    candidate_name_mapping = _create_candidate_name_mapping(df[candidate_col].unique(), candidates)
+
+    # Map candidate names to standardized short names
+    df[candidate_col] = df[candidate_col].map(candidate_name_mapping)
+
+    # Identify columns that define a unique poll (grouping columns)
+    # Use poll_id as the primary key if available, otherwise use a combination of key fields
+    if 'poll_id' in df.columns:
+        # Group by poll_id and take first value for other metadata columns
+        # This handles cases where some metadata might vary slightly within a poll
+        metadata_cols = [col for col in df.columns
+                        if col not in [candidate_col, vote_col, 'party_affiliation', 'poll_id']]
+
+        # Pivot using only poll_id as index
+        df_wide = df.pivot_table(
+            index='poll_id',
+            columns=candidate_col,
+            values=vote_col,
+            aggfunc='first'  # Use first value if duplicates
+        ).reset_index()
+
+        # Add back the metadata by taking the first occurrence for each poll_id
+        metadata_df = df.groupby('poll_id')[metadata_cols].first().reset_index()
+        df_wide = df_wide.merge(metadata_df, on='poll_id', how='left')
+
+    else:
+        # Fallback: use key columns that should define a unique poll
+        id_cols = ['pollster', 'fieldwork_start', 'fieldwork_end', 'sample_size']
+        id_cols = [col for col in id_cols if col in df.columns]
+
+        if not id_cols:
+            raise ValueError("Cannot identify unique poll identifier columns")
+
+        df_wide = df.pivot_table(
+            index=id_cols,
+            columns=candidate_col,
+            values=vote_col,
+            aggfunc='first'
+        ).reset_index()
+
+    # Flatten column names
+    df_wide.columns.name = None
+
+    return df_wide
+
+
+def _create_candidate_name_mapping(actual_names: np.ndarray, expected_names: List[str]) -> Dict[str, str]:
+    """
+    Create mapping from actual candidate names to expected standardized names.
+
+    For example:
+        "Henrique Gouveia e Melo" -> "Gouveia e Melo"
+        "Luís Marques Mendes" -> "Marques Mendes"
+
+    Args:
+        actual_names: Array of actual candidate names from the data
+        expected_names: List of expected standardized candidate names
+
+    Returns:
+        Dictionary mapping actual names to standardized names
+    """
+    mapping = {}
+
+    for actual in actual_names:
+        actual_lower = actual.lower().strip()
+        matched = False
+
+        # Try exact match first
+        for expected in expected_names:
+            if expected.lower() == actual_lower:
+                mapping[actual] = expected
+                matched = True
+                break
+
+        # Try partial match (expected name is substring of actual name)
+        if not matched:
+            for expected in expected_names:
+                expected_lower = expected.lower()
+                # Check if all words in expected are in actual
+                expected_words = expected_lower.split()
+                if all(word in actual_lower for word in expected_words):
+                    mapping[actual] = expected
+                    matched = True
+                    break
+
+        # If still not matched, map to "Others"
+        if not matched:
+            if 'Others' in expected_names:
+                mapping[actual] = 'Others'
+            else:
+                # Keep original name if no "Others" category
+                mapping[actual] = actual
+
+    return mapping
 
 
 def _create_column_mapping(columns: pd.Index, candidates: List[str]) -> Dict[str, str]:

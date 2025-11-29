@@ -97,16 +97,17 @@ class PresidentialElectionModel:
         candidates = self.dataset.candidates
 
         # Create calendar time coordinate from poll dates
-        unique_dates = pd.to_datetime(polls['date']).unique()
+        unique_dates = pd.DatetimeIndex(pd.to_datetime(polls['date']).unique())
         # Add election day if not present
         election_date = self.dataset.election_date_dt
         if election_date not in unique_dates:
-            unique_dates = np.append(unique_dates, election_date)
-        unique_dates = pd.to_datetime(np.sort(unique_dates))
+            unique_dates = unique_dates.append(pd.DatetimeIndex([election_date]))
+        # Sort dates
+        unique_dates = unique_dates.sort_values()
 
         # Convert to numeric (days from first date)
         min_date = unique_dates.min()
-        self.calendar_time_numeric = (unique_dates - min_date).days.values
+        self.calendar_time_numeric = (unique_dates - min_date).days.astype(float).values
 
         # Map poll dates to calendar time indices
         date_to_idx = {date: i for i, date in enumerate(unique_dates)}
