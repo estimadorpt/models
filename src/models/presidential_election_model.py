@@ -50,7 +50,7 @@ class PresidentialElectionModel:
         dataset: PresidentialElectionDataset,
         campaign_gp_lengthscale: float = 21.0,
         campaign_gp_amplitude_scale: float = 0.08,  # Reduced from 0.15 - less volatile swings
-        house_effect_sd_scale: float = 0.03,  # Reduced from 0.05 - tighter house effects
+        house_effect_sd_scale: float = 0.05,  # Back to 0.05 - let data inform house effects
         gp_kernel: str = 'Matern52',
         hsgp_m: int = 30,
         hsgp_c: float = 1.5,
@@ -147,9 +147,6 @@ class PresidentialElectionModel:
         observed_counts = polls[candidate_cols].to_numpy()
         observed_n = polls['sample_size'].to_numpy()
 
-        # Get undecided proportions (from raw data before multinomial conversion)
-        undecided_props = self.dataset.undecided_proportions
-
         data_containers = {
             'pollster_idx': pm.Data('pollster_idx', self.pollster_idx, dims='observations'),
             'calendar_time_poll_idx': pm.Data('calendar_time_poll_idx',
@@ -157,8 +154,6 @@ class PresidentialElectionModel:
             'observed_N': pm.Data('observed_N', observed_n, dims='observations'),
             'observed_counts': pm.Data('observed_counts', observed_counts,
                                        dims=('observations', 'candidates')),
-            'undecided_proportions': pm.Data('undecided_proportions', undecided_props,
-                                             dims='observations'),
         }
 
         self.data_containers = data_containers
@@ -284,15 +279,15 @@ class PresidentialElectionModel:
             )
 
             # ============================================================
-            #            4. UNDECIDED VOTER ALLOCATION
+            #            4. UNDECIDED VOTER ALLOCATION (REMOVED)
             # ============================================================
-            # Model how undecided voters allocate to candidates
-            # Prior: equal allocation (uninformative)
-            undecided_allocation = pm.Dirichlet(
-                'undecided_allocation',
-                a=np.ones(n_candidates),  # Equal prior weights
-                dims='candidates'
-            )
+            # NOTE: We previously modeled undecided allocation but removed it because:
+            # - We have no data on how undecideds actually break
+            # - It was an unidentified parameter absorbing all residuals
+            # - It was masking house effects and prior misspecification
+            #
+            # The model now forecasts DECLARED voting intention only.
+            # Undecided voters are a separate source of uncertainty not modeled here.
 
             # ============================================================
             #           5. LATENT SUPPORT TRAJECTORY
@@ -321,15 +316,10 @@ class PresidentialElectionModel:
             house_at_polls = house_effects[data_containers['pollster_idx'], :]
             latent_polls = latent_at_polls + house_at_polls
 
-            # Apply softmax to get declared support probabilities
-            declared_probs = pm.math.softmax(latent_polls, axis=1)
-
-            # Adjust for undecided allocation
-            # effective_prob = (1 - undecided) * declared + undecided * allocation
-            undecided_share = data_containers['undecided_proportions'][:, None]
+            # Apply softmax to get poll probabilities (declared voting intention)
             poll_probs = pm.Deterministic(
                 'poll_probs',
-                (1 - undecided_share) * declared_probs + undecided_share * undecided_allocation[None, :],
+                pm.math.softmax(latent_polls, axis=1),
                 dims=('observations', 'candidates')
             )
 
