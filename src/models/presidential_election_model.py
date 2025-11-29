@@ -49,8 +49,8 @@ class PresidentialElectionModel:
         self,
         dataset: PresidentialElectionDataset,
         campaign_gp_lengthscale: float = 21.0,
-        campaign_gp_amplitude_scale: float = 0.15,
-        house_effect_sd_scale: float = 0.05,
+        campaign_gp_amplitude_scale: float = 0.08,  # Reduced from 0.15 - less volatile swings
+        house_effect_sd_scale: float = 0.03,  # Reduced from 0.05 - tighter house effects
         gp_kernel: str = 'Matern52',
         hsgp_m: int = 30,
         hsgp_c: float = 1.5,
@@ -187,14 +187,18 @@ class PresidentialElectionModel:
             # ============================================================
             # Prior means for each candidate (in logit-like space for softmax)
             # Transform prior_means (which are on 0-1 scale) to log-odds scale
-            # Using log(p/(1-p)) but adjusted for multi-candidate setting
             prior_logits = np.log(np.clip(prior_means, 0.01, 0.99))
             prior_logits = prior_logits - prior_logits.mean()  # Center
+
+            # Transform prior SDs to logit scale (approximate via delta method)
+            # For p near 0.2, derivative of logit is ~1/(p(1-p)) ≈ 6
+            # So SD in logit space ≈ SD_prob * 6, but we want tighter priors
+            prior_logit_sds = prior_sds * 3  # More conservative scaling
 
             candidate_baseline = pm.Normal(
                 'candidate_baseline',
                 mu=prior_logits,
-                sigma=prior_sds * 5,  # Scale up for logit space
+                sigma=prior_logit_sds,
                 dims='candidates'
             )
 

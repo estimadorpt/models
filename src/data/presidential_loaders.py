@@ -393,16 +393,20 @@ def load_presidential_results(
     return df
 
 
-# Candidate prior configuration based on party affiliations
+# Candidate prior configuration for 2026 presidential election
+# NOTE: These are NOT based on legislative vote shares because:
+# - Presidential elections have different dynamics (candidate-centered)
+# - Independent candidates like Gouveia e Melo draw cross-party support
+# - Priors are informed by early polling patterns with modest uncertainty
 CANDIDATE_PARTY_PRIORS = {
-    'Marques Mendes': {'party': 'AD', 'prior_mean': 0.25, 'prior_sd': 0.10},
-    'António José Seguro': {'party': 'PS', 'prior_mean': 0.22, 'prior_sd': 0.10},
-    'André Ventura': {'party': 'CH', 'prior_mean': 0.18, 'prior_sd': 0.10},
-    'Cotrim Figueiredo': {'party': 'IL', 'prior_mean': 0.08, 'prior_sd': 0.05},
-    'Catarina Martins': {'party': 'BE', 'prior_mean': 0.04, 'prior_sd': 0.03},
-    'António Filipe': {'party': 'CDU', 'prior_mean': 0.03, 'prior_sd': 0.02},
-    'Gouveia e Melo': {'party': None, 'prior_mean': 0.15, 'prior_sd': 0.10},  # Independent
-    'Others': {'party': None, 'prior_mean': 0.05, 'prior_sd': 0.03},
+    'Gouveia e Melo': {'party': None, 'prior_mean': 0.25, 'prior_sd': 0.05},   # Strong independent, polls 20-30%
+    'Marques Mendes': {'party': 'AD', 'prior_mean': 0.20, 'prior_sd': 0.05},   # PSD-backed but won't get full AD vote
+    'André Ventura': {'party': 'CH', 'prior_mean': 0.15, 'prior_sd': 0.04},    # CH base is more loyal
+    'António José Seguro': {'party': 'PS', 'prior_mean': 0.12, 'prior_sd': 0.04},  # PS-backed, weaker than party
+    'Cotrim Figueiredo': {'party': 'IL', 'prior_mean': 0.08, 'prior_sd': 0.03},    # IL base + some crossover
+    'Catarina Martins': {'party': 'BE', 'prior_mean': 0.04, 'prior_sd': 0.02},
+    'António Filipe': {'party': 'CDU', 'prior_mean': 0.03, 'prior_sd': 0.01},
+    'Others': {'party': None, 'prior_mean': 0.03, 'prior_sd': 0.02},
 }
 
 
