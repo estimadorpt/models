@@ -201,11 +201,11 @@ class PresidentialElectionModel:
             #              2. CAMPAIGN DYNAMICS GP
             # ============================================================
             # Single GP capturing time-varying dynamics during campaign
-            campaign_gp_lengthscale = pm.LogNormal(
-                'campaign_gp_lengthscale',
-                mu=np.log(self.campaign_gp_lengthscale),
-                sigma=0.5
-            )
+            # Fix lengthscale at 28 days - with only 31 polls we can't estimate it reliably
+            # (posterior was [24-115 days] - too uncertain to be useful)
+            # Following DDHQ: "If too few polls to estimate time trends, use flatter approach"
+            campaign_gp_lengthscale = 28.0  # Fixed at ~1 month
+
             campaign_gp_amplitude = pm.HalfNormal(
                 'campaign_gp_amplitude',
                 sigma=self.campaign_gp_amplitude_scale
@@ -327,7 +327,14 @@ class PresidentialElectionModel:
             #                    7. LIKELIHOOD
             # ============================================================
             # Concentration parameter for Dirichlet-Multinomial
-            concentration = pm.Gamma('concentration', alpha=2, beta=0.01)
+            # Scale by undecided rate: higher undecided → lower concentration → wider intervals
+            # This follows FiveThirtyEight's approach of using undecideds as uncertainty
+            base_concentration = pm.Gamma('base_concentration', alpha=2, beta=0.01)
+            undecided_scaling = 1 + self.dataset.mean_undecided  # e.g., 1.35 for 35% undecided
+            concentration = pm.Deterministic(
+                'concentration',
+                base_concentration / undecided_scaling
+            )
 
             pm.DirichletMultinomial(
                 'poll_likelihood',

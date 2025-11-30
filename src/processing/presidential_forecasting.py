@@ -320,7 +320,11 @@ def generate_forecast_report(
         f"Election Date: {election_date}",
         "=" * 60,
         "",
-        "PROJECTED VOTE SHARES",
+        "NOTE: This forecast models DECLARED voting intention only.",
+        "Undecided voters (~35%) represent additional uncertainty",
+        "that cannot be reliably modeled without external data.",
+        "",
+        "PROJECTED VOTE SHARES (among decided voters)",
         "-" * 40,
     ]
 

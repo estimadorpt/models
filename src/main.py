@@ -1382,8 +1382,10 @@ def presidential_train(args):
 
         # Generate and display forecast
         print("\n" + "="*60)
-        print("FORECAST SUMMARY")
+        print("FORECAST SUMMARY (Declared Voting Intention)")
         print("="*60)
+        print("Note: ~35% undecided voters not modeled (irreducible uncertainty)")
+        print("-"*60)
         forecast_df = model.get_forecast()
         for _, row in forecast_df.iterrows():
             print(f"  {row['candidate']:25s} {row['mean']*100:5.1f}% "
