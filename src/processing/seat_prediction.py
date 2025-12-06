@@ -22,6 +22,14 @@ try:
     from src.config import DATA_DIR
     from src.data.dataset import ElectionDataset # Needed for type hinting and accessing dataset properties
     from src.visualization.plots import plot_seat_distribution_histograms # Needed if plotting is moved here
+    # Import shared export utilities
+    from src.processing.dashboard_exports import (
+        get_contestant_color,
+        PARTY_COLORS,
+        save_json,
+        format_float,
+        format_date,
+    )
 except ImportError as e:
     print(f"Error importing dependencies in seat_prediction.py: {e}")
     # Re-raise or handle appropriately depending on desired behavior

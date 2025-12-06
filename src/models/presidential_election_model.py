@@ -48,12 +48,14 @@ class PresidentialElectionModel:
     def __init__(
         self,
         dataset: PresidentialElectionDataset,
-        campaign_gp_lengthscale: float = 21.0,
-        campaign_gp_amplitude_scale: float = 0.08,  # Reduced from 0.15 - less volatile swings
-        house_effect_sd_scale: float = 0.05,  # Back to 0.05 - let data inform house effects
+        campaign_gp_lengthscale: float = 5.0,  # 5 days - more reactive to recent polls
+        campaign_gp_amplitude_scale: float = 0.50,  # Increased from 0.40 - allows more variation
+        house_effect_sd_scale: float = 0.04,  # Allow ~4pp house effects (we see 8pp in data)
         gp_kernel: str = 'Matern52',
         hsgp_m: int = 30,
         hsgp_c: float = 1.5,
+        use_parliamentary_house_priors: bool = True,
+        parliamentary_effects_path: Optional[str] = None,
     ):
         """
         Initialize the presidential election model.
@@ -66,6 +68,8 @@ class PresidentialElectionModel:
             gp_kernel: Kernel type for GP ('Matern52', 'Matern32', or 'ExpQuad')
             hsgp_m: Number of basis functions for HSGP approximation
             hsgp_c: Expansion factor for HSGP
+            use_parliamentary_house_priors: Whether to use parliamentary house effects as priors
+            parliamentary_effects_path: Path to parliamentary house effects JSON
         """
         self.dataset = dataset
         self.campaign_gp_lengthscale = campaign_gp_lengthscale
@@ -74,6 +78,8 @@ class PresidentialElectionModel:
         self.gp_kernel = gp_kernel
         self.hsgp_m = hsgp_m
         self.hsgp_c = hsgp_c
+        self.use_parliamentary_house_priors = use_parliamentary_house_priors
+        self.parliamentary_effects_path = parliamentary_effects_path
 
         # Model components (set during build)
         self.model: Optional[pm.Model] = None
@@ -86,6 +92,10 @@ class PresidentialElectionModel:
         self.calendar_time_poll_idx: Optional[np.ndarray] = None
         self.calendar_time_numeric: Optional[np.ndarray] = None
 
+        # House effect priors (loaded if using parliamentary priors)
+        self.house_effect_prior_means: Optional[np.ndarray] = None
+        self.house_effect_prior_sds: Optional[np.ndarray] = None
+
     def _build_coords(self) -> Tuple[np.ndarray, np.ndarray, Dict]:
         """
         Build coordinates and index mappings for the PyMC model.
@@ -96,32 +106,31 @@ class PresidentialElectionModel:
         polls = self.dataset.polls_train
         candidates = self.dataset.candidates
 
-        # Create calendar time coordinate from poll dates
-        unique_dates = pd.DatetimeIndex(pd.to_datetime(polls['date']).unique())
-        # Add election day if not present
+        # Create DENSE calendar time grid from first poll to election day
+        poll_dates_raw = pd.to_datetime(polls['date'])
+        min_date = poll_dates_raw.min()
         election_date = self.dataset.election_date_dt
-        if election_date not in unique_dates:
-            unique_dates = unique_dates.append(pd.DatetimeIndex([election_date]))
-        # Sort dates
-        unique_dates = unique_dates.sort_values()
-
+        
+        # Create daily grid from first poll to election day
+        calendar_dates = pd.date_range(start=min_date, end=election_date, freq='D')
+        
         # Convert to numeric (days from first date)
-        min_date = unique_dates.min()
-        self.calendar_time_numeric = (unique_dates - min_date).days.astype(float).values
+        self.calendar_time_numeric = (calendar_dates - min_date).days.astype(float).values
 
-        # Map poll dates to calendar time indices
-        date_to_idx = {date: i for i, date in enumerate(unique_dates)}
-        poll_dates = pd.to_datetime(polls['date'])
-        self.calendar_time_poll_idx = poll_dates.map(date_to_idx).values.astype(int)
+        # Map poll dates to calendar time indices (find closest date in grid)
+        date_to_idx = {date: i for i, date in enumerate(calendar_dates)}
+        self.calendar_time_poll_idx = poll_dates_raw.map(
+            lambda d: date_to_idx.get(d, np.argmin(np.abs(calendar_dates - d)))
+        ).values.astype(int)
 
         # Factorize pollsters
         self.pollster_idx, pollster_names = polls['pollster'].factorize(sort=True)
 
-        # Build coordinates dict
+        # Build coordinates dict with dense calendar grid
         COORDS = {
             'observations': polls.index,
             'candidates': candidates,
-            'calendar_time': unique_dates.strftime('%Y-%m-%d'),
+            'calendar_time': calendar_dates.strftime('%Y-%m-%d'),
             'pollsters': pollster_names,
         }
 
@@ -174,6 +183,30 @@ class PresidentialElectionModel:
         prior_means = self.dataset.get_prior_means()
         prior_sds = self.dataset.get_prior_sds()
 
+        # Load parliamentary house effects if requested
+        if self.use_parliamentary_house_priors:
+            from src.data.presidential_loaders import (
+                load_parliamentary_house_effects,
+                build_house_effect_prior_matrix
+            )
+
+            print("\n=== Loading Parliamentary House Effects ===")
+            parliamentary_effects = load_parliamentary_house_effects(self.parliamentary_effects_path)
+
+            if parliamentary_effects:
+                pollster_names = coords['pollsters']
+                self.house_effect_prior_means, self.house_effect_prior_sds = \
+                    build_house_effect_prior_matrix(
+                        pollster_names,
+                        candidates,
+                        parliamentary_effects
+                    )
+                print(f"Loaded house effects for {len(parliamentary_effects)} pollsters")
+                print(f"Prior matrix shape: {self.house_effect_prior_means.shape}")
+            else:
+                print("Warning: No parliamentary effects loaded, falling back to uninformed priors")
+                self.use_parliamentary_house_priors = False
+
         with pm.Model(coords=coords) as model:
             data_containers = self._build_data_containers()
 
@@ -185,10 +218,13 @@ class PresidentialElectionModel:
             prior_logits = np.log(np.clip(prior_means, 0.01, 0.99))
             prior_logits = prior_logits - prior_logits.mean()  # Center
 
-            # Transform prior SDs to logit scale (approximate via delta method)
-            # For p near 0.2, derivative of logit is ~1/(p(1-p)) ≈ 6
-            # So SD in logit space ≈ SD_prob * 6, but we want tighter priors
-            prior_logit_sds = prior_sds * 3  # More conservative scaling
+            # Transform prior SDs to logit scale using delta method
+            # For logit(p), derivative is 1/(p(1-p))
+            # Delta method: SD_logit ≈ SD_p / (p * (1-p))
+            prior_logit_sds = np.array([
+                s / (p * (1 - p)) for p, s in zip(prior_means, prior_sds)
+            ])
+            prior_logit_sds = np.maximum(prior_logit_sds, 0.2)  # Floor to prevent numerical issues
 
             candidate_baseline = pm.Normal(
                 'candidate_baseline',
@@ -201,15 +237,11 @@ class PresidentialElectionModel:
             #              2. CAMPAIGN DYNAMICS GP
             # ============================================================
             # Single GP capturing time-varying dynamics during campaign
-            # Fix lengthscale at 28 days - with only 31 polls we can't estimate it reliably
-            # (posterior was [24-115 days] - too uncertain to be useful)
-            # Following DDHQ: "If too few polls to estimate time trends, use flatter approach"
-            campaign_gp_lengthscale = 28.0  # Fixed at ~1 month
+            # Use configured lengthscale - shorter = more reactive to poll changes
+            campaign_gp_lengthscale = self.campaign_gp_lengthscale
 
-            campaign_gp_amplitude = pm.HalfNormal(
-                'campaign_gp_amplitude',
-                sigma=self.campaign_gp_amplitude_scale
-            )
+            # GP amplitude - use configured scale to capture trends
+            campaign_gp_amplitude = self.campaign_gp_amplitude_scale
 
             # Build covariance function
             if self.gp_kernel == 'Matern52':
@@ -259,24 +291,46 @@ class PresidentialElectionModel:
             )
 
             # ============================================================
-            #                   3. HOUSE EFFECTS
+            #          3. HOUSE EFFECTS (WITH PARLIAMENTARY PRIORS)
             # ============================================================
-            house_effects_sd = pm.HalfNormal(
-                'house_effects_sd',
-                sigma=self.house_effect_sd_scale,
-                dims='candidates'
-            )
-            # Zero-sum across pollsters for each candidate
-            house_effects_raw = pm.ZeroSumNormal(
-                'house_effects_raw',
-                sigma=1.0,
-                dims=('pollsters', 'candidates')
-            )
-            house_effects = pm.Deterministic(
-                'house_effects',
-                house_effects_raw * house_effects_sd[None, :],
-                dims=('pollsters', 'candidates')
-            )
+            if self.use_parliamentary_house_priors and self.house_effect_prior_means is not None:
+                # Use parliamentary house effects as informative priors
+                print("Using parliamentary house effects as informative priors")
+
+                # Informative priors centered on parliamentary effects
+                house_effects_raw = pm.Normal(
+                    'house_effects_raw',
+                    mu=self.house_effect_prior_means,
+                    sigma=self.house_effect_prior_sds,
+                    dims=('pollsters', 'candidates')
+                )
+
+                # Apply zero-sum constraint for identifiability using pytensor
+                pollster_means = pt.mean(house_effects_raw, axis=0)
+                house_effects = pm.Deterministic(
+                    'house_effects',
+                    house_effects_raw - pollster_means[None, :],
+                    dims=('pollsters', 'candidates')
+                )
+            else:
+                # Fallback to uninformed priors (original implementation)
+                print("Using uninformed house effect priors")
+
+                house_effects_sd = pm.HalfNormal(
+                    'house_effects_sd',
+                    sigma=self.house_effect_sd_scale,
+                    dims='candidates'
+                )
+                house_effects_raw = pm.ZeroSumNormal(
+                    'house_effects_raw',
+                    sigma=1.0,
+                    dims=('pollsters', 'candidates')
+                )
+                house_effects = pm.Deterministic(
+                    'house_effects',
+                    house_effects_raw * house_effects_sd[None, :],
+                    dims=('pollsters', 'candidates')
+                )
 
             # ============================================================
             #            4. UNDECIDED VOTER ALLOCATION (REMOVED)
@@ -327,14 +381,14 @@ class PresidentialElectionModel:
             #                    7. LIKELIHOOD
             # ============================================================
             # Concentration parameter for Dirichlet-Multinomial
-            # Scale by undecided rate: higher undecided → lower concentration → wider intervals
-            # This follows FiveThirtyEight's approach of using undecideds as uncertainty
-            base_concentration = pm.Gamma('base_concentration', alpha=2, beta=0.01)
+            # Lower concentration = more poll-to-poll variation allowed = GP can be more flexible
+            # High concentration (200) = tight fit to each poll = flat average
+            # Low concentration (10-50) = looser fit = allows trends to emerge
+            # Use fixed low concentration to force GP to capture poll variation  
+            # Low = polls are rough estimates, GP can be flexible
+            # High = polls are precise, GP constrained to fit each one
             undecided_scaling = 1 + self.dataset.mean_undecided  # e.g., 1.35 for 35% undecided
-            concentration = pm.Deterministic(
-                'concentration',
-                base_concentration / undecided_scaling
-            )
+            concentration = 30.0 / undecided_scaling  # Moderate - allow smoothing through house effects
 
             pm.DirichletMultinomial(
                 'poll_likelihood',

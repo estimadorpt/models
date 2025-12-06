@@ -21,6 +21,7 @@ DEFAULT_CANDIDATES_2026 = [
     'Cotrim Figueiredo',
     'Catarina Martins',
     'António Filipe',
+    'Jorge Pinto',  # Livre candidate
     'Others'
 ]
 
@@ -406,7 +407,33 @@ CANDIDATE_PARTY_PRIORS = {
     'Cotrim Figueiredo': {'party': 'IL', 'prior_mean': 0.08, 'prior_sd': 0.03},
     'Catarina Martins': {'party': 'BE', 'prior_mean': 0.04, 'prior_sd': 0.02},
     'António Filipe': {'party': 'CDU', 'prior_mean': 0.03, 'prior_sd': 0.01},
+    'Jorge Pinto': {'party': 'L', 'prior_mean': 0.01, 'prior_sd': 0.01},       # Livre candidate
     'Others': {'party': None, 'prior_mean': 0.03, 'prior_sd': 0.02},
+}
+
+
+# Mapping from presidential poll pollster names to parliamentary house effects pollster names
+POLLSTER_NAME_MAP = {
+    'Pitagórica': 'Pitagorica',
+    'ICS': 'ICS/ISCTE/GFK Metris',
+    'CESOP-UCP': 'CESOP-U.Católica',
+    'Aximage': 'Aximage',
+    'Intercampus': 'Intercampus',
+    'Consulmark2': 'Consulmark2',
+}
+
+
+# Mapping from candidates to parties for borrowing house effects
+CANDIDATE_TO_PARTY = {
+    'Gouveia e Melo': None,       # Independent - estimate fresh
+    'Marques Mendes': 'AD',
+    'António José Seguro': 'PS',
+    'André Ventura': 'CH',
+    'Cotrim Figueiredo': 'IL',
+    'Catarina Martins': 'BE',
+    'António Filipe': 'CDU',
+    'Jorge Pinto': 'L',           # Livre
+    'Others': None,
 }
 
 
@@ -432,3 +459,110 @@ def get_candidate_priors(candidates: List[str]) -> Dict[str, Dict[str, float]]:
                 'prior_sd': 0.05
             }
     return priors
+
+
+def load_parliamentary_house_effects(
+    filepath: Optional[str] = None
+) -> Dict[str, Dict[str, float]]:
+    """
+    Load parliamentary house effects from JSON file.
+
+    Args:
+        filepath: Path to house_effects.json. If None, uses default path.
+
+    Returns:
+        Nested dict: pollster -> party -> effect (in log-odds)
+    """
+    import json
+
+    if filepath is None:
+        # Default path to estimador-web house effects
+        filepath = os.path.join(
+            os.path.dirname(DATA_DIR),
+            '..',
+            'estimador-web',
+            'public',
+            'data',
+            'house_effects.json'
+        )
+
+    if not os.path.exists(filepath):
+        print(f"Warning: Parliamentary house effects not found at {filepath}")
+        return {}
+
+    with open(filepath, 'r') as f:
+        effects_list = json.load(f)
+
+    # Reorganize: list of {pollster, party, house_effect} -> nested dict
+    effects_dict = {}
+    for item in effects_list:
+        pollster = item['pollster']
+        party = item['party']
+        effect = item['house_effect']
+
+        if pollster not in effects_dict:
+            effects_dict[pollster] = {}
+        effects_dict[pollster][party] = effect
+
+    return effects_dict
+
+
+def build_house_effect_prior_matrix(
+    presidential_pollsters: List[str],
+    candidates: List[str],
+    parliamentary_effects: Optional[Dict[str, Dict[str, float]]] = None,
+    tight_sd: float = 0.03,
+    loose_sd: float = 0.08,
+    independent_sd: float = 0.06,
+) -> tuple:
+    """
+    Build prior mean and SD matrices for house effects.
+
+    Strategy:
+    - Party-affiliated candidates with parliamentary data: Use as prior mean, tight SD
+    - Party-affiliated candidates without data: Zero mean, loose SD
+    - Independents (Gouveia e Melo, Others): Zero mean, independent SD
+
+    Args:
+        presidential_pollsters: List of pollster names from presidential data
+        candidates: List of candidate names
+        parliamentary_effects: Dict from load_parliamentary_house_effects()
+        tight_sd: SD for informed priors (default 0.03)
+        loose_sd: SD for uninformed party candidates (default 0.08)
+        independent_sd: SD for independents (default 0.06)
+
+    Returns:
+        Tuple of (prior_means, prior_sds) as numpy arrays:
+        - prior_means: (n_pollsters, n_candidates) array in log-odds scale
+        - prior_sds: (n_pollsters, n_candidates) array
+    """
+    if parliamentary_effects is None:
+        parliamentary_effects = {}
+
+    n_pollsters = len(presidential_pollsters)
+    n_candidates = len(candidates)
+
+    prior_means = np.zeros((n_pollsters, n_candidates))
+    prior_sds = np.full((n_pollsters, n_candidates), loose_sd)
+
+    for p_idx, pres_pollster in enumerate(presidential_pollsters):
+        # Map to parliamentary pollster name
+        parl_pollster = POLLSTER_NAME_MAP.get(pres_pollster, pres_pollster)
+
+        for c_idx, candidate in enumerate(candidates):
+            party = CANDIDATE_TO_PARTY.get(candidate)
+
+            if party is None:
+                # Independent candidate - estimate fresh
+                prior_means[p_idx, c_idx] = 0.0
+                prior_sds[p_idx, c_idx] = independent_sd
+            elif parl_pollster in parliamentary_effects and party in parliamentary_effects[parl_pollster]:
+                # Have parliamentary data - use as informative prior
+                prior_means[p_idx, c_idx] = parliamentary_effects[parl_pollster][party]
+                prior_sds[p_idx, c_idx] = tight_sd
+            else:
+                # No data for this pollster-party combination
+                prior_means[p_idx, c_idx] = 0.0
+                prior_sds[p_idx, c_idx] = loose_sd
+
+    return prior_means, prior_sds

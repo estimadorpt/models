@@ -5,31 +5,38 @@ This module provides functions for generating forecasts, visualizations,
 and analysis outputs for Portuguese presidential election models.
 """
 
+import json
 import os
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import arviz as az
 
+# Import shared export utilities
+from .dashboard_exports import (
+    get_contestant_color,
+    PRESIDENTIAL_CANDIDATE_COLORS,
+    generate_all_dashboard_files,
+    save_trace_zarr,
+    save_json,
+    build_forecast_json,
+    build_trends_json,
+    build_trajectories_json,
+    build_house_effects_json,
+    build_polls_json,
+    format_float,
+    format_date,
+)
 
-# Candidate colors for visualization
-CANDIDATE_COLORS = {
-    'Gouveia e Melo': '#4A90D9',      # Blue (independent/military)
-    'Marques Mendes': '#FF8C00',       # Orange (PSD)
-    'António José Seguro': '#FF69B4',  # Pink (PS)
-    'André Ventura': '#8B0000',        # Dark red (CH)
-    'Cotrim Figueiredo': '#00CED1',    # Cyan (IL)
-    'Catarina Martins': '#DC143C',     # Crimson (BE)
-    'António Filipe': '#228B22',       # Green (CDU)
-    'Others': '#808080',               # Gray
-}
+# Re-export for backwards compatibility
+CANDIDATE_COLORS = PRESIDENTIAL_CANDIDATE_COLORS
 
 
 def get_candidate_color(candidate: str) -> str:
     """Get color for a candidate, with fallback."""
-    return CANDIDATE_COLORS.get(candidate, '#666666')
+    return get_contestant_color(candidate, election_type='presidential')
 
 
 def plot_support_trajectory(
@@ -41,6 +48,7 @@ def plot_support_trajectory(
     title: str = "Presidential Election Forecast",
     figsize: Tuple[int, int] = (14, 8),
     save_path: Optional[str] = None,
+    limit_to_polls: bool = True,
 ) -> plt.Figure:
     """
     Plot the support trajectory for all candidates.
@@ -54,6 +62,7 @@ def plot_support_trajectory(
         title: Plot title
         figsize: Figure size
         save_path: Path to save figure (optional)
+        limit_to_polls: If True, limit x-axis to poll date range only
 
     Returns:
         Matplotlib figure
@@ -70,20 +79,16 @@ def plot_support_trajectory(
 
         # Calculate statistics
         mean = candidate_probs.mean(dim=['chain', 'draw']).values
-        q05 = candidate_probs.quantile(0.05, dim=['chain', 'draw']).values
-        q95 = candidate_probs.quantile(0.95, dim=['chain', 'draw']).values
         q25 = candidate_probs.quantile(0.25, dim=['chain', 'draw']).values
         q75 = candidate_probs.quantile(0.75, dim=['chain', 'draw']).values
 
-        # Plot credible intervals
-        ax.fill_between(calendar_dates, q05 * 100, q95 * 100,
-                       color=color, alpha=0.15)
+        # Plot only 50% credible interval (narrower bands)
         ax.fill_between(calendar_dates, q25 * 100, q75 * 100,
-                       color=color, alpha=0.25)
-        ax.plot(calendar_dates, mean * 100, color=color, linewidth=2,
+                       color=color, alpha=0.2)
+        ax.plot(calendar_dates, mean * 100, color=color, linewidth=2.5,
                label=f'{candidate}')
 
-    # Overlay poll data if provided
+    # Overlay poll data with clear markers
     if polls_df is not None:
         for i, candidate in enumerate(candidates):
             if candidate in polls_df.columns:
@@ -93,16 +98,25 @@ def plot_support_trajectory(
                     poll_props = polls_df[candidate] / polls_df['sample_size'] * 100
                 else:
                     poll_props = polls_df[candidate] * 100
+                # Larger markers with black edge for visibility
                 ax.scatter(polls_df['date'], poll_props,
-                          color=color, alpha=0.4, s=20, marker='o')
+                          color=color, alpha=0.8, s=60, marker='o',
+                          edgecolors='black', linewidths=0.5, zorder=10)
 
-    # Add election day line
-    if election_date is not None:
+    # Add election day line (only if not limiting to polls)
+    if election_date is not None and not limit_to_polls:
         ax.axvline(election_date, color='black', linestyle='--',
                   linewidth=1.5, alpha=0.7, label='Election Day')
 
     # Add 50% threshold line (for first round win)
     ax.axhline(50, color='gray', linestyle=':', alpha=0.5)
+
+    # Limit x-axis to poll date range if requested
+    if limit_to_polls and polls_df is not None and 'date' in polls_df.columns:
+        poll_dates = pd.to_datetime(polls_df['date'])
+        min_date = poll_dates.min() - pd.Timedelta(days=3)
+        max_date = poll_dates.max() + pd.Timedelta(days=3)
+        ax.set_xlim(min_date, max_date)
 
     # Formatting
     ax.set_xlabel('Date', fontsize=12)
@@ -112,8 +126,8 @@ def plot_support_trajectory(
     ax.set_ylim(0, None)
 
     # Date formatting
-    ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
-    ax.xaxis.set_major_locator(mdates.MonthLocator(interval=2))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %d'))
+    ax.xaxis.set_major_locator(mdates.WeekdayLocator(interval=2))
     plt.xticks(rotation=45)
 
     plt.tight_layout()
@@ -363,6 +377,72 @@ def generate_forecast_report(
     return report
 
 
+def generate_dashboard_json(
+    model,
+    output_dir: str,
+    n_trajectory_samples: int = 100,
+) -> Dict[str, str]:
+    """
+    Generate JSON files for the web dashboard.
+    
+    Uses shared export utilities from dashboard_exports.py for consistent
+    format across election types.
+
+    Args:
+        model: PresidentialElectionModel with completed sampling
+        output_dir: Directory to save JSON files
+        n_trajectory_samples: Number of simulation paths for spaghetti plot
+
+    Returns:
+        Dictionary mapping output type to file path
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Get data from model
+    forecast_df = model.get_forecast()
+    win_probs_df = model.get_win_probabilities()
+    candidates = model.dataset.candidates
+    calendar_time = pd.to_datetime(model.coords['calendar_time'])
+    probs = model.trace.posterior['national_probs_calendar']
+    pollsters = list(model.coords['pollsters'])
+    
+    # Use shared export function
+    output_files = generate_all_dashboard_files(
+        output_dir=output_dir,
+        election_type='presidential',
+        election_date=model.dataset.election_date,
+        forecast_df=forecast_df,
+        posterior_trends=probs,
+        time_coords=calendar_time,
+        contestant_names=candidates,
+        house_effects=model.trace.posterior['house_effects'],
+        pollster_names=pollsters,
+        polls_df=model.dataset.polls_raw,
+        win_probabilities_df=win_probs_df,
+        contestant_column='candidate',
+        contestant_dim='candidates',
+        include_trajectories=True,
+        n_trajectory_samples=n_trajectory_samples,
+        file_prefix='presidential_',
+    )
+    
+    # Convert output keys to legacy format for backwards compatibility
+    legacy_files = {}
+    key_mapping = {
+        'forecast': 'forecast_json',
+        'win_probabilities': 'win_probs_json',
+        'trends': 'trends_json',
+        'trajectories': 'trajectories_json',
+        'house_effects': 'house_effects_json',
+        'polls': 'polls_json',
+    }
+    for new_key, legacy_key in key_mapping.items():
+        if new_key in output_files:
+            legacy_files[legacy_key] = output_files[new_key]
+    
+    return legacy_files
+
+
 def save_forecast_results(
     model,
     output_dir: str,
@@ -404,10 +484,12 @@ def save_forecast_results(
     )
     output_files['report'] = os.path.join(output_dir, 'forecast_report.txt')
 
-    # Save inference data
-    trace_path = os.path.join(output_dir, 'trace.nc')
-    model.trace.to_netcdf(trace_path)
-    output_files['trace'] = trace_path
+    # Save inference data as Zarr (standardized format, shared utility)
+    output_files['trace'] = save_trace_zarr(model.trace, output_dir, 'trace.zarr')
+
+    # Generate dashboard JSON files
+    dashboard_files = generate_dashboard_json(model, output_dir)
+    output_files.update(dashboard_files)
 
     if include_plots:
         # Trajectory plot
