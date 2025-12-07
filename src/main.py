@@ -1360,7 +1360,6 @@ def presidential_train(args):
         print("\nBuilding presidential election model...")
         model = PresidentialElectionModel(
             dataset=dataset,
-            campaign_gp_lengthscale=gp_lengthscale,
         )
         model.build_model()
 

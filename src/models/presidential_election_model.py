@@ -48,12 +48,8 @@ class PresidentialElectionModel:
     def __init__(
         self,
         dataset: PresidentialElectionDataset,
-        campaign_gp_lengthscale: float = 5.0,  # 5 days - more reactive to recent polls
-        campaign_gp_amplitude_scale: float = 0.50,  # Increased from 0.40 - allows more variation
-        house_effect_sd_scale: float = 0.04,  # Allow ~4pp house effects (we see 8pp in data)
-        gp_kernel: str = 'Matern52',
-        hsgp_m: int = 30,
-        hsgp_c: float = 1.5,
+        innovation_sd_scale: float = 0.08,  # Daily random walk innovation SD (~8-12pp movement over 50 days)
+        house_effect_sd_scale: float = 0.04,  # Allow ~4pp house effects
         use_parliamentary_house_priors: bool = True,
         parliamentary_effects_path: Optional[str] = None,
     ):
@@ -62,22 +58,15 @@ class PresidentialElectionModel:
 
         Args:
             dataset: PresidentialElectionDataset with polling data
-            campaign_gp_lengthscale: Prior mean for GP lengthscale (days)
-            campaign_gp_amplitude_scale: Prior scale for GP amplitude
+            innovation_sd_scale: Prior scale for daily random walk innovation SD in log-odds
+                                 0.08/day ≈ 0.57 over 50 days ≈ 8-12pp movement
             house_effect_sd_scale: Prior scale for house effect SD
-            gp_kernel: Kernel type for GP ('Matern52', 'Matern32', or 'ExpQuad')
-            hsgp_m: Number of basis functions for HSGP approximation
-            hsgp_c: Expansion factor for HSGP
             use_parliamentary_house_priors: Whether to use parliamentary house effects as priors
             parliamentary_effects_path: Path to parliamentary house effects JSON
         """
         self.dataset = dataset
-        self.campaign_gp_lengthscale = campaign_gp_lengthscale
-        self.campaign_gp_amplitude_scale = campaign_gp_amplitude_scale
+        self.innovation_sd_scale = innovation_sd_scale
         self.house_effect_sd_scale = house_effect_sd_scale
-        self.gp_kernel = gp_kernel
-        self.hsgp_m = hsgp_m
-        self.hsgp_c = hsgp_c
         self.use_parliamentary_house_priors = use_parliamentary_house_priors
         self.parliamentary_effects_path = parliamentary_effects_path
 
@@ -234,59 +223,41 @@ class PresidentialElectionModel:
             )
 
             # ============================================================
-            #              2. CAMPAIGN DYNAMICS GP
+            #              2. CAMPAIGN DYNAMICS (RANDOM WALK)
             # ============================================================
-            # Single GP capturing time-varying dynamics during campaign
-            # Use configured lengthscale - shorter = more reactive to poll changes
-            campaign_gp_lengthscale = self.campaign_gp_lengthscale
+            # Random walk in log-odds space - tight at polls, grows between
+            # Innovation SD: ~0.05-0.10 per day in log-odds (informed by campaign volatility)
+            # This gives ~8-12pp movement over 50 days (sqrt(50)*0.08 ≈ 0.57 logit ≈ 10pp)
 
-            # GP amplitude - use configured scale to capture trends
-            campaign_gp_amplitude = self.campaign_gp_amplitude_scale
+            n_days = len(self.calendar_time_numeric)
 
-            # Build covariance function
-            if self.gp_kernel == 'Matern52':
-                cov_func = campaign_gp_amplitude**2 * pm.gp.cov.Matern52(
-                    input_dim=1, ls=campaign_gp_lengthscale
+            # Innovation SD per day - use informative prior with mode away from zero
+            # LogNormal ensures positive values with mean around innovation_sd_scale
+            # With sparse polling (7 polls), we need stronger prior to capture dynamics
+            # LogNormal(mu=log(0.06), sigma=0.5) has mode ~0.05, mean ~0.07
+            log_scale = np.log(self.innovation_sd_scale) - 0.25  # Mode at scale * exp(-0.5*0.5^2)
+            innovation_sd = pm.LogNormal('innovation_sd', mu=log_scale, sigma=0.5)
+
+            # Create individual random walks per candidate and stack them
+            # This gives us (n_days, n_candidates) shape
+            candidate_walks = []
+            for i, cand in enumerate(candidates):
+                walk = pm.GaussianRandomWalk(
+                    f'campaign_walk_{cand}',
+                    sigma=innovation_sd,
+                    init_dist=pm.Normal.dist(0, 0.01),  # Start near zero
+                    steps=n_days - 1  # n_days - 1 steps gives n_days values
                 )
-            elif self.gp_kernel == 'Matern32':
-                cov_func = campaign_gp_amplitude**2 * pm.gp.cov.Matern32(
-                    input_dim=1, ls=campaign_gp_lengthscale
-                )
-            else:  # ExpQuad
-                cov_func = campaign_gp_amplitude**2 * pm.gp.cov.ExpQuad(
-                    input_dim=1, ls=campaign_gp_lengthscale
-                )
+                candidate_walks.append(walk)
 
-            # Use HSGP approximation for efficiency
-            campaign_gp = pm.gp.HSGP(
-                cov_func=cov_func,
-                m=[self.hsgp_m],
-                c=self.hsgp_c
-            )
-            phi_campaign, sqrt_psd_campaign = campaign_gp.prior_linearized(
-                X=self.calendar_time_numeric[:, None]
-            )
+            # Stack into (n_days, n_candidates) shape
+            campaign_innovations_raw = pt.stack(candidate_walks, axis=1)
 
-            # Add GP basis coordinate
-            model.add_coords({'gp_basis': np.arange(campaign_gp.n_basis_vectors)})
-
-            # GP coefficients per candidate (zero-sum constraint)
-            campaign_gp_coef_raw = pm.Normal(
-                'campaign_gp_coef_raw',
-                mu=0, sigma=1,
-                dims=('gp_basis', 'candidates')
-            )
-            # Center coefficients (zero-sum across GP basis for identifiability)
-            campaign_gp_coef = pm.Deterministic(
-                'campaign_gp_coef',
-                campaign_gp_coef_raw - campaign_gp_coef_raw.mean(axis=0, keepdims=True),
-                dims=('gp_basis', 'candidates')
-            )
-
-            # GP effect over calendar time
+            # Apply zero-sum constraint across candidates for identifiability
+            # At each time point, deviations should sum to zero
             campaign_effect = pm.Deterministic(
                 'campaign_effect',
-                pt.dot(phi_campaign, campaign_gp_coef * sqrt_psd_campaign[:, None]),
+                campaign_innovations_raw - campaign_innovations_raw.mean(axis=1, keepdims=True),
                 dims=('calendar_time', 'candidates')
             )
 
