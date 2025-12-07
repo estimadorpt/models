@@ -48,7 +48,8 @@ class PresidentialElectionModel:
     def __init__(
         self,
         dataset: PresidentialElectionDataset,
-        innovation_sd_scale: float = 0.08,  # Daily random walk innovation SD (~8-12pp movement over 50 days)
+        innovation_sd_scale: float = 0.025,  # Fixed daily RW innovation SD (~4-5pp movement over 50 days)
+        concentration_base: float = 100.0,  # DirichletMultinomial concentration (higher = tighter fit to polls)
         house_effect_sd_scale: float = 0.04,  # Allow ~4pp house effects
         use_parliamentary_house_priors: bool = True,
         parliamentary_effects_path: Optional[str] = None,
@@ -58,14 +59,19 @@ class PresidentialElectionModel:
 
         Args:
             dataset: PresidentialElectionDataset with polling data
-            innovation_sd_scale: Prior scale for daily random walk innovation SD in log-odds
-                                 0.08/day ≈ 0.57 over 50 days ≈ 8-12pp movement
+            innovation_sd_scale: Fixed daily random walk innovation SD in log-odds
+                                 0.025/day → sqrt(50)*0.025 ≈ 0.18 logits ≈ 4-5pp over campaign
+                                 Based on observed GM movement and Economist methodology
+            concentration_base: Base DirichletMultinomial concentration (before undecided scaling)
+                               Higher = tighter fit to polls = narrower CIs at poll dates
+                               80 → concentration ~60 with 35% undecided
             house_effect_sd_scale: Prior scale for house effect SD
             use_parliamentary_house_priors: Whether to use parliamentary house effects as priors
             parliamentary_effects_path: Path to parliamentary house effects JSON
         """
         self.dataset = dataset
         self.innovation_sd_scale = innovation_sd_scale
+        self.concentration_base = concentration_base
         self.house_effect_sd_scale = house_effect_sd_scale
         self.use_parliamentary_house_priors = use_parliamentary_house_priors
         self.parliamentary_effects_path = parliamentary_effects_path
@@ -226,17 +232,17 @@ class PresidentialElectionModel:
             #              2. CAMPAIGN DYNAMICS (RANDOM WALK)
             # ============================================================
             # Random walk in log-odds space - tight at polls, grows between
-            # Innovation SD: ~0.05-0.10 per day in log-odds (informed by campaign volatility)
-            # This gives ~8-12pp movement over 50 days (sqrt(50)*0.08 ≈ 0.57 logit ≈ 10pp)
+            # Innovation SD is FIXED (not learned) following Economist/538 methodology:
+            # - With only 7 polls, cannot reliably estimate volatility
+            # - Based on observed GM movement: ~5pp over 50 days
+            # - Daily volatility: 5pp / sqrt(50) ≈ 0.7pp/day ≈ 0.025 log-odds/day
 
             n_days = len(self.calendar_time_numeric)
 
-            # Innovation SD per day - use informative prior with mode away from zero
-            # LogNormal ensures positive values with mean around innovation_sd_scale
-            # With sparse polling (7 polls), we need stronger prior to capture dynamics
-            # LogNormal(mu=log(0.06), sigma=0.5) has mode ~0.05, mean ~0.07
-            log_scale = np.log(self.innovation_sd_scale) - 0.25  # Mode at scale * exp(-0.5*0.5^2)
-            innovation_sd = pm.LogNormal('innovation_sd', mu=log_scale, sigma=0.5)
+            # Fixed innovation SD based on observed campaign dynamics
+            # 0.025/day → sqrt(50)*0.025 ≈ 0.18 log-odds ≈ 4-5pp over campaign
+            # This allows real trends while keeping CIs tight (~8-10pp)
+            innovation_sd = self.innovation_sd_scale  # Fixed, not sampled
 
             # Create individual random walks per candidate and stack them
             # This gives us (n_days, n_candidates) shape
@@ -352,14 +358,13 @@ class PresidentialElectionModel:
             #                    7. LIKELIHOOD
             # ============================================================
             # Concentration parameter for Dirichlet-Multinomial
-            # Lower concentration = more poll-to-poll variation allowed = GP can be more flexible
-            # High concentration (200) = tight fit to each poll = flat average
-            # Low concentration (10-50) = looser fit = allows trends to emerge
-            # Use fixed low concentration to force GP to capture poll variation  
-            # Low = polls are rough estimates, GP can be flexible
-            # High = polls are precise, GP constrained to fit each one
+            # Higher concentration = tighter fit to polls = narrower CIs at poll dates
+            # Lower concentration = looser fit = wider CIs but more smoothing
+            #
+            # With fixed innovation_sd (0.025), we use HIGH concentration (~60-80)
+            # to get tight CIs at polls while RW handles trends between polls
             undecided_scaling = 1 + self.dataset.mean_undecided  # e.g., 1.35 for 35% undecided
-            concentration = 30.0 / undecided_scaling  # Moderate - allow smoothing through house effects
+            concentration = self.concentration_base / undecided_scaling  # ~60 with defaults
 
             pm.DirichletMultinomial(
                 'poll_likelihood',
