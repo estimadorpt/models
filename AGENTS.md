@@ -170,3 +170,41 @@ The model integrates multiple data types:
 ## Output Structure
 
 Models are saved to timestamped directories under `outputs/` with a symbolic link at `outputs/latest` pointing to the most recent run.
+
+### Output Folder Naming Convention
+
+To distinguish between intermediate/test runs and validated runs ready for production:
+
+```
+outputs/
+├── ACCEPTED_presidential_2026_v1_zerosumnormal/    # ✓ Validated, ready for reporting
+├── ACCEPTED_presidential_2026_v1_diagnostics/      # ✓ Associated diagnostics
+├── presidential_reactive/                          # Intermediate test run
+├── presidential_final/                             # Intermediate test run
+├── presidential_20251208_143022/                   # Timestamped run
+└── latest_presidential -> ACCEPTED_...             # Symlink to current best
+```
+
+**Prefix Convention:**
+
+| Prefix | Meaning | Action |
+|--------|---------|--------|
+| `ACCEPTED_` | Validated run, ready for production/reporting | Keep, use for dashboards |
+| `WIP_` | Work in progress, do not use for reporting | Keep temporarily |
+| `TEST_` | Experimental run, may be deleted | Safe to delete |
+| (none) | Intermediate run, subject to cleanup | Review before deleting |
+
+**Version Format:**
+```
+ACCEPTED_{model}_{election}_{version}_{description}
+         │        │          │         └── Key feature (zerosumnormal, gp, etc.)
+         │        │          └── v1, v2, v3...
+         │        └── Election year (2026)
+         └── Model type (presidential, legislative)
+```
+
+**When to mark as ACCEPTED:**
+- All MCMC diagnostics pass (rhat < 1.01, ESS > 400, no divergences)
+- Results reviewed and validated against raw data
+- House effects and trajectories are sensible
+- Ready to be used for public reporting/dashboards
