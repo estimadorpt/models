@@ -48,8 +48,8 @@ class PresidentialElectionModel:
     def __init__(
         self,
         dataset: PresidentialElectionDataset,
-        innovation_sd_scale: float = 0.025,  # Fixed daily RW innovation SD (~4-5pp movement over 50 days)
-        concentration_base: float = 100.0,  # DirichletMultinomial concentration (higher = tighter fit to polls)
+        innovation_sd_scale: float = 0.05,  # Fixed daily RW innovation SD (allows ~10pp movement over campaign)
+        concentration_base: float = 60.0,  # DirichletMultinomial concentration (match poll measurement error)
         house_effect_sd_scale: float = 0.04,  # Allow ~4pp house effects
         use_parliamentary_house_priors: bool = True,
         parliamentary_effects_path: Optional[str] = None,
@@ -244,26 +244,30 @@ class PresidentialElectionModel:
             # This allows real trends while keeping CIs tight (~8-10pp)
             innovation_sd = self.innovation_sd_scale  # Fixed, not sampled
 
-            # Create individual random walks per candidate and stack them
-            # This gives us (n_days, n_candidates) shape
-            candidate_walks = []
-            for i, cand in enumerate(candidates):
-                walk = pm.GaussianRandomWalk(
-                    f'campaign_walk_{cand}',
-                    sigma=innovation_sd,
-                    init_dist=pm.Normal.dist(0, 0.01),  # Start near zero
-                    steps=n_days - 1  # n_days - 1 steps gives n_days values
-                )
-                candidate_walks.append(walk)
+            # ZeroSumNormal for innovations: automatically enforces sum-to-zero
+            # Non-centered parameterization for better MCMC mixing
+            # This is the cleanest approach for identifiable compositional dynamics
 
-            # Stack into (n_days, n_candidates) shape
-            campaign_innovations_raw = pt.stack(candidate_walks, axis=1)
+            # Sample standardized innovations with built-in zero-sum constraint
+            innovations_raw = pm.ZeroSumNormal(
+                'campaign_innovations_raw',
+                sigma=1.0,  # Standardized, we scale below
+                shape=(n_days, n_candidates),
+                dims=('calendar_time', 'candidates')
+            )
 
-            # Apply zero-sum constraint across candidates for identifiability
-            # At each time point, deviations should sum to zero
+            # Scale innovations: first row is init (tighter), rest are daily innovations
+            init_scale = 0.05
+            scales = pt.concatenate([
+                pt.full((1,), init_scale),
+                pt.full((n_days - 1,), innovation_sd)
+            ])
+            scaled_innovations = innovations_raw * scales[:, None]
+
+            # Cumulative sum to get random walks (zero-sum preserved at each time point)
             campaign_effect = pm.Deterministic(
                 'campaign_effect',
-                campaign_innovations_raw - campaign_innovations_raw.mean(axis=1, keepdims=True),
+                pt.cumsum(scaled_innovations, axis=0),
                 dims=('calendar_time', 'candidates')
             )
 
@@ -361,10 +365,9 @@ class PresidentialElectionModel:
             # Higher concentration = tighter fit to polls = narrower CIs at poll dates
             # Lower concentration = looser fit = wider CIs but more smoothing
             #
-            # With fixed innovation_sd (0.025), we use HIGH concentration (~60-80)
-            # to get tight CIs at polls while RW handles trends between polls
-            undecided_scaling = 1 + self.dataset.mean_undecided  # e.g., 1.35 for 35% undecided
-            concentration = self.concentration_base / undecided_scaling  # ~60 with defaults
+            # Concentration is structural - should match poll measurement error
+            # With n=600, p=0.2: poll SD ≈ 1.64pp, concentration=60 gives posterior SD ≈ 1.7pp
+            concentration = self.concentration_base
 
             pm.DirichletMultinomial(
                 'poll_likelihood',

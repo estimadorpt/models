@@ -511,8 +511,8 @@ def build_house_effect_prior_matrix(
     presidential_pollsters: List[str],
     candidates: List[str],
     parliamentary_effects: Optional[Dict[str, Dict[str, float]]] = None,
-    tight_sd: float = 0.03,
-    loose_sd: float = 0.08,
+    tight_sd: float = 0.05,
+    loose_sd: float = 0.05,
     independent_sd: float = 0.06,
 ) -> tuple:
     """
