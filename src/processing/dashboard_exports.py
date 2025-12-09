@@ -136,7 +136,7 @@ def build_forecast_json(
         "election_type": election_type,
         "election_date": election_date,
         "updated_at": pd.Timestamp.now().isoformat(),
-        "contestants": []
+        "candidates": []
     }
     
     for _, row in forecast_df.iterrows():
@@ -157,7 +157,7 @@ def build_forecast_json(
         if 'ci_90' in row:
             contestant['ci_90'] = format_float(row['ci_90'])
             
-        data["contestants"].append(contestant)
+        data["candidates"].append(contestant)
     
     return data
 
@@ -190,7 +190,7 @@ def build_trends_json(
         "election_type": election_type,
         "election_date": election_date,
         "dates": [format_date(d) for d in time_coords],
-        "contestants": {}
+        "candidates": {}
     }
     
     for i, name in enumerate(contestant_names):
@@ -202,7 +202,7 @@ def build_trends_json(
         q25 = contestant_data.quantile(0.25, dim=['chain', 'draw']).values
         q75 = contestant_data.quantile(0.75, dim=['chain', 'draw']).values
         
-        data["contestants"][name] = {
+        data["candidates"][name] = {
             "color": get_contestant_color(name, election_type),
             "mean": [format_float(v) for v in mean],
             "ci_05": [format_float(v) for v in q05],
@@ -256,14 +256,14 @@ def build_trajectories_json(
         "election_date": election_date,
         "dates": [format_date(d) for d in time_coords],
         "n_samples": len(sample_indices),
-        "contestants": {}
+        "candidates": {}
     }
     
     for i, name in enumerate(contestant_names):
         contestant_probs = posterior.isel({contestant_dim: i}).values
         flat_probs = contestant_probs.reshape(total_samples, -1)
         
-        data["contestants"][name] = {
+        data["candidates"][name] = {
             "color": get_contestant_color(name, election_type),
             "trajectories": [
                 [format_float(v) for v in flat_probs[idx]] 
@@ -301,7 +301,7 @@ def build_house_effects_json(
     data = {
         "election_type": election_type,
         "pollsters": [],
-        "contestants": contestant_names,
+        "candidates": contestant_names,
         "effects": {}
     }
     
@@ -334,17 +334,22 @@ def build_polls_json(
     polls_df: pd.DataFrame,
     contestant_names: List[str],
     election_type: str = 'parliamentary',
+    normalize: bool = True,
 ) -> Dict[str, Any]:
     """
-    Build raw polls JSON for visualization overlay.
+    Build polls JSON for visualization overlay.
+    
+    Polls are normalized to sum to 1 (excluding undecided voters) to match
+    the model's posterior trends, which are also normalized via softmax.
     
     Args:
         polls_df: DataFrame with poll data
         contestant_names: List of party/candidate names to include
         election_type: 'presidential' or 'parliamentary'
+        normalize: If True, normalize values to sum to 1 (default True)
         
     Returns:
-        Polls dictionary
+        Polls dictionary with normalized values
     """
     data = {
         "election_type": election_type,
@@ -361,10 +366,21 @@ def build_polls_json(
         if 'sample_size' in row and pd.notna(row['sample_size']):
             poll_entry["sample_size"] = int(row['sample_size'])
         
-        # Add contestant values
+        # Calculate sum of all contestants for normalization
+        if normalize:
+            total = 0.0
+            for contestant in contestant_names:
+                if contestant in row and pd.notna(row[contestant]):
+                    total += float(row[contestant])
+            norm_factor = 1.0 / total if total > 0 else 1.0
+        else:
+            norm_factor = 1.0
+        
+        # Add contestant values (normalized if requested)
         for contestant in contestant_names:
             if contestant in row and pd.notna(row[contestant]):
-                poll_entry[contestant] = format_float(row[contestant])
+                value = float(row[contestant]) * norm_factor
+                poll_entry[contestant] = format_float(value)
                 
         data["polls"].append(poll_entry)
     
@@ -465,7 +481,7 @@ def generate_all_dashboard_files(
         win_probs_data = {
             "election_type": election_type,
             "election_date": election_date,
-            "contestants": []
+            "candidates": []
         }
         
         # Check if second_round_prob exists
@@ -486,7 +502,7 @@ def generate_all_dashboard_files(
                 if col in row:
                     entry[col.replace('_prob', '_probability')] = format_float(row[col])
                     
-            win_probs_data["contestants"].append(entry)
+            win_probs_data["candidates"].append(entry)
             
         output_files['win_probabilities'] = save_json(
             win_probs_data, output_dir, 'win_probabilities.json', file_prefix
