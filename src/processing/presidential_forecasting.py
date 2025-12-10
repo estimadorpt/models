@@ -79,11 +79,11 @@ def plot_support_trajectory(
 
         # Calculate statistics
         mean = candidate_probs.mean(dim=['chain', 'draw']).values
-        q25 = candidate_probs.quantile(0.25, dim=['chain', 'draw']).values
-        q75 = candidate_probs.quantile(0.75, dim=['chain', 'draw']).values
+        q10 = candidate_probs.quantile(0.10, dim=['chain', 'draw']).values
+        q90 = candidate_probs.quantile(0.90, dim=['chain', 'draw']).values
 
-        # Plot only 50% credible interval (narrower bands)
-        ax.fill_between(calendar_dates, q25 * 100, q75 * 100,
+        # Plot 80% credible interval (more honest about uncertainty)
+        ax.fill_between(calendar_dates, q10 * 100, q90 * 100,
                        color=color, alpha=0.2)
         ax.plot(calendar_dates, mean * 100, color=color, linewidth=2.5,
                label=f'{candidate}')
@@ -328,15 +328,27 @@ def generate_forecast_report(
     Returns:
         Report string
     """
+    from datetime import datetime
+
     lines = [
         "=" * 60,
         f"PRESIDENTIAL ELECTION FORECAST",
         f"Election Date: {election_date}",
+        f"Last Updated: {datetime.now().strftime('%Y-%m-%d %H:%M')}",
         "=" * 60,
         "",
-        "NOTE: This forecast models DECLARED voting intention only.",
-        "Undecided voters (~35%) represent additional uncertainty",
-        "that cannot be reliably modeled without external data.",
+        "MODEL APPROACH:",
+        "- Bayesian hierarchical model with pollster house effects",
+        "- Informative priors from parliamentary election data",
+        "- Random walk campaign dynamics (Economist/538 methodology)",
+        "- Dirichlet-Multinomial likelihood for compositional data",
+        "",
+        "IMPORTANT LIMITATIONS:",
+        "- Models DECLARED voting intention only (~65% of electorate)",
+        "- ~35% undecided voters represent additional uncertainty",
+        "- Credible intervals reflect model uncertainty, not total uncertainty",
+        "- Based on limited polling data (sparse data limits parameter learning)",
+        "- No empirical validation on historical Portuguese elections",
         "",
         "PROJECTED VOTE SHARES (among decided voters)",
         "-" * 40,
