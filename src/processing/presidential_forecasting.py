@@ -344,7 +344,7 @@ def generate_forecast_report(
         "- Dirichlet-Multinomial likelihood for compositional data",
         "",
         "IMPORTANT LIMITATIONS:",
-        "- Models DECLARED voting intention only (~65% of electorate)",
+        "- Models declared voting intention only (~65% of electorate)",
         "- ~35% undecided voters represent additional uncertainty",
         "- Credible intervals reflect model uncertainty, not total uncertainty",
         "- Based on limited polling data (sparse data limits parameter learning)",
