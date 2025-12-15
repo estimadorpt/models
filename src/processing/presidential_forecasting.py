@@ -438,6 +438,13 @@ def generate_dashboard_json(
         file_prefix='presidential_',
     )
     
+    # Generate head-to-head JSON (top 2 candidates by election day mean)
+    head_to_head_data = build_head_to_head_json(
+        probs, candidates, calendar_time, model.dataset.election_date
+    )
+    head_to_head_path = save_json(head_to_head_data, output_dir, 'head_to_head.json', 'presidential_')
+    output_files['head_to_head'] = head_to_head_path
+    
     # Convert output keys to legacy format for backwards compatibility
     legacy_files = {}
     key_mapping = {
@@ -445,8 +452,10 @@ def generate_dashboard_json(
         'win_probabilities': 'win_probs_json',
         'trends': 'trends_json',
         'trajectories': 'trajectories_json',
+        'snapshot_probabilities': 'snapshot_probs_json',
         'house_effects': 'house_effects_json',
         'polls': 'polls_json',
+        'head_to_head': 'head_to_head_json',
     }
     for new_key, legacy_key in key_mapping.items():
         if new_key in output_files:
