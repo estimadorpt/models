@@ -214,6 +214,51 @@ def build_trends_json(
     return data
 
 
+def build_snapshot_probabilities_json(
+    posterior: xr.DataArray,
+    time_coords: pd.DatetimeIndex,
+    contestant_names: List[str],
+    election_date: str,
+    election_type: str = 'parliamentary',
+    contestant_dim: str = 'parties_complete',
+    time_dim: str = 'calendar_time',
+) -> Dict[str, Any]:
+    """
+    Build "snapshot" (as-of-date) leader probabilities from joint posterior draws.
+
+    This computes, for each date t, the probability that each contestant is
+    the leader (highest share) in the first round *if the election were held at t*.
+
+    Critically, we compute this from the joint posterior samples (not marginal
+    Normal approximations), preserving the zero-sum / negative correlation structure.
+    """
+    data: Dict[str, Any] = {
+        "election_type": election_type,
+        "election_date": election_date,
+        "dates": [format_date(d) for d in time_coords],
+        "candidates": {},
+        "metric": "first_round_leader_probability",
+    }
+
+    # Ensure consistent dimension ordering then materialize a numpy view
+    # Shape: (chain, draw, time, contestant)
+    arr = posterior.transpose('chain', 'draw', time_dim, contestant_dim).values
+    n_chains, n_draws, n_times, n_contestants = arr.shape
+    flat = arr.reshape(n_chains * n_draws, n_times, n_contestants)
+
+    # Argmax along contestants for each (sample, time)
+    leaders = np.argmax(flat, axis=2)  # (n_samples, n_times)
+
+    for i, name in enumerate(contestant_names):
+        probs = (leaders == i).mean(axis=0)
+        data["candidates"][name] = {
+            "color": get_contestant_color(name, election_type),
+            "leading_probability": [format_float(v) for v in probs],
+        }
+
+    return data
+
+
 def build_trajectories_json(
     posterior: xr.DataArray,
     time_coords: pd.DatetimeIndex,
@@ -516,6 +561,15 @@ def generate_all_dashboard_files(
     output_files['trends'] = save_json(
         trends_data, output_dir, 'trends.json', file_prefix
     )
+
+    # 3b. Snapshot probabilities JSON (joint posterior leader probabilities)
+    snapshot_probs_data = build_snapshot_probabilities_json(
+        posterior_trends, time_coords, contestant_names,
+        election_date, election_type, contestant_dim
+    )
+    output_files['snapshot_probabilities'] = save_json(
+        snapshot_probs_data, output_dir, 'snapshot_probabilities.json', file_prefix
+    )
     
     # 4. Trajectories JSON
     if include_trajectories:
@@ -575,7 +629,6 @@ def save_trace_zarr(
     trace.to_zarr(trace_path)
     print(f"Saved trace to {trace_path}")
     return trace_path
-
 
 
 
