@@ -624,7 +624,7 @@ def build_head_to_head_json(
 # =============================================================================
 
 def compute_runoff_pair_probabilities(
-    election_day_probs: np.ndarray,
+    probs: np.ndarray,
     candidates: List[str],
 ) -> pd.DataFrame:
     """
@@ -634,16 +634,14 @@ def compute_runoff_pair_probabilities(
     then counts how often each pair appears across all samples.
     
     Args:
-        election_day_probs: Array of shape (n_samples, n_candidates) with 
-                           election day vote share probabilities
+        probs: Array of shape (n_samples, n_candidates) with vote share probabilities
         candidates: List of candidate names
         
     Returns:
         DataFrame with columns: candidate_a, candidate_b, probability
         Sorted by probability descending
     """
-    n_samples = election_day_probs.shape[0]
-    n_candidates = len(candidates)
+    n_samples = probs.shape[0]
     
     # Initialize pair counts
     from collections import Counter
@@ -651,7 +649,7 @@ def compute_runoff_pair_probabilities(
     
     # For each sample, determine 1st and 2nd place
     for i in range(n_samples):
-        sample = election_day_probs[i]
+        sample = probs[i]
         # Get indices of top 2 candidates
         top2_idx = np.argsort(sample)[-2:][::-1]  # Descending order
         first_idx, second_idx = top2_idx[0], top2_idx[1]
@@ -674,23 +672,56 @@ def compute_runoff_pair_probabilities(
     return df
 
 
+def compute_runoff_pairs_at_date(
+    posterior: "xr.DataArray",
+    candidates: List[str],
+    date_index: int,
+    contestant_dim: str = 'candidates',
+    time_dim: str = 'calendar_time',
+) -> pd.DataFrame:
+    """
+    Compute runoff pair probabilities at a specific date from the full posterior.
+    
+    Uses all posterior samples (chain × draw) for reliable probability estimates.
+    
+    Args:
+        posterior: xarray DataArray with dims (chain, draw, time, contestants)
+        candidates: List of candidate names
+        date_index: Index of the date to compute pairs for
+        contestant_dim: Name of the contestant dimension
+        time_dim: Name of the time dimension
+        
+    Returns:
+        DataFrame with runoff pair probabilities
+    """
+    # Extract all samples at the target date
+    # Shape: (chain, draw, contestants) -> (n_samples, contestants)
+    arr = posterior.isel({time_dim: date_index})
+    flat = arr.values.reshape(-1, len(candidates))
+    
+    return compute_runoff_pair_probabilities(flat, candidates)
+
+
 def build_runoff_pairs_json(
-    election_day_probs: np.ndarray,
+    probs: np.ndarray,
     candidates: List[str],
     election_date: str,
+    snapshot_date: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Build JSON structure for runoff pair probabilities visualization.
     
     Args:
-        election_day_probs: Array of shape (n_samples, n_candidates)
+        probs: Array of shape (n_samples, n_candidates) with vote share probs
         candidates: List of candidate names
         election_date: Election date string
+        snapshot_date: Optional date string indicating when probs are computed from.
+                      If provided, indicates these are "as of" snapshot probabilities.
         
     Returns:
         Dictionary with runoff pair data for both bar chart and matrix
     """
-    runoff_df = compute_runoff_pair_probabilities(election_day_probs, candidates)
+    runoff_df = compute_runoff_pair_probabilities(probs, candidates)
     
     # Build pair list for bar chart (top pairs)
     pairs = []
@@ -725,7 +756,7 @@ def build_runoff_pairs_json(
             matrix[i][j] = format_float(row['probability'])
             matrix[j][i] = format_float(row['probability'])  # Symmetric
     
-    return {
+    result = {
         'election_date': election_date,
         'pairs': pairs,
         'matrix': {
@@ -734,6 +765,11 @@ def build_runoff_pairs_json(
             'probabilities': matrix,
         }
     }
+    
+    if snapshot_date:
+        result['snapshot_date'] = snapshot_date
+        
+    return result
 
 
 # =============================================================================
@@ -852,11 +888,44 @@ def export_dashboard_from_trace(
     )
     output_files.update(standard_files)
     
-    # Generate runoff pairs JSON
+    # Generate runoff pairs JSON (election day)
     print("Generating runoff pairs data...")
     runoff_data = build_runoff_pairs_json(ed_probs_flat, candidates, election_date)
     runoff_path = save_json(runoff_data, output_dir, 'runoff_pairs.json', 'presidential_')
     output_files['runoff_pairs'] = runoff_path
+    
+    # Generate snapshot runoff pairs JSON (at last poll date)
+    # This reflects "if the election were held today" scenarios
+    if polls_df is not None and len(polls_df) > 0:
+        last_poll_date = polls_df['date'].max()
+        if isinstance(last_poll_date, pd.Timestamp):
+            last_poll_date_str = last_poll_date.strftime('%Y-%m-%d')
+        else:
+            last_poll_date_str = str(last_poll_date)
+        
+        # Find the index of the last poll date in calendar time
+        cutoff_idx = None
+        for i, t in enumerate(calendar_time):
+            if t.strftime('%Y-%m-%d') >= last_poll_date_str:
+                cutoff_idx = i
+                break
+        
+        if cutoff_idx is not None:
+            print(f"Generating snapshot runoff pairs data (as of {last_poll_date_str})...")
+            snapshot_runoff_df = compute_runoff_pairs_at_date(
+                probs, candidates, cutoff_idx, 
+                contestant_dim='candidates', time_dim='calendar_time'
+            )
+            # Build JSON from the DataFrame
+            snapshot_probs_at_date = probs.isel(calendar_time=cutoff_idx).values.reshape(-1, len(candidates))
+            snapshot_runoff_data = build_runoff_pairs_json(
+                snapshot_probs_at_date, candidates, election_date, 
+                snapshot_date=last_poll_date_str
+            )
+            snapshot_runoff_path = save_json(
+                snapshot_runoff_data, output_dir, 'snapshot_runoff_pairs.json', 'presidential_'
+            )
+            output_files['snapshot_runoff_pairs'] = snapshot_runoff_path
     
     # Generate head-to-head JSON (for top 2 candidates)
     print("Generating head-to-head data...")
