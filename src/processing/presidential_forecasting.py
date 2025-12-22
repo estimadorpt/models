@@ -773,6 +773,110 @@ def build_runoff_pairs_json(
 
 
 # =============================================================================
+# CHANGE SINCE LAST POLL
+# =============================================================================
+
+def compute_changes_since_last_poll(
+    snapshot_probs: Dict[str, Any],
+    polls_df: pd.DataFrame,
+) -> Optional[Dict[str, Any]]:
+    """
+    Compute the change in leading probabilities between the two most recent poll dates.
+    
+    Args:
+        snapshot_probs: The snapshot probabilities data structure
+        polls_df: DataFrame with poll data including 'date' column
+        
+    Returns:
+        Dictionary with change data, or None if not enough polls
+    """
+    if polls_df is None or len(polls_df) == 0:
+        return None
+    
+    # Get unique poll dates sorted
+    poll_dates = sorted(polls_df['date'].unique())
+    if len(poll_dates) < 2:
+        return None
+    
+    # Get the two most recent poll dates
+    current_date = poll_dates[-1]
+    previous_date = poll_dates[-2]
+    
+    if isinstance(current_date, pd.Timestamp):
+        current_date_str = current_date.strftime('%Y-%m-%d')
+    else:
+        current_date_str = str(current_date)[:10]
+        
+    if isinstance(previous_date, pd.Timestamp):
+        previous_date_str = previous_date.strftime('%Y-%m-%d')
+    else:
+        previous_date_str = str(previous_date)[:10]
+    
+    # Find indices in the dates array
+    dates = snapshot_probs.get('dates', [])
+    current_idx = None
+    previous_idx = None
+    
+    for i, d in enumerate(dates):
+        if d == current_date_str:
+            current_idx = i
+        if d == previous_date_str:
+            previous_idx = i
+    
+    if current_idx is None or previous_idx is None:
+        # Try to find closest dates
+        for i, d in enumerate(dates):
+            if d >= current_date_str and current_idx is None:
+                current_idx = i
+            if d >= previous_date_str and previous_idx is None:
+                previous_idx = i
+    
+    if current_idx is None or previous_idx is None:
+        return None
+    
+    # Compute changes for each candidate
+    changes = {}
+    for candidate, data in snapshot_probs.get('candidates', {}).items():
+        if candidate == 'Others':
+            continue
+        
+        probs = data.get('leading_probability', [])
+        if current_idx < len(probs) and previous_idx < len(probs):
+            current_prob = probs[current_idx]
+            previous_prob = probs[previous_idx]
+            change = current_prob - previous_prob
+            changes[candidate] = {
+                'current': format_float(current_prob),
+                'previous': format_float(previous_prob),
+                'change': format_float(change),
+                'change_pp': format_float(change * 100),  # in percentage points
+            }
+    
+    # Sort by current probability descending
+    sorted_candidates = sorted(
+        changes.items(), 
+        key=lambda x: x[1]['current'], 
+        reverse=True
+    )
+    
+    return {
+        'current_date': current_date_str,
+        'previous_date': previous_date_str,
+        'n_polls_current': int(len([d for d in poll_dates if str(d)[:10] == current_date_str])),
+        'n_polls_previous': int(len([d for d in poll_dates if str(d)[:10] == previous_date_str])),
+        'total_polls': len(poll_dates),
+        'candidates': [
+            {
+                'name': name,
+                'color': get_candidate_color(name),
+                **data
+            }
+            for name, data in sorted_candidates
+        ]
+    }
+
+
+# =============================================================================
 # DASHBOARD EXPORT FROM SAVED TRACE
 # =============================================================================
 
@@ -804,7 +908,13 @@ def export_dashboard_from_trace(
     
     # Load the trace
     print(f"Loading trace from {trace_path}...")
-    idata = az.from_zarr(trace_path)
+    try:
+        idata = az.from_zarr(trace_path)
+    except ImportError:
+        # ArviZ doesn't support zarr>=3, use xarray workaround
+        import xarray as xr
+        datatree = xr.open_datatree(trace_path, engine='zarr')
+        idata = az.InferenceData.from_datatree(datatree)
     
     # Extract coordinates from trace
     candidates = list(idata.posterior.coords['candidates'].values)
@@ -934,6 +1044,21 @@ def export_dashboard_from_trace(
     )
     head_to_head_path = save_json(head_to_head_data, output_dir, 'head_to_head.json', 'presidential_')
     output_files['head_to_head'] = head_to_head_path
+    
+    # Generate changes since last poll JSON
+    if 'snapshot_probabilities' in output_files:
+        print("Generating changes since last poll...")
+        # Load the snapshot probs we just saved
+        import json
+        with open(output_files['snapshot_probabilities'], 'r') as f:
+            snapshot_data = json.load(f)
+        
+        changes_data = compute_changes_since_last_poll(snapshot_data, polls_df)
+        if changes_data:
+            changes_path = save_json(changes_data, output_dir, 'changes.json', 'presidential_')
+            output_files['changes'] = changes_path
+            print(f"  Current date: {changes_data['current_date']}")
+            print(f"  Previous date: {changes_data['previous_date']}")
     
     print(f"\nExported {len(output_files)} files to {output_dir}")
     return output_files

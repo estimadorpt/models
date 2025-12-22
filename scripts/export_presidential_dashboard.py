@@ -16,6 +16,9 @@ Usage:
     
     # Export and copy to estimador-web
     pixi run python scripts/export_presidential_dashboard.py --copy-to-web
+    
+    # Mark the run as accepted
+    pixi run python scripts/export_presidential_dashboard.py --mark-accepted my_run_name
 
 Generated files:
     - presidential_forecast.json
@@ -28,12 +31,14 @@ Generated files:
     - presidential_runoff_pairs.json
     - presidential_snapshot_runoff_pairs.json
     - presidential_head_to_head.json
+    - presidential_changes.json (changes since last poll)
 """
 
 import argparse
 import os
 import shutil
 import sys
+import re
 from pathlib import Path
 
 # Add src to path for imports
@@ -127,6 +132,54 @@ def copy_to_estimador_web(output_dir: str, web_data_path: str = ESTIMADOR_WEB_DA
     return True
 
 
+def mark_run_as_accepted(output_dir: str, accepted_name: str) -> str:
+    """
+    Mark a model run as accepted by renaming the directory with ACCEPTED_ prefix.
+    
+    Also updates the latest_presidential symlink to point to the new location.
+    
+    Args:
+        output_dir: Current output directory path
+        accepted_name: Name for the accepted run (without ACCEPTED_ prefix)
+        
+    Returns:
+        New path to the accepted run directory
+    """
+    output_path = Path(output_dir).resolve()
+    outputs_root = output_path.parent
+    
+    # Clean up the accepted name (remove any existing ACCEPTED_ prefix)
+    clean_name = re.sub(r'^ACCEPTED_', '', accepted_name)
+    new_name = f"ACCEPTED_{clean_name}"
+    new_path = outputs_root / new_name
+    
+    if output_path == new_path:
+        print(f"Run is already marked as accepted: {new_path}")
+        return str(new_path)
+    
+    if new_path.exists():
+        print(f"Warning: {new_path} already exists. Not renaming.")
+        return str(output_path)
+    
+    # Rename the directory
+    print(f"Renaming {output_path.name} -> {new_name}")
+    output_path.rename(new_path)
+    
+    # Update the latest_presidential symlink
+    symlink_path = outputs_root / "latest_presidential"
+    if symlink_path.is_symlink():
+        symlink_path.unlink()
+    symlink_path.symlink_to(new_path)
+    print(f"Updated latest_presidential symlink -> {new_name}")
+    
+    # Remove any broken symlink inside the directory
+    internal_symlink = new_path / "latest_presidential"
+    if internal_symlink.is_symlink():
+        internal_symlink.unlink()
+    
+    return str(new_path)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Export presidential dashboard JSON files from a model trace.",
@@ -170,6 +223,11 @@ def main():
         default=ESTIMADOR_WEB_DATA_PATH,
         help=f"Path to estimador-web data folder (default: {ESTIMADOR_WEB_DATA_PATH})",
     )
+    parser.add_argument(
+        "--mark-accepted",
+        metavar="NAME",
+        help="Mark the run as accepted with the given name (e.g., 'presidential_2026_v2_12polls')",
+    )
     
     args = parser.parse_args()
     
@@ -208,6 +266,13 @@ def main():
     print("=" * 60)
     for key, path in output_files.items():
         print(f"  {key}: {path}")
+    
+    # Optionally mark as accepted
+    if args.mark_accepted:
+        print("\n" + "=" * 60)
+        print("MARKING RUN AS ACCEPTED")
+        print("=" * 60)
+        output_dir = mark_run_as_accepted(output_dir, args.mark_accepted)
     
     # Optionally copy to estimador-web
     if args.copy_to_web:
