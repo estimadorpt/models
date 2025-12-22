@@ -43,6 +43,11 @@ diagnose = "python -m src.main --mode diagnose --load-dir outputs/latest"
 predict = "python -m src.main --mode predict --load-dir outputs/latest"
 municipal-train = "python -m src.main --mode municipal-train --draws 1000 --tune 1000"
 
+# Presidential model commands
+presidential-train = "python -m src.main --mode presidential-train --draws 1000 --tune 1000"
+presidential-export = "python scripts/export_presidential_dashboard.py"
+presidential-export-web = "python scripts/export_presidential_dashboard.py --copy-to-web"
+
 [environments]
 default = { solve-group = "default" }
 dev = { features = ["dev"], solve-group = "default" }
