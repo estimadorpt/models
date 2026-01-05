@@ -6,10 +6,10 @@ This file tracks which model runs are currently deployed to [estimador.pt](https
 
 ### Presidential Election 2026
 
-**Model Run:** `presidential_dec_2025_v2`  
-**Deployed:** 2025-12-22  
-**Last Poll Date:** 2025-12-19 (Pitagórica/TVI-CNN)  
-**Total Polls:** 12
+**Model Run:** `ACCEPTED_presidential_jan2026_poll`  
+**Deployed:** 2026-01-05  
+**Last Poll Date:** 2026-01-04 (Pitagórica for TVI/CNN/TSF/JN)  
+**Total Polls:** 13
 
 Files deployed to `estimador-web/public/data/`:
 - `presidential_forecast.json`
@@ -21,27 +21,41 @@ Files deployed to `estimador-web/public/data/`:
 - `presidential_polls.json`
 - `presidential_head_to_head.json`
 - `presidential_runoff_pairs.json`
-- `presidential_snapshot_runoff_pairs.json` ← Computed at last poll date (Dec 19)
+- `presidential_snapshot_runoff_pairs.json` ← Computed at last poll date (Jan 4)
+- `presidential_changes.json`
 
-**Key Results (as of Dec 22, 2025):**
-- André Ventura: 44.6% leading probability ("if elections today")
-- Marques Mendes: 40.5% leading probability
-- Gouveia e Melo: 9.0% leading probability
-- António José Seguro: 5.4% leading probability
+**Key Results (as of Jan 4, 2026):**
+- André Ventura: 45.3% leading probability ("if elections today")
+- Marques Mendes: 20.7% leading probability
+- Gouveia e Melo: 18.4% leading probability
+- António José Seguro: 13.5% leading probability
 
 **Election Day Forecast:**
-- André Ventura: 20.9% (35.9% win prob)
-- Marques Mendes: 20.6% (34.4% win prob)
-- Gouveia e Melo: 17.3% (15.3% win prob)
-- António José Seguro: 16.2% (11.3% win prob)
+- André Ventura: 20.4% (38.2% win prob)
+- Marques Mendes: 18.4% (21.2% win prob)
+- Gouveia e Melo: 18.0% (20.1% win prob)
+- António José Seguro: 17.2% (16.3% win prob)
+
+**New poll added (Jan 2-4, 2026 - Pitagórica):**
+- António José Seguro: 19.3%
+- Gouveia e Melo: 19.2%
+- André Ventura: 18.9%
+- Cotrim Figueiredo: 18.0%
+- Marques Mendes: 15.4%
 
 ---
 
 ## Previous Versions
 
+### presidential_dec_2025_v2 (Dec 22, 2025)
+
+**Status:** Superseded by `ACCEPTED_presidential_jan2026_poll`  
+**Last Poll Date:** 2025-12-19  
+**Notes:** 12 polls. Ventura 44.6%, Mendes 40.5% leading.
+
 ### ACCEPTED_presidential_2026_v1_zerosumnormal (Dec 8, 2024)
 
-**Status:** Superseded by `ACCEPTED_presidential_dec_2025_polls`  
+**Status:** Superseded  
 **Last Poll Date:** 2025-12-03  
 **Notes:** Did not include Dec 12-16 polls. Showed Gouveia e Melo higher.
 
