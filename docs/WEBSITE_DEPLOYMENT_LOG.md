@@ -6,10 +6,10 @@ This file tracks which model runs are currently deployed to [estimador.pt](https
 
 ### Presidential Election 2026
 
-**Model Run:** `ACCEPTED_presidential_jan2026_poll`  
-**Deployed:** 2026-01-05  
-**Last Poll Date:** 2026-01-04 (Pitagórica for TVI/CNN/TSF/JN)  
-**Total Polls:** 13
+**Model Run:** `ACCEPTED_presidential_jan07_tracking`  
+**Deployed:** 2026-01-09  
+**Last Poll Date:** 2026-01-07 (Pitagórica tracking poll for TVI/CNN/TSF/JN)  
+**Total Polls:** 14
 
 Files deployed to `estimador-web/public/data/`:
 - `presidential_forecast.json`
@@ -21,31 +21,39 @@ Files deployed to `estimador-web/public/data/`:
 - `presidential_polls.json`
 - `presidential_head_to_head.json`
 - `presidential_runoff_pairs.json`
-- `presidential_snapshot_runoff_pairs.json` ← Computed at last poll date (Jan 4)
+- `presidential_snapshot_runoff_pairs.json` ← Computed at last poll date (Jan 7)
+- `presidential_runoff_changes.json`
 - `presidential_changes.json`
 
-**Key Results (as of Jan 4, 2026):**
-- André Ventura: 45.3% leading probability ("if elections today")
-- Marques Mendes: 20.7% leading probability
-- Gouveia e Melo: 18.4% leading probability
-- António José Seguro: 13.5% leading probability
+**Key Results (as of Jan 7, 2026):**
+- André Ventura: 48.6% leading probability ("if elections today")
+- António José Seguro: 17.1% leading probability
+- Gouveia e Melo: 16.4% leading probability
+- Marques Mendes: 15.3% leading probability
 
 **Election Day Forecast:**
-- André Ventura: 20.4% (38.2% win prob)
-- Marques Mendes: 18.4% (21.2% win prob)
-- Gouveia e Melo: 18.0% (20.1% win prob)
-- António José Seguro: 17.2% (16.3% win prob)
+- André Ventura: 20.6% [13.1% - 29.6%] (40.3% win prob)
+- Gouveia e Melo: 17.9% [11.2% - 26.2%] (17.9% win prob)
+- Marques Mendes: 17.8% [11.0% - 26.1%] (18.0% win prob)
+- António José Seguro: 17.8% [11.0% - 26.3%] (18.6% win prob)
+- Cotrim Figueiredo: 14.7% [8.9% - 22.3%] (5.3% win prob)
 
-**New poll added (Jan 2-4, 2026 - Pitagórica):**
-- António José Seguro: 19.3%
-- Gouveia e Melo: 19.2%
-- André Ventura: 18.9%
-- Cotrim Figueiredo: 18.0%
-- Marques Mendes: 15.4%
+**New poll added (Jan 5-7, 2026 - Pitagórica tracking):**
+- André Ventura: 20.5% (↑ 0.9pp) ← NOW LEADING
+- António José Seguro: 20.1% (↓ 0.9pp)
+- Cotrim Figueiredo: 18.1% (↑ 0.1pp)
+- Gouveia e Melo: 17.8% (↑ 0.6pp)
+- Marques Mendes: 16.7% (↑ 0.7pp)
 
 ---
 
 ## Previous Versions
+
+### ACCEPTED_presidential_jan2026_poll (Jan 5, 2026)
+
+**Status:** Superseded by `ACCEPTED_presidential_jan07_tracking`  
+**Last Poll Date:** 2026-01-04  
+**Notes:** 13 polls. Ventura 45.3%, Seguro 13.5% leading.
 
 ### presidential_dec_2025_v2 (Dec 22, 2025)
 
