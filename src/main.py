@@ -58,6 +58,9 @@ from src.data.dataset import ElectionDataset
 from src.processing.electoral_systems import calculate_dhondt
 from src.processing.seat_prediction import simulate_seat_allocation
 from src.models.municipal_coupling_model import train_coupling_model as train_municipal_coupling_model
+from src.data.presidential_dataset import PresidentialElectionDataset
+from src.models.presidential_election_model import PresidentialElectionModel
+from src.processing.presidential_forecasting import save_forecast_results as save_presidential_results
 
 def get_model_class(model_type_str: str):
     if model_type_str == "static":
@@ -1320,6 +1323,127 @@ def run_forecast_comparison_logic(run_a_dir, run_b_dir, prediction_mode, hdi_pro
     print(f"--- Forecast Comparison Failed or Incomplete ---")
     return False
 
+def presidential_train(args):
+    """Train a presidential election forecasting model."""
+    try:
+        print("\n" + "="*60)
+        print("PRESIDENTIAL ELECTION MODEL TRAINING")
+        print("="*60)
+
+        election_date = args.presidential_election_date
+        polls_file = args.presidential_polls_file
+        gp_lengthscale = args.presidential_gp_lengthscale
+        innovation_sd = getattr(args, 'innovation_sd', 0.05)
+        house_effect_prior_sd = getattr(args, 'house_effect_prior_sd', 0.02)
+
+        print(f"Election date: {election_date}")
+        print(f"Polls file: {polls_file}")
+        print(f"GP lengthscale: {gp_lengthscale} days")
+        print(f"Innovation SD: {innovation_sd}")
+
+        # Create output directory
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        run_name = f"presidential_run_{timestamp}"
+        default_output_dir = "outputs/"
+        if args.output_dir == default_output_dir:
+            output_dir = os.path.join(default_output_dir.rstrip('/'), run_name)
+        else:
+            output_dir = args.output_dir
+        os.makedirs(output_dir, exist_ok=True)
+        print(f"Output directory: {output_dir}")
+
+        # Load dataset
+        print("\nLoading presidential election dataset...")
+        dataset = PresidentialElectionDataset(
+            election_date=election_date,
+            polls_file=polls_file,
+        )
+
+        # House effect configuration (uninformative priors by default)
+        use_parliamentary_house_priors = getattr(args, 'use_parliamentary_house_priors', False)
+        if use_parliamentary_house_priors:
+            print("\n*** Using parliamentary house effect priors ***")
+        else:
+            print("\n*** Using uninformative house effect priors ***")
+
+        # Build model
+        print("\nBuilding presidential election model...")
+        model = PresidentialElectionModel(
+            dataset=dataset,
+            innovation_sd_scale=innovation_sd,
+            use_parliamentary_house_priors=use_parliamentary_house_priors,
+        )
+        model.build_model()
+
+        # Sample
+        print("\nSampling posterior...")
+        start_time = time.time()
+        trace = model.sample(
+            draws=args.draws,
+            tune=args.tune,
+            chains=args.chains,
+            target_accept=args.target_accept,
+        )
+        fitting_duration = time.time() - start_time
+        print(f"Sampling completed in {fitting_duration:.2f} seconds")
+
+        # Save results
+        print("\nSaving results...")
+        output_files = save_presidential_results(model, output_dir)
+
+        # Generate and display forecast
+        print("\n" + "="*60)
+        print("FORECAST SUMMARY (Declared Voting Intention)")
+        print("="*60)
+        print("Note: ~35% undecided voters not modeled (irreducible uncertainty)")
+        print("-"*60)
+        forecast_df = model.get_forecast()
+        for _, row in forecast_df.iterrows():
+            print(f"  {row['candidate']:25s} {row['mean']*100:5.1f}% "
+                  f"[{row['ci_lower']*100:4.1f}% - {row['ci_upper']*100:4.1f}%]")
+
+        print("\n" + "="*60)
+        print("WIN PROBABILITIES")
+        print("="*60)
+        win_probs = model.get_win_probabilities()
+        for _, row in win_probs.iterrows():
+            print(f"  {row['candidate']:25s} {row['leading_prob']*100:5.1f}%")
+        print(f"\n  P(Second Round): {win_probs['second_round_prob'].iloc[0]:.1%}")
+
+        # Create latest symlink
+        latest_link_path = os.path.join(os.path.dirname(output_dir) or '.', "latest_presidential")
+        try:
+            if os.path.islink(latest_link_path) or os.path.exists(latest_link_path):
+                os.remove(latest_link_path)
+            os.symlink(os.path.abspath(output_dir), latest_link_path)
+            print(f"\nSymbolic link 'latest_presidential' updated to {output_dir}")
+        except Exception as e:
+            print(f"Warning: Could not create symlink: {e}")
+
+        # Notification
+        if args.notify:
+            try:
+                requests.post("https://ntfy.sh/bc-estimador",
+                    data=f"Presidential model completed in {fitting_duration:.2f}s".encode(encoding='utf-8'))
+            except Exception:
+                pass
+
+        print(f"\nPresidential model training complete. Results saved to {output_dir}")
+        return model
+
+    except Exception as e:
+        print(f"ERROR during presidential model training: {e}")
+        if args.debug:
+            traceback.print_exc()
+        if args.notify:
+            try:
+                requests.post("https://ntfy.sh/bc-estimador",
+                    data=f"Presidential model FAILED: {e}".encode(encoding='utf-8'))
+            except Exception:
+                pass
+        return None
+
+
 def compare_forecasts_mode(args):
     """Handles the 'compare-forecasts' mode."""
     print("Starting forecast comparison mode...")
@@ -1367,6 +1491,7 @@ def main(args=None):
             "predict",
             "compare-forecasts",
             "municipal-train",
+            "presidential-train",
         ],
         required=True,
         help="Operation mode",
@@ -1514,6 +1639,41 @@ def main(args=None):
     #     "--fast", action="store_true", help="Skip plot generation during cross-validation"
     # ) # Example if needed
 
+    # --- Presidential Election Model Arguments ---
+    presidential_group = parser.add_argument_group('Presidential Election Model Parameters')
+    presidential_group.add_argument(
+        "--presidential-election-date",
+        type=str,
+        default="2026-01-18",
+        help="Presidential election date (default: 2026-01-18)",
+    )
+    presidential_group.add_argument(
+        "--presidential-polls-file",
+        type=str,
+        default="presidenciais_polls_2026.parquet",
+        help="Filename of presidential polls parquet file in data directory",
+    )
+    presidential_group.add_argument(
+        "--presidential-gp-lengthscale",
+        type=float,
+        default=21.0,
+        help="Campaign GP lengthscale in days for presidential model (default: 21)",
+    )
+    presidential_group.add_argument(
+        "--innovation-sd",
+        type=float,
+        default=0.08,
+        help="Daily random walk innovation SD in log-odds space. Higher values allow "
+             "faster movement in response to polls. (default: 0.08)",
+    )
+    presidential_group.add_argument(
+        "--use-parliamentary-house-priors",
+        action="store_true",
+        help="Use parliamentary election house effects as informative priors. "
+             "By default, uninformative priors are used (recommended when a single "
+             "pollster dominates recent polling).",
+    )
+
     # --- Municipal Coupling Model Arguments ---
     municipal_group = parser.add_argument_group('Municipal Coupling Model Parameters')
     municipal_group.add_argument(
@@ -1623,6 +1783,8 @@ def main(args=None):
             print(f"  Holdout year: {evaluation.election_year}")
             print(f"  Winner accuracy: {evaluation.winner_accuracy:.3%}")
             print(f"  Vote-share MAE: {evaluation.mean_vote_share_mae:.3%}")
+        elif args.mode == "presidential-train":
+            presidential_train(args)
             
         end_main_time = time.time()
         print(f"\n'{args.mode}' mode finished in {end_main_time - start_main_time:.2f} seconds.")

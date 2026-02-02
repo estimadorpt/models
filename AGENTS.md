@@ -74,11 +74,16 @@ pixi run format            # Format code with black
 pixi run lint              # Check code formatting
 pixi run notebook          # Start Jupyter Lab
 
-# Model operations
+# Legislative model operations
 pixi run train             # Train default model
 pixi run viz               # Visualize latest model
 pixi run diagnose          # Diagnose latest model
 pixi run predict           # Generate predictions
+
+# Presidential model operations
+pixi run presidential-train           # Train presidential model
+pixi run presidential-export          # Export dashboard JSON files
+pixi run presidential-export-web      # Export AND copy to estimador-web
 ```
 
 ### With Conda/Python
@@ -170,3 +175,133 @@ The model integrates multiple data types:
 ## Output Structure
 
 Models are saved to timestamped directories under `outputs/` with a symbolic link at `outputs/latest` pointing to the most recent run.
+
+### Output Folder Naming Convention
+
+To distinguish between intermediate/test runs and validated runs ready for production:
+
+```
+outputs/
+├── ACCEPTED_presidential_2026_v1_zerosumnormal/    # ✓ Validated, ready for reporting
+├── ACCEPTED_presidential_2026_v1_diagnostics/      # ✓ Associated diagnostics
+├── presidential_reactive/                          # Intermediate test run
+├── presidential_final/                             # Intermediate test run
+├── presidential_20251208_143022/                   # Timestamped run
+└── latest_presidential -> ACCEPTED_...             # Symlink to current best
+```
+
+**Prefix Convention:**
+
+| Prefix | Meaning | Action |
+|--------|---------|--------|
+| `ACCEPTED_` | Validated run, ready for production/reporting | Keep, use for dashboards |
+| `WIP_` | Work in progress, do not use for reporting | Keep temporarily |
+| `TEST_` | Experimental run, may be deleted | Safe to delete |
+| (none) | Intermediate run, subject to cleanup | Review before deleting |
+
+**Version Format:**
+```
+ACCEPTED_{model}_{election}_{version}_{description}
+         │        │          │         └── Key feature (zerosumnormal, gp, etc.)
+         │        │          └── v1, v2, v3...
+         │        └── Election year (2026)
+         └── Model type (presidential, legislative)
+```
+
+**When to mark as ACCEPTED:**
+- All MCMC diagnostics pass (rhat < 1.01, ESS > 400, no divergences)
+- Results reviewed and validated against raw data
+- House effects and trajectories are sensible
+- Ready to be used for public reporting/dashboards
+
+## Presidential Model & Website Deployment
+
+### Presidential Model Configuration
+
+**Default settings (as of Jan 2026):**
+- `--innovation-sd 0.08`: Allows faster response to recent poll movements
+- Uninformative house effect priors (no parliamentary data by default)
+
+These defaults were chosen because a single pollster (Pitagórica) dominated January 2026 polling, making it impossible to distinguish pollster bias from genuine candidate movement. The uninformative priors let recent polls drive the forecast directly.
+
+**Optional flags:**
+- `--use-parliamentary-house-priors`: Use house effects estimated from parliamentary elections (use when multiple pollsters are active)
+- `--innovation-sd 0.05`: More conservative, slower response to polls
+
+### Complete Workflow: Train, Export, and Deploy
+
+#### Step 1: Add New Polls (if any)
+
+New polls are added to `data/presidenciais_polls_2026.parquet`. Ensure all polls are normalized to 100% (excluding undecided voters) for consistency.
+
+#### Step 2: Train the Model
+
+```bash
+# Train with a descriptive output directory name
+pixi run presidential-train --output-dir outputs/presidential_jan16_final
+```
+
+This will:
+- Load all polls from the parquet file
+- Train the Bayesian model (~20-30 seconds)
+- Save trace, forecasts, and diagnostic plots
+- Update the `latest_presidential` symlink
+
+#### Step 3: Export and Copy to Website
+
+```bash
+# Export JSON files AND copy to estimador-web in one command
+pixi run presidential-export-web --trace-path outputs/presidential_jan16_final/trace.zarr
+```
+
+This exports 12 JSON files and copies them to `../estimador-web/public/data/`.
+
+#### Step 4: Push to Website
+
+```bash
+cd ../estimador-web
+git add public/data/presidential_*.json
+git commit -m "feat: update presidential forecast with latest polls"
+git push
+```
+
+The website will automatically rebuild and deploy via Vercel/Netlify.
+
+#### Quick Reference (All-in-One)
+
+```bash
+# Full workflow from models repo
+pixi run presidential-train --output-dir outputs/presidential_jan16_final && \
+pixi run presidential-export-web --trace-path outputs/presidential_jan16_final/trace.zarr && \
+cd ../estimador-web && \
+git add public/data/presidential_*.json && \
+git commit -m "feat: update presidential forecast" && \
+git push && \
+cd ../models
+```
+
+**To use the old parliamentary house effect priors:**
+```bash
+pixi run presidential-train --use-parliamentary-house-priors --innovation-sd 0.05 --output-dir outputs/presidential_YYYYMMDD
+```
+
+### Generated Dashboard Files
+
+The export script generates 12 JSON files for the web dashboard:
+
+| File | Description |
+|------|-------------|
+| `presidential_forecast.json` | Election day forecast with credible intervals |
+| `presidential_win_probabilities.json` | Win/leading probabilities per candidate |
+| `presidential_trends.json` | Time series of support over campaign |
+| `presidential_snapshot_probabilities.json` | "If elections were today" probabilities |
+| `presidential_trajectories.json` | Spaghetti plot data (100 posterior samples) |
+| `presidential_house_effects.json` | Pollster bias estimates |
+| `presidential_polls.json` | Raw poll data for overlay |
+| `presidential_runoff_pairs.json` | Second round matchup probabilities (election day) |
+| `presidential_snapshot_runoff_pairs.json` | Second round matchups (as of last poll) |
+| `presidential_runoff_changes.json` | Changes in runoff probabilities since previous poll |
+| `presidential_head_to_head.json` | Top 2 candidate head-to-head over time |
+| `presidential_changes.json` | Changes in win probabilities since previous poll |
+
+See `docs/WEBSITE_DEPLOYMENT_LOG.md` for deployment history and current production version.
