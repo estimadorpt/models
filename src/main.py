@@ -1333,10 +1333,13 @@ def presidential_train(args):
         election_date = args.presidential_election_date
         polls_file = args.presidential_polls_file
         gp_lengthscale = args.presidential_gp_lengthscale
+        innovation_sd = getattr(args, 'innovation_sd', 0.05)
+        house_effect_prior_sd = getattr(args, 'house_effect_prior_sd', 0.02)
 
         print(f"Election date: {election_date}")
         print(f"Polls file: {polls_file}")
         print(f"GP lengthscale: {gp_lengthscale} days")
+        print(f"Innovation SD: {innovation_sd}")
 
         # Create output directory
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -1356,10 +1359,19 @@ def presidential_train(args):
             polls_file=polls_file,
         )
 
+        # House effect configuration (uninformative priors by default)
+        use_parliamentary_house_priors = getattr(args, 'use_parliamentary_house_priors', False)
+        if use_parliamentary_house_priors:
+            print("\n*** Using parliamentary house effect priors ***")
+        else:
+            print("\n*** Using uninformative house effect priors ***")
+
         # Build model
         print("\nBuilding presidential election model...")
         model = PresidentialElectionModel(
             dataset=dataset,
+            innovation_sd_scale=innovation_sd,
+            use_parliamentary_house_priors=use_parliamentary_house_priors,
         )
         model.build_model()
 
@@ -1646,6 +1658,20 @@ def main(args=None):
         type=float,
         default=21.0,
         help="Campaign GP lengthscale in days for presidential model (default: 21)",
+    )
+    presidential_group.add_argument(
+        "--innovation-sd",
+        type=float,
+        default=0.08,
+        help="Daily random walk innovation SD in log-odds space. Higher values allow "
+             "faster movement in response to polls. (default: 0.08)",
+    )
+    presidential_group.add_argument(
+        "--use-parliamentary-house-priors",
+        action="store_true",
+        help="Use parliamentary election house effects as informative priors. "
+             "By default, uninformative priors are used (recommended when a single "
+             "pollster dominates recent polling).",
     )
 
     # --- Municipal Coupling Model Arguments ---

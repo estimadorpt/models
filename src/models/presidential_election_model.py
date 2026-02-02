@@ -12,6 +12,38 @@ Key features:
 - House effects per pollster
 - Probabilistic undecided voter allocation
 - Dirichlet-Multinomial likelihood for poll observations
+
+House Effect Handling:
+    The model supports three approaches for house effect priors:
+
+    1. Parliamentary priors (default): Use house effects from legislative elections
+       as informative priors for presidential polling.
+
+    2. Custom fixed priors: Use `custom_house_effect_priors` parameter to provide
+       pre-estimated house effects. This is the FiveThirtyEight-style approach
+       for campaigns where a single pollster dominates recent polling.
+
+    3. Uninformed priors: Fall back to hierarchical priors centered at zero.
+
+    For campaigns with single-pollster dominance in the late period, use the
+    `estimate_fixed_house_effects()` helper function:
+
+        from src.models.presidential_election_model import (
+            PresidentialElectionModel,
+            estimate_fixed_house_effects,
+        )
+
+        # Estimate house effects from early multi-pollster period
+        fixed_he = estimate_fixed_house_effects(
+            dataset=dataset,
+            cutoff_date='2025-12-31',
+        )
+
+        # Train model with fixed house effects
+        model = PresidentialElectionModel(
+            dataset=dataset,
+            custom_house_effect_priors=fixed_he,
+        )
 """
 
 from typing import Dict, List, Optional, Tuple
@@ -53,6 +85,7 @@ class PresidentialElectionModel:
         house_effect_sd_scale: float = 0.04,  # Allow ~4pp house effects
         use_parliamentary_house_priors: bool = True,
         parliamentary_effects_path: Optional[str] = None,
+        custom_house_effect_priors: Optional[Dict[str, np.ndarray]] = None,
     ):
         """
         Initialize the presidential election model.
@@ -68,6 +101,12 @@ class PresidentialElectionModel:
             house_effect_sd_scale: Prior scale for house effect SD
             use_parliamentary_house_priors: Whether to use parliamentary house effects as priors
             parliamentary_effects_path: Path to parliamentary house effects JSON
+            custom_house_effect_priors: Optional dict with 'means' and 'sds' arrays for
+                                        custom house effect priors. Shape must be
+                                        (n_pollsters, n_candidates). If provided, takes
+                                        priority over parliamentary priors. Use this for
+                                        fixed house effects estimated from early data
+                                        (FiveThirtyEight-style approach).
         """
         self.dataset = dataset
         self.innovation_sd_scale = innovation_sd_scale
@@ -75,6 +114,7 @@ class PresidentialElectionModel:
         self.house_effect_sd_scale = house_effect_sd_scale
         self.use_parliamentary_house_priors = use_parliamentary_house_priors
         self.parliamentary_effects_path = parliamentary_effects_path
+        self.custom_house_effect_priors = custom_house_effect_priors
 
         # Model components (set during build)
         self.model: Optional[pm.Model] = None
@@ -178,8 +218,37 @@ class PresidentialElectionModel:
         prior_means = self.dataset.get_prior_means()
         prior_sds = self.dataset.get_prior_sds()
 
-        # Load parliamentary house effects if requested
-        if self.use_parliamentary_house_priors:
+        # ============================================================
+        # HOUSE EFFECT PRIORS: Priority order
+        # 1. Custom priors (if provided) - for fixed early HE approach
+        # 2. Parliamentary priors (if requested)
+        # 3. Uninformed priors (fallback)
+        # ============================================================
+        n_pollsters = len(coords['pollsters'])
+
+        if self.custom_house_effect_priors is not None:
+            # Priority 1: Custom house effect priors (e.g., from early data estimation)
+            print("\n=== Using Custom House Effect Priors ===")
+            self.house_effect_prior_means = self.custom_house_effect_priors['means']
+            self.house_effect_prior_sds = self.custom_house_effect_priors['sds']
+
+            # Validate shapes
+            expected_shape = (n_pollsters, n_candidates)
+            if self.house_effect_prior_means.shape != expected_shape:
+                raise ValueError(
+                    f"Custom house effect means shape {self.house_effect_prior_means.shape} "
+                    f"does not match expected {expected_shape}. "
+                    f"Pollsters: {list(coords['pollsters'])}, Candidates: {candidates}"
+                )
+
+            print(f"Custom HE prior shape: {self.house_effect_prior_means.shape}")
+            print(f"Custom HE prior SD range: [{self.house_effect_prior_sds.min():.4f}, "
+                  f"{self.house_effect_prior_sds.max():.4f}]")
+            # Force use of informative priors path
+            self.use_parliamentary_house_priors = True
+
+        elif self.use_parliamentary_house_priors:
+            # Priority 2: Parliamentary house effects
             from src.data.presidential_loaders import (
                 load_parliamentary_house_effects,
                 build_house_effect_prior_matrix
@@ -537,3 +606,194 @@ class PresidentialElectionModel:
         df['second_round_prob'] = second_round_prob
         df = df.sort_values('leading_prob', ascending=False).reset_index(drop=True)
         return df
+
+
+def create_shrunk_house_effect_priors(
+    dataset: PresidentialElectionDataset,
+    prior_sd: float = 0.02,
+) -> Dict[str, np.ndarray]:
+    """
+    Create zero-centered house effect priors with specified SD.
+
+    This is the simplest approach for handling single-pollster dominance:
+    shrink house effects toward zero rather than estimating them. When
+    only one pollster is providing recent data, we cannot distinguish
+    pollster bias from genuine movement, so we assume minimal bias.
+
+    Usage:
+        # Create shrunk priors (house effects ~0 with SD=2%)
+        shrunk_priors = create_shrunk_house_effect_priors(
+            dataset=dataset,
+            prior_sd=0.02,  # Allow up to ~4pp house effect (2 SD)
+        )
+
+        # Train model with shrunk house effects
+        model = PresidentialElectionModel(
+            dataset=dataset,
+            custom_house_effect_priors=shrunk_priors,
+        )
+
+    Args:
+        dataset: PresidentialElectionDataset with polling data
+        prior_sd: SD for house effect priors. Default 0.02 (2%) allows
+                  modest house effects while shrinking toward zero.
+
+    Returns:
+        Dict with 'means' and 'sds' arrays suitable for custom_house_effect_priors.
+    """
+    # Get pollster count from model coords
+    temp_model = PresidentialElectionModel(dataset=dataset)
+    temp_model._build_coords()
+    n_pollsters = len(temp_model.coords['pollsters'])
+    n_candidates = len(dataset.candidates)
+
+    # Zero means, uniform SD
+    means = np.zeros((n_pollsters, n_candidates))
+    sds = np.full((n_pollsters, n_candidates), prior_sd)
+
+    print(f"\n=== Creating Shrunk House Effect Priors ===")
+    print(f"Shape: {means.shape}")
+    print(f"Prior SD: {prior_sd*100:.1f}pp (shrinking toward zero)")
+
+    return {'means': means, 'sds': sds}
+
+
+def estimate_fixed_house_effects(
+    dataset: PresidentialElectionDataset,
+    cutoff_date: str,
+    fixed_sd: float = 0.005,
+    draws: int = 500,
+    tune: int = 500,
+    **model_kwargs
+) -> Dict[str, np.ndarray]:
+    """
+    Estimate house effects from early data to use as fixed priors.
+
+    NOTE: This approach may not work as expected when pollsters don't overlap
+    in time. If early pollsters don't poll at the same dates, the model will
+    estimate house effects from temporal differences rather than true bias.
+
+    For single-pollster dominance, consider using `create_shrunk_house_effect_priors()`
+    instead, which simply shrinks house effects toward zero.
+
+    Usage:
+        # Step 1: Estimate house effects from early overlapping period
+        fixed_he = estimate_fixed_house_effects(
+            dataset,
+            cutoff_date='2025-12-31',  # Before single-pollster period
+        )
+
+        # Step 2: Train full model with fixed house effects
+        model = PresidentialElectionModel(
+            dataset=dataset,
+            custom_house_effect_priors=fixed_he,
+        )
+        model.build_model()
+        model.sample()
+
+    Args:
+        dataset: PresidentialElectionDataset with full polling data
+        cutoff_date: Date string (YYYY-MM-DD) to use as cutoff. Only polls
+                     before this date are used to estimate house effects.
+        fixed_sd: Floor SD for fixed priors (default 0.005).
+        draws: Posterior samples for house effect estimation
+        tune: Tuning samples for house effect estimation
+        **model_kwargs: Additional arguments passed to PresidentialElectionModel
+
+    Returns:
+        Dict with 'means' and 'sds' arrays suitable for custom_house_effect_priors.
+        Shape is (n_pollsters, n_candidates) where pollsters are those in the
+        FULL dataset (not just the early subset).
+    """
+    import warnings
+
+    # Create early-only dataset
+    cutoff_dt = pd.to_datetime(cutoff_date)
+    all_polls = dataset.polls_train.copy()
+    early_polls = all_polls[pd.to_datetime(all_polls['date']) < cutoff_dt]
+
+    if len(early_polls) < 3:
+        raise ValueError(
+            f"Only {len(early_polls)} polls before {cutoff_date}. "
+            "Need at least 3 polls to estimate house effects."
+        )
+
+    print(f"\n{'='*60}")
+    print(f"ESTIMATING HOUSE EFFECTS FROM EARLY DATA")
+    print(f"{'='*60}")
+    print(f"Cutoff date: {cutoff_date}")
+    print(f"Early polls: {len(early_polls)} (of {len(all_polls)} total)")
+    print(f"Pollsters in early data: {early_polls['pollster'].nunique()}")
+
+    # Create a temporary dataset with only early polls
+    # We need to copy the original dataset and replace the polls
+    import copy
+    early_dataset = copy.copy(dataset)
+    early_dataset.polls_train = early_polls.reset_index(drop=True)
+    early_dataset.polls_raw = early_polls.reset_index(drop=True)
+
+    # Train model on early data
+    early_model = PresidentialElectionModel(
+        dataset=early_dataset,
+        use_parliamentary_house_priors=model_kwargs.get('use_parliamentary_house_priors', True),
+        house_effect_sd_scale=model_kwargs.get('house_effect_sd_scale', 0.04),
+        innovation_sd_scale=model_kwargs.get('innovation_sd_scale', 0.05),
+    )
+    early_model.build_model()
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        early_model.sample(draws=draws, tune=tune, chains=4)
+
+    # Extract house effect posteriors from early model
+    early_he = early_model.trace.posterior['house_effects']
+    early_he_means = early_he.mean(dim=['chain', 'draw']).values
+    early_he_sds = early_he.std(dim=['chain', 'draw']).values
+    early_pollsters = list(early_model.coords['pollsters'])
+    early_candidates = early_dataset.candidates
+
+    print(f"\nHouse effects estimated from early data:")
+    for i, pollster in enumerate(early_pollsters):
+        effects = early_he_means[i, :]
+        print(f"  {pollster}: mean effect range [{effects.min():.3f}, {effects.max():.3f}]")
+
+    # Map to full dataset pollsters
+    # Get pollsters from full dataset by building coords
+    full_model_temp = PresidentialElectionModel(dataset=dataset)
+    full_model_temp._build_coords()
+    full_pollsters = list(full_model_temp.coords['pollsters'])
+    n_candidates = len(dataset.candidates)
+
+    print(f"\nMapping to full dataset pollsters ({len(full_pollsters)} total):")
+
+    # Build prior matrices for full pollster set
+    # Use posterior SDs from early model (with floor) to allow updating based on new data
+    full_means = np.zeros((len(full_pollsters), n_candidates))
+    full_sds = np.full((len(full_pollsters), n_candidates), fixed_sd)
+
+    for i, pollster in enumerate(full_pollsters):
+        if pollster in early_pollsters:
+            early_idx = early_pollsters.index(pollster)
+            # Map candidates (handle case where order might differ)
+            for j, candidate in enumerate(dataset.candidates):
+                if candidate in early_candidates:
+                    early_c_idx = early_candidates.index(candidate)
+                    full_means[i, j] = early_he_means[early_idx, early_c_idx]
+                    # Use posterior SD from early model, with floor
+                    # This allows the model to update based on new data
+                    full_sds[i, j] = max(early_he_sds[early_idx, early_c_idx], fixed_sd)
+            print(f"  {pollster}: using estimated effect (SD range [{full_sds[i,:].min():.3f}, {full_sds[i,:].max():.3f}])")
+        else:
+            # Pollster not in early data - use zero prior with moderate uncertainty
+            full_means[i, :] = 0.0
+            full_sds[i, :] = 0.02  # ~2pp uncertainty for new pollsters
+            print(f"  {pollster}: not in early data, using zero prior")
+
+    print(f"\nFixed house effect priors ready:")
+    print(f"  Shape: {full_means.shape}")
+    print(f"  Fixed SD: {fixed_sd} (very tight)")
+
+    return {
+        'means': full_means,
+        'sds': full_sds,
+    }

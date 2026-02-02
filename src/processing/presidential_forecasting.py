@@ -876,6 +876,79 @@ def compute_changes_since_last_poll(
     }
 
 
+def compute_runoff_probability_from_pairs(pairs: List[Dict[str, Any]]) -> Dict[str, float]:
+    """
+    Compute each candidate's probability of reaching the runoff by summing
+    all pairs where they appear.
+    
+    Args:
+        pairs: List of pair dictionaries with candidate_a, candidate_b, probability
+        
+    Returns:
+        Dictionary mapping candidate name to runoff probability
+    """
+    probs: Dict[str, float] = {}
+    for pair in pairs:
+        a, b = pair['candidate_a'], pair['candidate_b']
+        p = pair['probability']
+        probs[a] = probs.get(a, 0.0) + p
+        probs[b] = probs.get(b, 0.0) + p
+    return probs
+
+
+def compute_runoff_changes(
+    current_runoff_data: Dict[str, Any],
+    previous_runoff_data: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Compute changes in runoff probabilities between two dates.
+    
+    Args:
+        current_runoff_data: Runoff pairs JSON for current date
+        previous_runoff_data: Runoff pairs JSON for previous date
+        
+    Returns:
+        Dictionary with runoff probability changes per candidate
+    """
+    current_probs = compute_runoff_probability_from_pairs(current_runoff_data.get('pairs', []))
+    previous_probs = compute_runoff_probability_from_pairs(previous_runoff_data.get('pairs', []))
+    
+    # Get all candidates from both dates
+    all_candidates = set(current_probs.keys()) | set(previous_probs.keys())
+    
+    changes = {}
+    for candidate in all_candidates:
+        current = current_probs.get(candidate, 0.0)
+        previous = previous_probs.get(candidate, 0.0)
+        change = current - previous
+        changes[candidate] = {
+            'current': format_float(current),
+            'previous': format_float(previous),
+            'change': format_float(change),
+            'change_pp': format_float(change * 100),
+        }
+    
+    # Sort by current probability descending
+    sorted_candidates = sorted(
+        changes.items(),
+        key=lambda x: x[1]['current'],
+        reverse=True
+    )
+    
+    return {
+        'current_date': current_runoff_data.get('snapshot_date', ''),
+        'previous_date': previous_runoff_data.get('snapshot_date', ''),
+        'candidates': [
+            {
+                'name': name,
+                'color': get_candidate_color(name),
+                **data
+            }
+            for name, data in sorted_candidates
+        ]
+    }
+
+
 # =============================================================================
 # DASHBOARD EXPORT FROM SAVED TRACE
 # =============================================================================
@@ -1036,6 +1109,43 @@ def export_dashboard_from_trace(
                 snapshot_runoff_data, output_dir, 'snapshot_runoff_pairs.json', 'presidential_'
             )
             output_files['snapshot_runoff_pairs'] = snapshot_runoff_path
+            
+            # Also compute runoff pairs at previous poll date for changes
+            if polls_df is not None and len(polls_df) > 0:
+                poll_dates = sorted(polls_df['date'].unique())
+                if len(poll_dates) >= 2:
+                    previous_poll_date = poll_dates[-2]
+                    if isinstance(previous_poll_date, pd.Timestamp):
+                        previous_poll_date_str = previous_poll_date.strftime('%Y-%m-%d')
+                    else:
+                        previous_poll_date_str = str(previous_poll_date)[:10]
+                    
+                    # Find index for previous poll date
+                    previous_idx = None
+                    for i, t in enumerate(calendar_time):
+                        if t.strftime('%Y-%m-%d') >= previous_poll_date_str:
+                            previous_idx = i
+                            break
+                    
+                    if previous_idx is not None:
+                        print(f"Generating previous runoff pairs data (as of {previous_poll_date_str})...")
+                        previous_probs_at_date = probs.isel(calendar_time=previous_idx).values.reshape(-1, len(candidates))
+                        previous_runoff_data = build_runoff_pairs_json(
+                            previous_probs_at_date, candidates, election_date,
+                            snapshot_date=previous_poll_date_str
+                        )
+                        
+                        # Compute runoff changes
+                        print("Generating runoff probability changes...")
+                        runoff_changes_data = compute_runoff_changes(
+                            snapshot_runoff_data, previous_runoff_data
+                        )
+                        runoff_changes_path = save_json(
+                            runoff_changes_data, output_dir, 'runoff_changes.json', 'presidential_'
+                        )
+                        output_files['runoff_changes'] = runoff_changes_path
+                        print(f"  Current date: {runoff_changes_data['current_date']}")
+                        print(f"  Previous date: {runoff_changes_data['previous_date']}")
     
     # Generate head-to-head JSON (for top 2 candidates)
     print("Generating head-to-head data...")
@@ -1045,9 +1155,9 @@ def export_dashboard_from_trace(
     head_to_head_path = save_json(head_to_head_data, output_dir, 'head_to_head.json', 'presidential_')
     output_files['head_to_head'] = head_to_head_path
     
-    # Generate changes since last poll JSON
+    # Generate changes since last poll JSON (for leading probabilities)
     if 'snapshot_probabilities' in output_files:
-        print("Generating changes since last poll...")
+        print("Generating leading probability changes since last poll...")
         # Load the snapshot probs we just saved
         import json
         with open(output_files['snapshot_probabilities'], 'r') as f:
